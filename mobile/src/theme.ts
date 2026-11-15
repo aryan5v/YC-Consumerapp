@@ -16,6 +16,7 @@ export const colors = {
   glass: "rgba(10,10,14,0.46)",
   scrim: "rgba(0,0,0,0.4)",
   holdDim: "rgba(0,0,0,0.16)",
+  letterboxVeil: "rgba(7,7,10,0.5)",
   textShadow: "rgba(0,0,0,0.85)",
   glow: "#FFC46B",
 };
@@ -38,6 +39,11 @@ export const glow = {
   bloomOpacity: [0.06, 0.24],
   flashOpacity: 0.42,
   maxRadius: 22,
+};
+
+export const letterbox = {
+  blur: 40,
+  thumbWidth: 240,
 };
 
 export const radius = {

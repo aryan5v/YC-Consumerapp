@@ -1,7 +1,8 @@
 import { createAudioPlayer, type AudioPlayer } from "expo-audio";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
-import { useVideoPlayer, VideoView, type VideoPlayer } from "expo-video";
+import { Image } from "expo-image";
+import { useVideoPlayer, VideoView, type VideoPlayer, type VideoThumbnail } from "expo-video";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Animated, Pressable, Share, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -15,7 +16,7 @@ import { PuzzleSheet, type PuzzleState } from "../components/PuzzleSheet";
 import { SettingsGlyph, SettingsSheet } from "../components/SettingsSheet";
 import { audioSource, useStory, videoSource, type Ending, type Stop } from "../data";
 import { useSettings } from "../settings";
-import { colors, ease, fonts, gradients, motion, radius, type } from "../theme";
+import { colors, ease, fonts, gradients, letterbox, motion, radius, type } from "../theme";
 
 const SLOTS = [0, 1, 2, 3];
 const PORTRAIT = 9 / 16;
@@ -28,7 +29,7 @@ const MIC_SPACE = 58;
 
 let speakUnavailable = false;
 
-type Slot = { url: string | null; ready: boolean; aspect: number | null; retries: number };
+type Slot = { url: string | null; ready: boolean; aspect: number | null; retries: number; backdrop: VideoThumbnail | null };
 type Snap = { beatId: string; clipUrl: string; narration: string; stop: Stop | null; ending: Ending | null; beatIndex: number; beatsTotal: number };
 type Commit = { fromBeatId: string; optionId?: string; url: string | null };
 
@@ -61,7 +62,7 @@ export function Player({
   const p3 = useVideoPlayer(null, setup);
   const players = useMemo(() => [p0, p1, p2, p3], [p0, p1, p2, p3]);
 
-  const slots = useRef<Slot[]>(SLOTS.map(() => ({ url: null, ready: false, aspect: null, retries: 0 }))).current;
+  const slots = useRef<Slot[]>(SLOTS.map(() => ({ url: null, ready: false, aspect: null, retries: 0, backdrop: null }))).current;
   const activeRef = useRef(-1);
   const previousRef = useRef(-1);
   const notBefore = useRef(0);
@@ -120,6 +121,18 @@ export function Player({
         if (size && size.width > 0 && size.height > 0) {
           slots[i].aspect = size.width / size.height;
           bump();
+          if (slots[i].aspect >= 1) {
+            const url = slots[i].url;
+            player
+              .generateThumbnailsAsync(0.5, { maxWidth: letterbox.thumbWidth })
+              .then(([thumb]) => {
+                if (thumb && slots[i].url === url) {
+                  slots[i].backdrop = thumb;
+                  bump();
+                }
+              })
+              .catch(() => {});
+          }
         }
       }),
       player.addListener("playToEnd", () => {
@@ -146,7 +159,7 @@ export function Player({
         (s, index) => index !== activeRef.current && index !== previousRef.current && (s.url === null || !wanted.includes(s.url)),
       );
       if (i < 0) continue;
-      slots[i] = { url, ready: false, aspect: null, retries: 0 };
+      slots[i] = { url, ready: false, aspect: null, retries: 0, backdrop: null };
       load(i);
     }
   }, [view, commit, slots, load]);
@@ -414,18 +427,24 @@ export function Player({
               {
                 opacity: visible ? 1 : 0,
                 zIndex: i === active ? 2 : i === previous ? 1 : 0,
-                backgroundColor: letterboxed && visible ? colors.black : "transparent",
+                backgroundColor: letterboxed && visible && !slots[i].backdrop ? colors.black : "transparent",
                 transform: [{ scale: (i === active && phase === "held") || i === previous ? holdScale : 1 }],
               },
             ]}
           >
+            {letterboxed && slots[i].backdrop && (
+              <>
+                <Image source={slots[i].backdrop} blurRadius={letterbox.blur} contentFit="cover" style={StyleSheet.absoluteFill} />
+                <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.letterboxVeil }]} />
+              </>
+            )}
             <VideoView
               player={players[i]}
               nativeControls={false}
               allowsPictureInPicture={false}
               allowsVideoFrameAnalysis={false}
               contentFit={letterboxed ? "contain" : "cover"}
-              style={StyleSheet.absoluteFill}
+              style={[StyleSheet.absoluteFill, { backgroundColor: "transparent" }]}
             />
           </Animated.View>
         );

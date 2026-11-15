@@ -22,6 +22,8 @@ const PORTRAIT = 9 / 16;
 const PUZZLE_FEEDBACK_MS = 900;
 const HEARD_MS = 550;
 const DUCKED_VOLUME = 0.25;
+const TARGET_TOP_CLEARANCE = 44;
+const CAPTION_CLEARANCE = 96;
 const MIC_SPACE = 58;
 
 let speakUnavailable = false;
@@ -461,6 +463,7 @@ export function Player({
               onPick={pick}
               bottomInset={insets.bottom + micSpace}
               screenWidth={width}
+              safe={{ top: insets.top + TARGET_TOP_CLEARANCE, bottom: height - insets.bottom - CAPTION_CLEARANCE - captionLift }}
             />
           )}
         </Presence>

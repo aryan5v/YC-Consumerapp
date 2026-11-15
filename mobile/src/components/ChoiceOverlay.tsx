@@ -8,6 +8,9 @@ import { Ring } from "./Ring";
 export type Rect = { x: number; y: number; w: number; h: number };
 
 const CHIP_HEIGHT = 56;
+const SIDE_MARGIN = 12;
+const MIN_TARGET = 64;
+const LABEL_ROOM = 30;
 const CHIP_GAP = 10;
 
 export function chipsHeight(options: ChoiceOption[]) {
@@ -196,6 +199,7 @@ export function ChoiceOverlay({
   onPick,
   bottomInset,
   screenWidth,
+  safe,
 }: {
   options: ChoiceOption[];
   video: Rect;
@@ -204,13 +208,23 @@ export function ChoiceOverlay({
   onPick: (id: string) => void;
   bottomInset: number;
   screenWidth: number;
+  safe: { top: number; bottom: number };
 }) {
+  const fit = (box: NonNullable<ChoiceOption["box"]>): Rect => {
+    const left = Math.max(video.x + box.x * video.w, SIDE_MARGIN);
+    const right = Math.min(video.x + (box.x + box.w) * video.w, screenWidth - SIDE_MARGIN);
+    const top = Math.max(video.y + box.y * video.h, safe.top);
+    const bottom = Math.min(video.y + (box.y + box.h) * video.h, safe.bottom);
+    const w = Math.max(right - left, MIN_TARGET);
+    const h = Math.max(bottom - top, MIN_TARGET);
+    return { x: Math.min(left, screenWidth - SIDE_MARGIN - w), y: Math.min(top, safe.bottom - h), w, h };
+  };
   return (
     <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
       <Animated.View pointerEvents="box-none" style={[StyleSheet.absoluteFill, { transform: [{ scale: holdScale }] }]}>
         {options.map((o, i) => {
           if (o.box === null) return null;
-          const frame = { x: video.x + o.box.x * video.w, y: video.y + o.box.y * video.h, w: o.box.w * video.w, h: o.box.h * video.h };
+          const frame = fit(o.box);
           return (
             <Outline
               key={o.id}
@@ -220,7 +234,7 @@ export function ChoiceOverlay({
               onPick={onPick}
               frame={frame}
               screenWidth={screenWidth}
-              labelAbove={frame.y + frame.h > video.y + video.h * 0.72}
+              labelAbove={frame.y + frame.h + LABEL_ROOM > safe.bottom}
             />
           );
         })}

@@ -403,6 +403,7 @@ export function Player({
   const scale = aspect < 1 ? Math.max(width / aspect, height) : Math.min(width / aspect, height);
   const video = { x: (width - aspect * scale) / 2, y: (height - scale) / 2, w: aspect * scale, h: scale };
   const micSpace = micOn ? MIC_SPACE : 0;
+  const bandHeight = (slotAspect: number | null) => Math.max(0, (height - width / (slotAspect ?? PORTRAIT)) / 2);
   const captionLift = choice ? chipsHeight(choice.options) + micSpace : 0;
   const stopLine =
     held && current.stop
@@ -432,12 +433,6 @@ export function Player({
               },
             ]}
           >
-            {letterboxed && slots[i].backdrop && (
-              <>
-                <Image source={slots[i].backdrop} blurRadius={letterbox.blur} contentFit="cover" style={StyleSheet.absoluteFill} />
-                <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.letterboxVeil }]} />
-              </>
-            )}
             <VideoView
               player={players[i]}
               nativeControls={false}
@@ -446,6 +441,19 @@ export function Player({
               contentFit={letterboxed ? "contain" : "cover"}
               style={[StyleSheet.absoluteFill, { backgroundColor: "transparent" }]}
             />
+            {letterboxed &&
+              slots[i].backdrop &&
+              [0, height - bandHeight(slots[i].aspect)].map((top) => (
+                <View key={top} style={{ position: "absolute", left: 0, right: 0, top, height: bandHeight(slots[i].aspect), overflow: "hidden" }}>
+                  <Image
+                    source={slots[i].backdrop}
+                    blurRadius={letterbox.blur}
+                    contentFit="cover"
+                    style={{ position: "absolute", left: 0, width, top: -top, height }}
+                  />
+                  <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.letterboxVeil }]} />
+                </View>
+              ))}
           </Animated.View>
         );
       })}

@@ -50,7 +50,7 @@ const FIXTURE: FixtureEntry[] = [
   },
   {
     clip_prompt:
-      "Inside the shop a single buzzing fluorescent tube lights shelves of dusty cans and a narrow counter with an old cash register. The clerk behind the counter wears a green visor and has not blinked since the bell rang. The parcel is still hidden under the jacket.",
+      "Inside the shop a single buzzing fluorescent tube lights shelves of dusty cans, a fridge door with a taped handle, and a narrow counter with an old cash register. The clerk behind the counter wears a green visor and has not blinked since the bell rang. The parcel is still hidden under the jacket.",
     narration: "The clerk has not blinked since you came in.",
     spoken_line: "You are dripping on my floor. What do you want?",
     stop: {

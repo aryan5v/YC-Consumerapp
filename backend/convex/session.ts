@@ -1,9 +1,9 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { ensureAnonymousUser, readActiveUser, setActiveUser } from "./lib/session";
+import { deviceUser, ensureDeviceUser } from "./lib/session";
 
 export const whoami = query({
-  args: {},
+  args: { deviceToken: v.string() },
   returns: v.union(
     v.null(),
     v.object({
@@ -12,45 +12,43 @@ export const whoami = query({
       anonymous: v.boolean(),
     }),
   ),
-  handler: async (ctx) => {
-    const user = await readActiveUser(ctx);
+  handler: async (ctx, { deviceToken }) => {
+    const user = await deviceUser(ctx, deviceToken);
     if (user === null) return null;
     return { userId: user._id, name: user.name ?? null, anonymous: user.kind === "anonymous" };
   },
 });
 
 export const signInAnonymously = mutation({
-  args: {},
+  args: { deviceToken: v.string() },
   returns: v.id("users"),
-  handler: async (ctx) => {
-    const userId = await ensureAnonymousUser(ctx);
-    await setActiveUser(ctx, userId);
-    return userId;
+  handler: async (ctx, { deviceToken }) => {
+    return (await ensureDeviceUser(ctx, deviceToken))._id;
   },
 });
 
 export const signInAs = mutation({
-  args: { name: v.string() },
+  args: { name: v.string(), deviceToken: v.string() },
   returns: v.id("users"),
-  handler: async (ctx, { name }) => {
+  handler: async (ctx, { name, deviceToken }) => {
     const trimmed = name.trim().slice(0, 60);
     if (trimmed === "") throw new Error("a name is required");
-    const existing = await ctx.db
-      .query("users")
-      .withIndex("by_name", (q) => q.eq("name", trimmed))
-      .first();
-    const userId = existing?._id ?? (await ctx.db.insert("users", { name: trimmed, kind: "named", createdAt: Date.now() }));
-    await setActiveUser(ctx, userId);
-    return userId;
+    const user = await ensureDeviceUser(ctx, deviceToken);
+    if (user.name !== trimmed || user.kind !== "named") {
+      await ctx.db.patch(user._id, { name: trimmed, kind: "named" });
+    }
+    return user._id;
   },
 });
 
 export const signOut = mutation({
-  args: {},
+  args: { deviceToken: v.string() },
   returns: v.id("users"),
-  handler: async (ctx) => {
-    const userId = await ensureAnonymousUser(ctx);
-    await setActiveUser(ctx, userId);
-    return userId;
+  handler: async (ctx, { deviceToken }) => {
+    const user = await ensureDeviceUser(ctx, deviceToken);
+    if (user.name !== undefined || user.kind !== "anonymous") {
+      await ctx.db.patch(user._id, { name: undefined, kind: "anonymous" });
+    }
+    return user._id;
   },
 });

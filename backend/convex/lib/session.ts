@@ -1,57 +1,71 @@
 import { MutationCtx, QueryCtx } from "../_generated/server";
 import { Doc, Id } from "../_generated/dataModel";
 
-export const ACTIVE_SESSION_KEY = "active";
+const DEVICE_TOKEN = /^[A-Za-z0-9_.:-]{6,128}$/;
 
-export async function readSessionUserId(ctx: QueryCtx): Promise<Id<"users"> | null> {
-  const session = await ctx.db
-    .query("sessions")
-    .withIndex("by_key", (q) => q.eq("key", ACTIVE_SESSION_KEY))
-    .unique();
-  return session?.userId ?? null;
+export function deviceKey(raw: string): string {
+  const trimmed = raw.trim();
+  if (!DEVICE_TOKEN.test(trimmed)) {
+    throw new Error(
+      "deviceToken must be 6 to 128 characters of letters, digits, dot, colon, underscore, or dash",
+    );
+  }
+  return trimmed;
 }
 
-export async function readAnonymousUser(ctx: QueryCtx): Promise<Doc<"users"> | null> {
-  return await ctx.db
+export async function deviceUser(ctx: QueryCtx, raw: string): Promise<Doc<"users"> | null> {
+  const key = deviceKey(raw);
+  const direct = await ctx.db
     .query("users")
-    .withIndex("by_kind", (q) => q.eq("kind", "anonymous"))
+    .withIndex("by_device_key", (q) => q.eq("deviceKey", key))
     .first();
-}
-
-export async function readActiveUser(ctx: QueryCtx): Promise<Doc<"users"> | null> {
-  const userId = await readSessionUserId(ctx);
-  if (userId !== null) {
-    const user = await ctx.db.get(userId);
-    if (user !== null) return user;
-  }
-  return await readAnonymousUser(ctx);
-}
-
-export async function ensureAnonymousUser(ctx: MutationCtx): Promise<Id<"users">> {
-  const existing = await readAnonymousUser(ctx);
-  if (existing !== null) return existing._id;
-  return await ctx.db.insert("users", { kind: "anonymous", createdAt: Date.now() });
-}
-
-export async function setActiveUser(ctx: MutationCtx, userId: Id<"users">): Promise<void> {
+  if (direct !== null) return direct;
   const session = await ctx.db
     .query("sessions")
-    .withIndex("by_key", (q) => q.eq("key", ACTIVE_SESSION_KEY))
+    .withIndex("by_key", (q) => q.eq("key", key))
     .unique();
-  if (session === null) {
-    await ctx.db.insert("sessions", { key: ACTIVE_SESSION_KEY, userId });
-    return;
-  }
-  await ctx.db.patch(session._id, { userId });
+  if (session === null) return null;
+  return await ctx.db.get(session.userId);
 }
 
-export async function ensureActiveUser(ctx: MutationCtx): Promise<Id<"users">> {
-  const userId = await readSessionUserId(ctx);
-  if (userId !== null) {
-    const user = await ctx.db.get(userId);
-    if (user !== null) return user._id;
+export async function requireDeviceUser(ctx: QueryCtx, raw: string): Promise<Doc<"users">> {
+  const user = await deviceUser(ctx, raw);
+  if (user === null) {
+    throw new Error("this device has no player on it yet: call session.signInAnonymously first");
   }
-  const anonymous = await ensureAnonymousUser(ctx);
-  await setActiveUser(ctx, anonymous);
-  return anonymous;
+  return user;
+}
+
+export async function ensureDeviceUser(ctx: MutationCtx, raw: string): Promise<Doc<"users">> {
+  const key = deviceKey(raw);
+  const user = await deviceUser(ctx, key);
+  if (user !== null) {
+    const session = await ctx.db
+      .query("sessions")
+      .withIndex("by_key", (q) => q.eq("key", key))
+      .unique();
+    if (session === null) await ctx.db.insert("sessions", { key, userId: user._id });
+    return user;
+  }
+  const userId = await ctx.db.insert("users", {
+    kind: "anonymous",
+    deviceKey: key,
+    createdAt: Date.now(),
+  });
+  await ctx.db.insert("sessions", { key, userId });
+  const created = await ctx.db.get(userId);
+  if (created === null) throw new Error("could not create a player for this device");
+  return created;
+}
+
+export async function runOwnedBy(
+  ctx: QueryCtx,
+  runId: Id<"runs">,
+  deviceToken: string,
+): Promise<{ user: Doc<"users">; run: Doc<"runs"> }> {
+  const user = await requireDeviceUser(ctx, deviceToken);
+  const run = await ctx.db.get(runId);
+  if (run === null) throw new Error("run not found");
+  if (run.userId !== user._id) throw new Error("this run belongs to another device");
+  return { user, run };
 }

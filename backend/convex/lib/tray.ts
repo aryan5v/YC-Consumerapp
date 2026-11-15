@@ -9,6 +9,7 @@ import {
   submitVideo,
   uniserveModel,
   uniserveTask,
+  v1BaseUrl,
 } from "./trayUniserve";
 
 export type Box = { x: number; y: number; w: number; h: number };
@@ -18,7 +19,6 @@ export type TrayAnchors = {
   continuityVideoUrl: string | null;
   characterSheetUrl: string | null;
   styleImageUrl: string | null;
-  voiceRefUrl: string | null;
 };
 
 export type TrayGenerateRequest = TrayAnchors & {
@@ -32,6 +32,7 @@ export type TrayJobState = {
   status: "queued" | "generating" | "ready" | "failed";
   mp4Url: string | null;
   lastFrameUrl: string | null;
+  progress?: string | null;
   error?: string;
 };
 
@@ -43,7 +44,7 @@ export function trayUrls(): string[] {
   const raw = list ?? single ?? "";
   return raw
     .split(",")
-    .map((entry) => entry.trim().replace(/\/+$/, ""))
+    .map((entry) => v1BaseUrl(entry))
     .filter((entry) => entry !== "");
 }
 
@@ -103,9 +104,8 @@ export async function trayGenerate(request: TrayGenerateRequest): Promise<{ jobI
     continuityVideoUrl: request.continuityVideoUrl,
     characterSheetUrl: request.characterSheetUrl,
     styleImageUrl: request.styleImageUrl,
-    voiceRefUrl: request.voiceRefUrl,
   };
-  const jobId = await submitVideo(uniserve);
+  const { jobId } = await submitVideo(uniserve);
   return { jobId: `${jobId}@${baseUrl}` };
 }
 
@@ -117,7 +117,14 @@ export async function trayGetJob(jobId: string): Promise<TrayJobState> {
   if (reference.baseUrl === null) {
     return { status: "failed", mp4Url: null, lastFrameUrl: null, error: `job ${jobId} has no instance` };
   }
-  return await fetchVideoJob({ baseUrl: reference.baseUrl, apiKey: apiKey(), jobId: reference.jobId });
+  const state = await fetchVideoJob({ baseUrl: reference.baseUrl, apiKey: apiKey(), jobId: reference.jobId });
+  return {
+    status: state.status,
+    mp4Url: state.mp4Url,
+    lastFrameUrl: state.lastFrameUrl,
+    progress: state.progress,
+    error: state.error,
+  };
 }
 
 export async function trayDetect(frameUrl: string, targets: string[]): Promise<TrayDetectResult> {

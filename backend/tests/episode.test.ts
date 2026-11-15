@@ -7,9 +7,21 @@ import { checkAnswer } from "../convex/lib/story";
 import { DirectorPuzzleStop, validateBeat } from "../convex/lib/director";
 import { fixtureBeat } from "../convex/lib/fixture";
 import { addDays, pacificDate } from "../convex/lib/pacific";
+import { STOCK_MP4S } from "../convex/lib/stock";
 import { matchSpokenOption } from "../convex/lib/speech";
 import { extractCode } from "../convex/keiki";
 import { KEIKI_SECRET, MOCK_LINE, keikiTool } from "./keiki-fixture";
+
+const HERMETIC_ENV = [
+  "KEIKI_API_KEY",
+  "KEIKI_AGENT_ID",
+  "KEIKI_AGENT_NAME",
+  "KEIKI_LINE",
+  "KEIKI_OUTBOUND",
+  "OPENAI_API_KEY",
+  "DEEPSEEK_API_KEY",
+];
+for (const name of HERMETIC_ENV) delete process.env[name];
 
 const rawModules = import.meta.glob("../convex/**/*.*s");
 const modules = Object.fromEntries(
@@ -23,10 +35,16 @@ function newBackend() {
 type Backend = ReturnType<typeof newBackend>;
 
 const WRONG_ANSWER = "9999";
+const TOKEN = "judge-phone-one";
+const OTHER_TOKEN = "judge-phone-two";
+
+function withBeat(beatId: string) {
+  return { deviceToken: TOKEN, expectedBeatId: beatId as never };
+}
 
 async function startRun(t: Backend) {
   await t.mutation(api.episodes.seed, { days: 1 });
-  const runId = await t.mutation(api.runs.startToday, {});
+  const runId = await t.mutation(api.runs.startToday, { deviceToken: TOKEN });
   await t.finishAllScheduledFunctions(vi.runAllTimers);
   return runId;
 }
@@ -36,7 +54,7 @@ async function playEpisode(t: Backend, options: { wrongAnswers?: number } = {}) 
   const runId = await startRun(t);
   const transcript: string[] = [];
   let wrongUsed = 0;
-  let view = await t.query(api.runs.view, { runId });
+  let view = await t.query(api.runs.view, { runId, deviceToken: TOKEN });
   let guard = 0;
 
   while (view.status === "active") {
@@ -60,7 +78,11 @@ async function playEpisode(t: Backend, options: { wrongAnswers?: number } = {}) 
         expect(option.box).toBeNull();
       }
       transcript.push(`  choice: ${stop.options.map((option) => option.label).join(" | ")}`);
-      await t.mutation(api.runs.choose, { runId, optionId: stop.options[0].id });
+      await t.mutation(api.runs.choose, {
+        runId,
+        optionId: stop.options[0].id,
+        ...withBeat(view.current.beatId),
+      });
     } else {
       expect(stop.outcomes.success.status).toBe("ready");
       expect(stop.outcomes.failure.status).toBe("ready");
@@ -69,12 +91,16 @@ async function playEpisode(t: Backend, options: { wrongAnswers?: number } = {}) 
       if (wrong) wrongUsed += 1;
       const answer = wrong ? WRONG_ANSWER : expectedAnswer(stop);
       transcript.push(`  puzzle: ${stop.question} -> ${answer} (${wrong ? "deliberately wrong" : "right"})`);
-      const result = await t.mutation(api.runs.answer, { runId, answer });
+      const result = await t.mutation(api.runs.answer, {
+        runId,
+        answer,
+        ...withBeat(view.current.beatId),
+      });
       expect(result.correct).toBe(!wrong);
     }
 
     await t.finishAllScheduledFunctions(vi.runAllTimers);
-    view = await t.query(api.runs.view, { runId });
+    view = await t.query(api.runs.view, { runId, deviceToken: TOKEN });
   }
 
   return { runId, view, transcript, wrongUsed };
@@ -126,7 +152,7 @@ describe("a full episode in mock mode", () => {
     expect(view.beatIndex).toBe(6);
     expect(view.beatsTotal).toBe(7);
 
-    const home = await t.query(api.home.today, {});
+    const home = await t.query(api.home.today, { deviceToken: TOKEN });
     expect(home.streak).toBe(1);
     expect(home.run).toEqual({ id: runId, status: "ended" });
   });
@@ -134,11 +160,15 @@ describe("a full episode in mock mode", () => {
   test("keeps prefetch one level deep and cancels the shots the player did not take", async () => {
     const t = newBackend();
     const runId = await startRun(t);
-    const first = await t.query(api.runs.view, { runId });
+    const first = await t.query(api.runs.view, { runId, deviceToken: TOKEN });
     expect(first.stop?.kind).toBe("choice");
     const taken = first.stop?.kind === "choice" ? first.stop.options[1] : null;
     expect(taken).not.toBeNull();
-    await t.mutation(api.runs.choose, { runId, optionId: taken!.id });
+    await t.mutation(api.runs.choose, {
+      runId,
+      optionId: taken!.id,
+      ...withBeat(first.current.beatId),
+    });
     await t.finishAllScheduledFunctions(vi.runAllTimers);
 
     const counts = await t.run(async (ctx) => {
@@ -166,30 +196,38 @@ describe("a full episode in mock mode", () => {
   test("a wrong answer promotes the failure shot instead of the success shot", async () => {
     const t = newBackend();
     const runId = await startRun(t);
-    let view = await t.query(api.runs.view, { runId });
+    let view = await t.query(api.runs.view, { runId, deviceToken: TOKEN });
     while (view.stop !== null && view.stop.kind === "choice") {
-      await t.mutation(api.runs.choose, { runId, optionId: view.stop.options[0].id });
+      await t.mutation(api.runs.choose, {
+        runId,
+        optionId: view.stop.options[0].id,
+        ...withBeat(view.current.beatId),
+      });
       await t.finishAllScheduledFunctions(vi.runAllTimers);
-      view = await t.query(api.runs.view, { runId });
+      view = await t.query(api.runs.view, { runId, deviceToken: TOKEN });
     }
     expect(view.stop?.kind).toBe("puzzle");
-    const before = await t.query(api.runs.view, { runId });
+    const before = await t.query(api.runs.view, { runId, deviceToken: TOKEN });
     expect(before.stop?.kind === "puzzle" && before.stop.outcomes.failure.status).toBe("ready");
 
-    const result = await t.mutation(api.runs.answer, { runId, answer: WRONG_ANSWER });
+    const result = await t.mutation(api.runs.answer, {
+      runId,
+      answer: WRONG_ANSWER,
+      ...withBeat(before.current.beatId),
+    });
     await t.finishAllScheduledFunctions(vi.runAllTimers);
     expect(result.correct).toBe(false);
     const run = await t.run(async (ctx) => await ctx.db.get(runId));
     expect(run?.path).toContain("The register locks");
     expect(run?.path).not.toContain("The drawer opens");
-    const after = await t.query(api.runs.view, { runId });
+    const after = await t.query(api.runs.view, { runId, deviceToken: TOKEN });
     expect(after.stop?.kind === "puzzle" && after.stop.outcomes.failure.status).toBeDefined();
   });
 
   test("startToday resumes an active run rather than starting a second one", async () => {
     const t = newBackend();
     const first = await startRun(t);
-    const second = await t.mutation(api.runs.startToday, {});
+    const second = await t.mutation(api.runs.startToday, { deviceToken: TOKEN });
     await t.finishAllScheduledFunctions(vi.runAllTimers);
     expect(second).toBe(first);
     const runs = await t.run(async (ctx) => await ctx.db.query("runs").collect());
@@ -201,8 +239,8 @@ describe("streaks", () => {
   test("counts consecutive days", async () => {
     const t = newBackend();
     const today = pacificDate();
+    const userId = await t.mutation(api.session.signInAnonymously, { deviceToken: TOKEN });
     await t.run(async (ctx) => {
-      const userId = await ctx.db.insert("users", { kind: "anonymous", createdAt: Date.now() });
       await ctx.db.insert("streaks", {
         userId,
         current: 4,
@@ -212,7 +250,7 @@ describe("streaks", () => {
       });
     });
     await playEpisode(t);
-    const home = await t.query(api.home.today, {});
+    const home = await t.query(api.home.today, { deviceToken: TOKEN });
     expect(home.streak).toBe(5);
     const streak = await t.run(async (ctx) => await ctx.db.query("streaks").first());
     expect(streak?.longest).toBe(5);
@@ -221,8 +259,8 @@ describe("streaks", () => {
   test("resets after a missed day", async () => {
     const t = newBackend();
     const today = pacificDate();
+    const userId = await t.mutation(api.session.signInAnonymously, { deviceToken: TOKEN });
     await t.run(async (ctx) => {
-      const userId = await ctx.db.insert("users", { kind: "anonymous", createdAt: Date.now() });
       await ctx.db.insert("streaks", {
         userId,
         current: 4,
@@ -232,7 +270,7 @@ describe("streaks", () => {
       });
     });
     await playEpisode(t);
-    const home = await t.query(api.home.today, {});
+    const home = await t.query(api.home.today, { deviceToken: TOKEN });
     expect(home.streak).toBe(1);
     const streak = await t.run(async (ctx) => await ctx.db.query("streaks").first());
     expect(streak?.longest).toBe(9);
@@ -307,13 +345,13 @@ describe("clip failures", () => {
     expect(recovered?.url).toMatch(/^https:\/\//);
   });
 
-  test("keeps the run playable when a clip cannot be recovered", async () => {
+  test("a clip that cannot be recovered holds the frame and the run keeps playing", async () => {
     const t = newBackend();
     await t.mutation(api.episodes.seed, { days: 1 });
+    const userId = await t.mutation(api.session.signInAnonymously, { deviceToken: TOKEN });
     const built = await t.run(async (ctx) => {
       const episode = await ctx.db.query("episodes").first();
       if (episode === null) throw new Error("no episode seeded");
-      const userId = await ctx.db.insert("users", { kind: "anonymous", createdAt: Date.now() });
       const runId = await ctx.db.insert("runs", {
         userId,
         episodeId: episode._id,
@@ -364,8 +402,12 @@ describe("clip failures", () => {
     await t.finishAllScheduledFunctions(vi.runAllTimers);
 
     const clip = await t.run(async (ctx) => await ctx.db.get(built.clipId));
-    expect(clip?.status).toBe("failed");
-    const view = await t.query(api.runs.view, { runId: built.runId });
+    expect(clip?.status).toBe("ready");
+    expect(clip?.url).toBe(STOCK_MP4S[0]);
+    expect(clip?.error).toContain("held clip");
+    const view = await t.query(api.runs.view, { runId: built.runId, deviceToken: TOKEN });
+    expect(view.current.status).toBe("ready");
+    expect(view.current.clipUrl).toBe(STOCK_MP4S[0]);
     expect(view.stop?.kind).toBe("choice");
     if (view.stop?.kind === "choice") {
       expect(view.stop.options).toHaveLength(3);
@@ -404,7 +446,7 @@ describe("the ending hands off to Keiki", () => {
 
   test("the tool endpoints match a player by phone and record what they said", async () => {
     const t = newBackend();
-    await t.mutation(api.users.setPhone, { phone: "(415) 555-0142" });
+    await t.mutation(api.users.setPhone, { phone: "(415) 555-0142", deviceToken: TOKEN });
     await playEpisode(t);
 
     const story = await keikiTool(t, "/keiki/story", { phone: "+14155550142" });
@@ -485,11 +527,11 @@ describe("the ending hands off to Keiki", () => {
 
   test("what the player texted opens the next episode", async () => {
     const t = newBackend();
-    await t.mutation(api.users.setPhone, { phone: "+14155550142" });
+    await t.mutation(api.users.setPhone, { phone: "+14155550142", deviceToken: TOKEN });
     const { runId } = await playEpisode(t);
     await keikiTool(t, "/keiki/reply", { phone: "+14155550142", text: "I still have the parcel" });
 
-    const second = await t.mutation(api.runs.startToday, {});
+    const second = await t.mutation(api.runs.startToday, { deviceToken: TOKEN });
     await t.finishAllScheduledFunctions(vi.runAllTimers);
     expect(second).not.toBe(runId);
 
@@ -497,7 +539,7 @@ describe("the ending hands off to Keiki", () => {
     const context = await t.query(internal.beats.context, { beatId: beatId! });
     expect(context?.lastPlayerText).toBe("I still have the parcel");
 
-    const fresh = await t.query(api.runs.view, { runId: second });
+    const fresh = await t.query(api.runs.view, { runId: second, deviceToken: TOKEN });
     expect(fresh.beatIndex).toBe(0);
     expect(fresh.stop?.spokenLine.length).toBeGreaterThan(0);
   });
@@ -507,7 +549,11 @@ describe("speaking back", () => {
   test("voice is off cleanly without an OpenAI key", async () => {
     const t = newBackend();
     await startRun(t);
-    await expect(t.mutation(api.runs.speakUploadUrl, {})).rejects.toThrow(/OPENAI_API_KEY/);
+    const runId = await startRun(t);
+    const view = await t.query(api.runs.view, { runId, deviceToken: TOKEN });
+    await expect(
+      t.mutation(api.runs.speakUploadUrl, { runId, ...withBeat(view.current.beatId) }),
+    ).rejects.toThrow(/OPENAI_API_KEY/);
   });
 
   test("maps what the player said onto an existing option and never invents one", () => {

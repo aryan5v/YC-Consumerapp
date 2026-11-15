@@ -46,12 +46,25 @@ export default defineSchema({
   users: defineTable({
     name: v.optional(v.string()),
     phone: v.optional(v.string()),
+    deviceKey: v.optional(v.string()),
     kind: v.union(v.literal("anonymous"), v.literal("named")),
     createdAt: v.number(),
   })
     .index("by_name", ["name"])
     .index("by_kind", ["kind"])
+    .index("by_device_key", ["deviceKey"])
     .index("by_phone", ["phone"]),
+
+  recordings: defineTable({
+    userId: v.id("users"),
+    runId: v.id("runs"),
+    beatId: v.id("beats"),
+    storageId: v.optional(v.id("_storage")),
+    consumed: v.boolean(),
+    createdAt: v.number(),
+  })
+    .index("by_run_beat", ["runId", "beatId"])
+    .index("by_user", ["userId", "createdAt"]),
 
   storyMessages: defineTable({
     userId: v.id("users"),
@@ -112,7 +125,8 @@ export default defineSchema({
     endedAt: v.optional(v.number()),
   })
     .index("by_user_episode", ["userId", "episodeId"])
-    .index("by_user", ["userId"]),
+    .index("by_user", ["userId"])
+    .index("by_status", ["status"]),
 
   beats: defineTable({
     runId: v.id("runs"),
@@ -152,6 +166,8 @@ export default defineSchema({
     aspect: v.string(),
     seconds: v.number(),
     attempts: v.number(),
+    attemptToken: v.optional(v.string()),
+    attemptAt: v.optional(v.number()),
     error: v.optional(v.string()),
     createdAt: v.number(),
     readyAt: v.optional(v.number()),

@@ -18,7 +18,7 @@ export const generateBeat = internalAction({
   handler: async (ctx, { beatId }) => {
     const data = await ctx.runQuery(internal.beats.context, { beatId });
     if (data === null) return null;
-    const { beat, run, episode, pathLabels, lastPlayerText } = data;
+    const { beat, run, episode, pathLabels, lastPlayerText, parentBeat, option } = data;
     if (beat.status === "cancelled") return null;
     if (beat.stop !== undefined || beat.ending !== undefined) {
       await ctx.runMutation(internal.clips.ensureForBeat, { beatId });
@@ -27,7 +27,17 @@ export const generateBeat = internalAction({
 
     const beatsLeft = Math.max(1, episode.beatsTotal - beat.depth);
     const expectedKind = expectedStopKind(beat.depth, episode.beatsTotal);
-    const state: DirectorBeatState = run.state;
+    const state: DirectorBeatState = parentBeat?.state ?? run.state;
+    const continuation =
+      parentBeat === null || option === null
+        ? null
+        : {
+            previousClipPrompt: parentBeat.clipPrompt,
+            optionLabel: option.label,
+            optionAction: option.action,
+            optionTarget: option.target,
+          };
+    const childPath = continuation === null ? pathLabels : [...pathLabels, continuation.optionLabel];
 
     let director: DirectorBeat | null = null;
     let lastError: string | undefined;
@@ -50,9 +60,10 @@ export const generateBeat = internalAction({
               beatsTotal: episode.beatsTotal,
               beatsLeft,
               expectedKind,
-              pathLabels,
+              pathLabels: childPath,
               state,
               lastPlayerText: beat.depth === 0 ? lastPlayerText : null,
+              continuation,
             },
             lastError,
           ),

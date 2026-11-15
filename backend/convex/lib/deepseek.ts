@@ -3,24 +3,51 @@ import { envFlag } from "./env";
 
 export type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
 
+export function directorKey(): string | null {
+  return envFlag("DIRECTOR_API_KEY") ?? envFlag("DEEPSEEK_API_KEY");
+}
+
 export function directorMode(): "live" | "fixture" {
-  return envFlag("DEEPSEEK_API_KEY") === null ? "fixture" : "live";
+  return directorKey() === null ? "fixture" : "live";
+}
+
+export function directorProvider(): "deepseek" | "openai" {
+  return envFlag("DIRECTOR_PROVIDER") === "openai" ? "openai" : "deepseek";
+}
+
+export function directorBaseUrl(): string {
+  const explicit = envFlag("DIRECTOR_BASE_URL");
+  if (explicit !== null) return explicit.replace(/\/+$/, "");
+  if (directorProvider() === "openai") return "https://api.openai.com/v1";
+  return (envFlag("DEEPSEEK_BASE_URL") ?? "https://api.deepseek.com").replace(/\/+$/, "");
+}
+
+export function directorModel(): string {
+  const explicit = envFlag("DIRECTOR_MODEL");
+  if (explicit !== null) return explicit;
+  if (directorProvider() === "openai") return "gpt-5.4";
+  return envFlag("DEEPSEEK_MODEL") ?? "deepseek-chat";
 }
 
 export async function deepseekJSON(messages: ChatMessage[], maxTokens = 2000): Promise<string> {
-  const base = (envFlag("DEEPSEEK_BASE_URL") ?? "https://api.deepseek.com").replace(/\/+$/, "");
-  const key = envFlag("DEEPSEEK_API_KEY");
-  if (key === null) throw new Error("DEEPSEEK_API_KEY is not set");
+  const base = directorBaseUrl();
+  const key = directorKey();
+  if (key === null) throw new Error("no director API key is set");
+  const body: Record<string, unknown> = {
+    model: directorModel(),
+    messages,
+    response_format: { type: "json_object" },
+  };
+  if (directorProvider() === "openai") {
+    body.max_completion_tokens = maxTokens;
+  } else {
+    body.temperature = 1.0;
+    body.max_tokens = maxTokens;
+  }
   const res = await fetch(`${base}/chat/completions`, {
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
-    body: JSON.stringify({
-      model: envFlag("DEEPSEEK_MODEL") ?? "deepseek-chat",
-      messages,
-      response_format: { type: "json_object" },
-      temperature: 1.0,
-      max_tokens: maxTokens,
-    }),
+    body: JSON.stringify(body),
     signal: AbortSignal.timeout(directorTimeoutMs()),
   });
   const text = await res.text();

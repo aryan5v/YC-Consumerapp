@@ -242,7 +242,10 @@ export const markDelivery = internalMutation({
   },
   returns: v.null(),
   handler: async (ctx, { messageId, runId, delivery, error, text }) => {
-    await ctx.db.patch(messageId, { delivery, error, text });
+    const patch: { delivery: typeof delivery; error?: string; text?: string } = { delivery };
+    if (error !== undefined) patch.error = error;
+    if (text !== undefined) patch.text = text;
+    await ctx.db.patch(messageId, patch);
     const run = await ctx.db.get(runId);
     if (run === null || run.ending === undefined) return null;
     if (delivery !== "sent") return null;

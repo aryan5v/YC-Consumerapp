@@ -1,12 +1,13 @@
+import { v } from "convex/values";
 import { query } from "./_generated/server";
 import { homeValidator } from "./lib/validators";
-import { readActiveUser } from "./lib/session";
+import { deviceUser } from "./lib/session";
 import { pacificDate } from "./lib/pacific";
 
 export const today = query({
-  args: {},
+  args: { deviceToken: v.string() },
   returns: homeValidator,
-  handler: async (ctx) => {
+  handler: async (ctx, { deviceToken }) => {
     const date = pacificDate();
     const episode = await ctx.db
       .query("episodes")
@@ -17,7 +18,7 @@ export const today = query({
         `no episode exists for ${date}. Run \`npx convex run episodes:ensureToday\` to create it.`,
       );
     }
-    const user = await readActiveUser(ctx);
+    const user = await deviceUser(ctx, deviceToken);
     if (user === null) {
       return {
         episode: {

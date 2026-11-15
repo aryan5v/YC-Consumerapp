@@ -4,12 +4,15 @@ export type EnvName =
   | "FASTH3_API_KEY"
   | "FASTH3_MODEL"
   | "FASTH3_TASK"
-  | "FASTH3_SIZE"
   | "FASTH3_SHORT_EDGE"
-  | "FASTH3_NUM_FRAMES"
+  | "FASTH3_CONTINUITY_VIDEO"
   | "FASTH3_SUBMIT_TIMEOUT_MS"
   | "DETECT_URL"
   | "DETECT_API_KEY"
+  | "DIRECTOR_PROVIDER"
+  | "DIRECTOR_BASE_URL"
+  | "DIRECTOR_MODEL"
+  | "DIRECTOR_API_KEY"
   | "DEEPSEEK_API_KEY"
   | "DEEPSEEK_BASE_URL"
   | "DEEPSEEK_MODEL"
@@ -34,7 +37,15 @@ export type EnvName =
   | "OPENAI_TTS_MODEL"
   | "OPENAI_STT_MODEL"
   | "OPENAI_BASE_URL"
-  | "OPENAI_TIMEOUT_MS";
+  | "OPENAI_TIMEOUT_MS"
+  | "HELD_CLIP_URL"
+  | "MAX_ACTIVE_RUNS"
+  | "ACTIVE_RUN_TTL_MS"
+  | "SPEECH_ATTEMPTS_PER_BEAT"
+  | "MAX_UPLOAD_BYTES"
+  | "DEMO_CACHE"
+  | "DEMO_DATE"
+  | "DEMO_DEPTH";
 
 export function env(name: EnvName): string | undefined {
   switch (name) {
@@ -48,18 +59,24 @@ export function env(name: EnvName): string | undefined {
       return process.env.FASTH3_MODEL;
     case "FASTH3_TASK":
       return process.env.FASTH3_TASK;
-    case "FASTH3_SIZE":
-      return process.env.FASTH3_SIZE;
     case "FASTH3_SHORT_EDGE":
       return process.env.FASTH3_SHORT_EDGE;
-    case "FASTH3_NUM_FRAMES":
-      return process.env.FASTH3_NUM_FRAMES;
+    case "FASTH3_CONTINUITY_VIDEO":
+      return process.env.FASTH3_CONTINUITY_VIDEO;
     case "FASTH3_SUBMIT_TIMEOUT_MS":
       return process.env.FASTH3_SUBMIT_TIMEOUT_MS;
     case "DETECT_URL":
       return process.env.DETECT_URL;
     case "DETECT_API_KEY":
       return process.env.DETECT_API_KEY;
+    case "DIRECTOR_PROVIDER":
+      return process.env.DIRECTOR_PROVIDER;
+    case "DIRECTOR_BASE_URL":
+      return process.env.DIRECTOR_BASE_URL;
+    case "DIRECTOR_MODEL":
+      return process.env.DIRECTOR_MODEL;
+    case "DIRECTOR_API_KEY":
+      return process.env.DIRECTOR_API_KEY;
     case "DEEPSEEK_API_KEY":
       return process.env.DEEPSEEK_API_KEY;
     case "DEEPSEEK_BASE_URL":
@@ -110,6 +127,22 @@ export function env(name: EnvName): string | undefined {
       return process.env.OPENAI_BASE_URL;
     case "OPENAI_TIMEOUT_MS":
       return process.env.OPENAI_TIMEOUT_MS;
+    case "HELD_CLIP_URL":
+      return process.env.HELD_CLIP_URL;
+    case "MAX_ACTIVE_RUNS":
+      return process.env.MAX_ACTIVE_RUNS;
+    case "ACTIVE_RUN_TTL_MS":
+      return process.env.ACTIVE_RUN_TTL_MS;
+    case "SPEECH_ATTEMPTS_PER_BEAT":
+      return process.env.SPEECH_ATTEMPTS_PER_BEAT;
+    case "MAX_UPLOAD_BYTES":
+      return process.env.MAX_UPLOAD_BYTES;
+    case "DEMO_CACHE":
+      return process.env.DEMO_CACHE;
+    case "DEMO_DATE":
+      return process.env.DEMO_DATE;
+    case "DEMO_DEPTH":
+      return process.env.DEMO_DEPTH;
   }
 }
 

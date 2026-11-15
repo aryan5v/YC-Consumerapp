@@ -3,6 +3,7 @@ import { internalMutation, internalQuery } from "./_generated/server";
 import { Doc } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
 import { clipPrompt } from "./lib/style";
+import { ChildSpec, childSpecs } from "./lib/story";
 import { maybeFinish, maybePrefetch } from "./lib/orchestration";
 
 export const context = internalQuery({
@@ -20,7 +21,20 @@ export const context = internalQuery({
       .order("desc")
       .take(6);
     const inbound = recent.find((message) => message.direction === "inbound");
-    return { beat, run, episode, pathLabels: run.path, lastPlayerText: inbound?.text ?? null };
+    const parentBeat = beat.parentBeatId === undefined ? null : await ctx.db.get(beat.parentBeatId);
+    let option: ChildSpec | null = null;
+    if (parentBeat !== null && beat.optionId !== undefined && parentBeat.stop !== undefined) {
+      option = childSpecs(parentBeat.stop).find((spec) => spec.optionId === beat.optionId) ?? null;
+    }
+    return {
+      beat,
+      run,
+      episode,
+      pathLabels: run.path,
+      lastPlayerText: inbound?.text ?? null,
+      parentBeat,
+      option,
+    };
   },
 });
 

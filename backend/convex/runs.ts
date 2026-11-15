@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { Doc, Id } from "./_generated/dataModel";
-import { ensureActiveUser } from "./lib/session";
+import { ensureDeviceUser, requireDeviceUser, runOwnedBy } from "./lib/session";
 import { ensureEpisode } from "./lib/episodes";
 import { pacificDate } from "./lib/pacific";
 import { runViewValidator } from "./lib/validators";
@@ -15,24 +15,55 @@ import { deepseekJSON, directorMode, parseJSONObject } from "./lib/deepseek";
 import { graderMessages, speechMapperMessages } from "./lib/director";
 import { checkAnswer } from "./lib/story";
 import { childrenOfBeat, clipForBeat, kickRun } from "./lib/orchestration";
+import { activeRunTtlMs, maxActiveRuns, maxUploadBytes, speechAttemptsPerBeat } from "./lib/config";
+
+const NO_SPEECH = {
+  transcript: "",
+  matchedOptionId: null as string | null,
+  correct: null as boolean | null,
+  reply: null as string | null,
+  replyAudioUrl: null as string | null,
+};
+
+async function refuseWhenAtCapacity(ctx: Parameters<typeof kickRun>[0]): Promise<void> {
+  const cutoff = Date.now() - activeRunTtlMs();
+  const active = await ctx.db
+    .query("runs")
+    .withIndex("by_status", (q) => q.eq("status", "active"))
+    .collect();
+  let live = 0;
+  for (const run of active) {
+    if (run.startedAt < cutoff) {
+      await ctx.db.patch(run._id, { status: "ended", endedAt: Date.now() });
+      continue;
+    }
+    live += 1;
+  }
+  if (live >= maxActiveRuns()) {
+    throw new Error(
+      "the demo is at capacity: too many episodes are being generated at once. Try again in a minute.",
+    );
+  }
+}
 
 export const startToday = mutation({
-  args: {},
+  args: { deviceToken: v.string() },
   returns: v.id("runs"),
-  handler: async (ctx) => {
-    const userId = await ensureActiveUser(ctx);
+  handler: async (ctx, { deviceToken }) => {
+    const user = await ensureDeviceUser(ctx, deviceToken);
     const episode = await ensureEpisode(ctx, pacificDate());
     const existing = await ctx.db
       .query("runs")
-      .withIndex("by_user_episode", (q) => q.eq("userId", userId).eq("episodeId", episode._id))
+      .withIndex("by_user_episode", (q) => q.eq("userId", user._id).eq("episodeId", episode._id))
       .order("desc")
       .first();
     if (existing !== null && existing.status === "active") {
       await kickRun(ctx, existing);
       return existing._id;
     }
+    await refuseWhenAtCapacity(ctx);
     const runId = await ctx.db.insert("runs", {
-      userId,
+      userId: user._id,
       episodeId: episode._id,
       status: "active",
       path: [],
@@ -56,11 +87,10 @@ export const startToday = mutation({
 });
 
 export const view = query({
-  args: { runId: v.id("runs") },
+  args: { runId: v.id("runs"), deviceToken: v.string() },
   returns: runViewValidator,
-  handler: async (ctx, { runId }) => {
-    const run = await ctx.db.get(runId);
-    if (run === null) throw new Error("run not found");
+  handler: async (ctx, { runId, deviceToken }) => {
+    const { run } = await runOwnedBy(ctx, runId, deviceToken);
     const episode = await ctx.db.get(run.episodeId);
     if (episode === null) throw new Error("episode not found");
     const beatId = run.currentBeatId;
@@ -78,28 +108,30 @@ export const view = query({
 });
 
 export const choose = mutation({
-  args: { runId: v.id("runs"), optionId: v.string() },
+  args: { runId: v.id("runs"), optionId: v.string(), expectedBeatId: v.id("beats"), deviceToken: v.string() },
   returns: v.null(),
-  handler: async (ctx, { runId, optionId }) => {
-    await chooseOption(ctx, runId, optionId);
+  handler: async (ctx, { runId, optionId, expectedBeatId, deviceToken }) => {
+    await runOwnedBy(ctx, runId, deviceToken);
+    await chooseOption(ctx, runId, optionId, expectedBeatId);
     return null;
   },
 });
 
 export const answer = mutation({
-  args: { runId: v.id("runs"), answer: v.string() },
+  args: { runId: v.id("runs"), answer: v.string(), expectedBeatId: v.id("beats"), deviceToken: v.string() },
   returns: v.object({ correct: v.boolean() }),
-  handler: async (ctx, { runId, answer: given }) => {
-    const correct = await answerPuzzle(ctx, runId, given);
-    return { correct };
+  handler: async (ctx, { runId, answer: given, expectedBeatId, deviceToken }) => {
+    await runOwnedBy(ctx, runId, deviceToken);
+    const result = await answerPuzzle(ctx, runId, given, expectedBeatId);
+    return { correct: result.correct };
   },
 });
 
 export const speakContext = internalQuery({
-  args: { runId: v.id("runs") },
-  handler: async (ctx, { runId }) => {
-    const run = await ctx.db.get(runId);
-    if (run === null || run.status !== "active") return null;
+  args: { runId: v.id("runs"), deviceToken: v.string() },
+  handler: async (ctx, { runId, deviceToken }) => {
+    const { run } = await runOwnedBy(ctx, runId, deviceToken);
+    if (run.status !== "active") return null;
     const beatId = run.currentBeatId;
     if (beatId === undefined) return null;
     const beat = await ctx.db.get(beatId);
@@ -107,6 +139,7 @@ export const speakContext = internalQuery({
     const episode = await ctx.db.get(run.episodeId);
     if (episode === null) return null;
     return {
+      beatId,
       stop: beat.stop ?? null,
       spokenLine: beat.spokenLine ?? "",
       characterName: episode.character.name,
@@ -118,36 +151,99 @@ export const speakContext = internalQuery({
 });
 
 export const speakChoose = internalMutation({
-  args: { runId: v.id("runs"), optionId: v.string() },
-  returns: v.null(),
-  handler: async (ctx, { runId, optionId }) => {
-    await chooseOption(ctx, runId, optionId);
-    return null;
+  args: {
+    runId: v.id("runs"),
+    optionId: v.string(),
+    expectedBeatId: v.id("beats"),
+    deviceToken: v.string(),
+  },
+  returns: v.boolean(),
+  handler: async (ctx, { runId, optionId, expectedBeatId, deviceToken }) => {
+    await runOwnedBy(ctx, runId, deviceToken);
+    return await chooseOption(ctx, runId, optionId, expectedBeatId);
   },
 });
 
 export const speakAnswer = internalMutation({
-  args: { runId: v.id("runs"), answer: v.string(), correct: v.boolean() },
-  returns: v.null(),
-  handler: async (ctx, { runId, answer, correct }) => {
-    await answerPuzzle(ctx, runId, answer, correct);
-    return null;
+  args: {
+    runId: v.id("runs"),
+    answer: v.string(),
+    correct: v.boolean(),
+    expectedBeatId: v.id("beats"),
+    deviceToken: v.string(),
+  },
+  returns: v.boolean(),
+  handler: async (ctx, { runId, answer, correct, expectedBeatId, deviceToken }) => {
+    await runOwnedBy(ctx, runId, deviceToken);
+    const result = await answerPuzzle(ctx, runId, answer, expectedBeatId, correct);
+    return result.applied;
   },
 });
 
 export const speakUploadUrl = mutation({
-  args: {},
+  args: { runId: v.id("runs"), expectedBeatId: v.id("beats"), deviceToken: v.string() },
   returns: v.string(),
-  handler: async (ctx) => {
+  handler: async (ctx, { runId, expectedBeatId, deviceToken }) => {
     if (!openaiConfigured()) {
       throw new Error("voice is not configured on this deployment: OPENAI_API_KEY is unset");
     }
+    const { user } = await runOwnedBy(ctx, runId, deviceToken);
+    if (expectedBeatId === undefined) throw new Error("a recording belongs to one beat");
+    const used = await ctx.db
+      .query("recordings")
+      .withIndex("by_run_beat", (q) => q.eq("runId", runId).eq("beatId", expectedBeatId))
+      .collect();
+    if (used.length >= speechAttemptsPerBeat()) {
+      throw new Error("too many voice attempts on this beat: tap your answer or type it instead");
+    }
+    await ctx.db.insert("recordings", {
+      userId: user._id,
+      runId,
+      beatId: expectedBeatId,
+      consumed: false,
+      createdAt: Date.now(),
+    });
     return await ctx.storage.generateUploadUrl();
   },
 });
 
+export const claimRecording = internalMutation({
+  args: {
+    runId: v.id("runs"),
+    beatId: v.id("beats"),
+    audioStorageId: v.id("_storage"),
+    deviceToken: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, { runId, beatId, audioStorageId, deviceToken }) => {
+    await runOwnedBy(ctx, runId, deviceToken);
+    const pending = await ctx.db
+      .query("recordings")
+      .withIndex("by_run_beat", (q) => q.eq("runId", runId).eq("beatId", beatId))
+      .collect();
+    const claim = pending.find((row) => !row.consumed && row.storageId === undefined);
+    if (claim === undefined) {
+      await ctx.storage.delete(audioStorageId);
+      throw new Error("that recording does not belong to this beat: ask for the upload URL again");
+    }
+    const meta = await ctx.storage.getMetadata(audioStorageId);
+    if (meta === null) throw new Error("that recording is no longer in storage");
+    if (meta.size > maxUploadBytes()) {
+      await ctx.storage.delete(audioStorageId);
+      await ctx.db.patch(claim._id, { consumed: true });
+      throw new Error("that recording is too long: keep it under ten seconds");
+    }
+    await ctx.db.patch(claim._id, { consumed: true, storageId: audioStorageId });
+  },
+});
+
 export const speak = action({
-  args: { runId: v.id("runs"), audioStorageId: v.id("_storage") },
+  args: {
+    runId: v.id("runs"),
+    audioStorageId: v.id("_storage"),
+    expectedBeatId: v.id("beats"),
+    deviceToken: v.string(),
+  },
   returns: v.object({
     transcript: v.string(),
     matchedOptionId: v.union(v.string(), v.null()),
@@ -155,15 +251,27 @@ export const speak = action({
     reply: v.union(v.string(), v.null()),
     replyAudioUrl: v.union(v.string(), v.null()),
   }),
-  handler: async (ctx, { runId, audioStorageId }) => {
+  handler: async (ctx, { runId, audioStorageId, expectedBeatId, deviceToken }) => {
     if (!openaiConfigured()) {
       throw new Error("voice is not configured on this deployment: OPENAI_API_KEY is unset");
     }
-    const context = await ctx.runQuery(internal.runs.speakContext, { runId });
+    const context = await ctx.runQuery(internal.runs.speakContext, { runId, deviceToken });
     if (context === null) throw new Error("this run is no longer active");
+    if (context.beatId !== expectedBeatId) return NO_SPEECH;
+    await ctx.runMutation(internal.runs.claimRecording, {
+      runId,
+      beatId: expectedBeatId,
+      audioStorageId,
+      deviceToken,
+    });
     const recording = await ctx.storage.get(audioStorageId);
     if (recording === null) throw new Error("that recording is no longer in storage");
-    const transcript = await transcribe(recording, "m4a");
+    let transcript = "";
+    try {
+      transcript = await transcribe(recording, "m4a");
+    } finally {
+      await ctx.storage.delete(audioStorageId);
+    }
     const replyAudio = async (text: string): Promise<{ reply: string; replyAudioUrl: string | null }> => {
       try {
         const audio = await synthesize({
@@ -194,7 +302,7 @@ export const speak = action({
 
     if (stop.kind === "puzzle") {
       let correct = checkAnswer(stop, said);
-      if (!correct && said !== "" && directorMode() === "live") {
+      if (!correct && directorMode() === "live") {
         try {
           const raw = await deepseekJSON(
             graderMessages({ question: stop.question, answers: stop.answers, transcript: said }),
@@ -206,7 +314,14 @@ export const speak = action({
           correct = false;
         }
       }
-      await ctx.runMutation(internal.runs.speakAnswer, { runId, answer: said, correct });
+      const applied = await ctx.runMutation(internal.runs.speakAnswer, {
+        runId,
+        answer: said,
+        correct,
+        expectedBeatId,
+        deviceToken,
+      });
+      if (!applied) return { ...NO_SPEECH, transcript };
       return { transcript, matchedOptionId: correct ? "success" : "failure", correct, reply: null, replyAudioUrl: null };
     }
 
@@ -219,7 +334,7 @@ export const speak = action({
     const local = matchSpokenOption(options, said);
     let optionId = local.optionId;
     let reply: string | null = null;
-    if (optionId === null && said !== "" && directorMode() === "live") {
+    if (optionId === null && directorMode() === "live") {
       try {
         const raw = await deepseekJSON(
           speechMapperMessages({
@@ -243,7 +358,13 @@ export const speak = action({
       const spoken = await replyAudio(reply ?? askAgainLine(context.characterName));
       return { transcript, matchedOptionId: null, correct: null, ...spoken };
     }
-    await ctx.runMutation(internal.runs.speakChoose, { runId, optionId });
+    const applied = await ctx.runMutation(internal.runs.speakChoose, {
+      runId,
+      optionId,
+      expectedBeatId,
+      deviceToken,
+    });
+    if (!applied) return { ...NO_SPEECH, transcript };
     return { transcript, matchedOptionId: optionId, correct: null, reply: null, replyAudioUrl: null };
   },
 });

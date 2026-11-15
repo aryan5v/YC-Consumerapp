@@ -9,7 +9,9 @@ export const startClip = internalAction({
   returns: v.null(),
   handler: async (ctx, { beatId }) => {
     const data = await ctx.runQuery(internal.clips.work, { beatId });
-    if (data === null || data.clip.status !== "queued") return null;
+    if (data === null) return null;
+    const attemptToken = await ctx.runMutation(internal.clips.claimAttempt, { beatId });
+    if (attemptToken === null) return null;
     try {
       const job = await trayGenerate({
         prompt: data.clip.prompt,
@@ -17,13 +19,20 @@ export const startClip = internalAction({
         continuityVideoUrl: data.anchors.continuityVideoUrl,
         characterSheetUrl: data.anchors.characterSheetUrl,
         styleImageUrl: data.anchors.styleImageUrl,
-        voiceRefUrl: data.anchors.voiceRefUrl,
         seed: data.clip.seed,
         aspect: data.clip.aspect,
         seconds: data.clip.seconds,
       });
-      await ctx.runMutation(internal.clips.setJob, { beatId, jobId: job.jobId });
-      await ctx.scheduler.runAfter(pollMs(), internal.tray.pollClip, { beatId, attempt: 1 });
+      const stored = await ctx.runMutation(internal.clips.setJob, {
+        beatId,
+        jobId: job.jobId,
+        attemptToken,
+      });
+      if (!stored) {
+        await trayCancel(job.jobId).catch(() => null);
+        return null;
+      }
+      await ctx.scheduler.runAfter(pollMs(), internal.tray.pollClip, { beatId, attempt: 1, attemptToken });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       await ctx.runMutation(internal.clips.markFailed, { beatId, error: `generate: ${message}`, retryable: true });
@@ -33,18 +42,23 @@ export const startClip = internalAction({
 });
 
 export const pollClip = internalAction({
-  args: { beatId: v.id("beats"), attempt: v.number() },
+  args: { beatId: v.id("beats"), attempt: v.number(), attemptToken: v.string() },
   returns: v.null(),
-  handler: async (ctx, { beatId, attempt }) => {
+  handler: async (ctx, { beatId, attempt, attemptToken }) => {
     const data = await ctx.runQuery(internal.clips.work, { beatId });
     if (data === null) return null;
     const clip = data.clip;
-    if (clip.status === "ready" || clip.status === "cancelled" || clip.status === "failed") return null;
+    if (clip.status === "cancelled" || clip.status === "failed") {
+      if (clip.jobId !== undefined) await trayCancel(clip.jobId).catch(() => null);
+      return null;
+    }
+    if (clip.status !== "generating" || clip.attemptToken !== attemptToken) return null;
     if (clip.jobId === undefined) {
       await ctx.runMutation(internal.clips.markFailed, { beatId, error: "no tray job id", retryable: true });
       return null;
     }
     if (attempt > maxPolls()) {
+      await trayCancel(clip.jobId).catch(() => null);
       await ctx.runMutation(internal.clips.markFailed, {
         beatId,
         error: `tray job ${clip.jobId} did not finish after ${attempt - 1} polls`,
@@ -65,14 +79,23 @@ export const pollClip = internalAction({
         await ctx.runMutation(internal.clips.markFailed, { beatId, error: job.error ?? "tray job failed", retryable: true });
         return null;
       }
-      await ctx.scheduler.runAfter(pollMs(), internal.tray.pollClip, { beatId, attempt: attempt + 1 });
+      await ctx.scheduler.runAfter(pollMs(), internal.tray.pollClip, {
+        beatId,
+        attempt: attempt + 1,
+        attemptToken,
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (attempt >= maxPolls()) {
+        await trayCancel(clip.jobId).catch(() => null);
         await ctx.runMutation(internal.clips.markFailed, { beatId, error: `poll: ${message}` });
         return null;
       }
-      await ctx.scheduler.runAfter(pollMs(), internal.tray.pollClip, { beatId, attempt: attempt + 1 });
+      await ctx.scheduler.runAfter(pollMs(), internal.tray.pollClip, {
+        beatId,
+        attempt: attempt + 1,
+        attemptToken,
+      });
     }
     return null;
   },

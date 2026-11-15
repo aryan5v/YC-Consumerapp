@@ -55,6 +55,13 @@ export type DirectorBeat = {
   ending: { title: string; summary: string } | null;
 };
 
+export type DirectorContinuation = {
+  previousClipPrompt: string;
+  optionLabel: string;
+  optionAction: string;
+  optionTarget: string | null;
+};
+
 export type DirectorContext = {
   episodeTitle: string;
   premise: string;
@@ -66,9 +73,51 @@ export type DirectorContext = {
   pathLabels: string[];
   state: DirectorBeatState;
   lastPlayerText: string | null;
+  continuation: DirectorContinuation | null;
 };
 
 export const CHOICE_OPTION_COUNT = 3;
+export const MAX_SPOKEN_WORDS = 14;
+
+const SMALL_WORDS = new Set([
+  "the", "a", "an", "of", "in", "on", "at", "to", "and", "or", "with", "for", "its", "his", "her",
+  "their", "my", "your", "under", "over", "into", "from", "that", "this",
+]);
+
+export function shortenSpokenLine(raw: string): string {
+  const text = raw.trim().replace(/\s+/g, " ");
+  if (text === "") return text;
+  const words = text.split(" ");
+  if (words.length <= MAX_SPOKEN_WORDS) return text;
+  const head = words.slice(0, MAX_SPOKEN_WORDS).join(" ");
+  const boundary = Math.max(head.lastIndexOf(", "), head.lastIndexOf("; "), head.lastIndexOf(". "));
+  const cut = boundary > head.length * 0.5 ? head.slice(0, boundary) : head;
+  const trimmed = cut.replace(/[,;:\s]+$/, "");
+  if (trimmed === "") return head;
+  const capital = trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
+  return /[.!?]$/.test(capital) ? capital : `${capital}.`;
+}
+
+function significantTokens(raw: string): string[] {
+  const out: string[] = [];
+  for (const token of raw.toLowerCase().replace(/[^a-z0-9 ]+/g, " ").split(/\s+/)) {
+    if (token === "" || SMALL_WORDS.has(token)) continue;
+    if (token.length < 3 && !/^[0-9]/.test(token)) continue;
+    out.push(token);
+  }
+  return out;
+}
+
+export function targetIsVisible(target: string, clipPrompt: string): boolean {
+  const wanted = significantTokens(target);
+  if (wanted.length === 0) return true;
+  const shown = new Set(significantTokens(clipPrompt));
+  let hits = 0;
+  for (const token of wanted) {
+    if (shown.has(token)) hits += 1;
+  }
+  return hits >= 1 && hits / wanted.length >= 0.5;
+}
 export const DEFAULT_SPOKEN_LINE = "So what do you do?";
 
 export function expectedStopKind(depth: number, beatsTotal: number, rhythm = 3): "choice" | "puzzle" | "ending" {
@@ -89,10 +138,11 @@ export function buildDirectorMessages(context: DirectorContext, previousError?: 
     "1. Write action and setting only. Never write style, palette, colour, lighting, lens, camera or rendering words; the studio appends a fixed style bible to every shot and a stray style word breaks consistency.",
     "2. Continuity. The same protagonist, the same night, the same street, the same moment. No time skips, no new characters you did not introduce, no weather changes.",
     "3. Every target must be a physical object that is actually visible in the shot you just wrote for this beat, and the shot ends on a steady wide frame where all the targets are separated.",
-    `4. ${character} speaks in every shot. spoken_line is the line ${character} says out loud at the end of the shot, just before it settles into the wide decision frame. Keep it under fourteen words so it fits in about four seconds. Write it as speech, not as a caption: contractions, plain words, no stage directions, no quotation marks inside it.`,
-    `5. Every option and every outcome carries its own spoken_line: what ${character} says out loud at the end of that following shot.`,
-    "6. Failure is never game over. A failed puzzle sends the story somewhere worse and more interesting.",
-    "7. Reply with a single JSON object and nothing else. No prose, no markdown fence.",
+    `4. ${character} speaks in every shot. spoken_line is the line ${character} says out loud at the end of the shot, just before it settles into the wide decision frame. It must be fourteen words or fewer so it fits in about four seconds: count them. Write it as speech, not as a caption: contractions, plain words, no stage directions, no quotation marks inside it.`,
+    "5. A puzzle must have exactly one correct answer, and every string in answers must be another way of saying that same answer, never a second answer.",
+    "6. Every target must use the words of the clip_prompt you wrote for this same beat: the shot has to actually show the thing the option names.",
+    "7. Failure is never game over. A failed puzzle sends the story somewhere worse and more interesting.",
+    "8. Reply with a single JSON object and nothing else. No prose, no markdown fence.",
   ].join("\n");
 
   const choiceShape = [
@@ -104,7 +154,7 @@ export function buildDirectorMessages(context: DirectorContext, previousError?: 
     '  "stop": {',
     '    "kind": "choice",',
     '    "options": [',
-    '      { "id": "a", "label": "3-5 word verb phrase shown on a chip", "target": "a physical thing visible in the shot, 2-4 words", "leads_to": "one line: what happens if the player picks this", "spoken_line": "what the character says at the end of that following shot", "narration": "one narration line for the shot that follows" },',
+    '      { "id": "a", "label": "3-5 word verb phrase shown on a chip", "target": "a physical thing the shot you just wrote actually shows, using its words", "leads_to": "one line: what happens if the player picks this", "narration": "one narration line for the shot that follows" },',
     '      { "id": "b", ... },',
     '      { "id": "c", ... }',
     "    ]",
@@ -126,8 +176,8 @@ export function buildDirectorMessages(context: DirectorContext, previousError?: 
     '    "answer_type": "number",',
     '    "choices": null,',
     '    "answers": ["every acceptable answer, lowercase, digits only for a number"],',
-    '    "success": { "id": "success", "label": "3 word outcome", "leads_to": "one line", "spoken_line": "what the character says at the end of that shot", "narration": "one narration line" },',
-    '    "failure": { "id": "failure", "label": "3 word outcome", "leads_to": "one line", "spoken_line": "what the character says at the end of that shot", "narration": "one narration line" }',
+    '    "success": { "id": "success", "label": "3 word outcome", "leads_to": "one line", "narration": "one narration line" },',
+    '    "failure": { "id": "failure", "label": "3 word outcome", "leads_to": "one line", "narration": "one narration line" }',
     "  },",
     '  "state": { "items": [], "trust": 0, "clues": [], "beats_left": <N> },',
     '  "ending": null',
@@ -148,7 +198,22 @@ export function buildDirectorMessages(context: DirectorContext, previousError?: 
   ].join("\n");
 
   const wantsEnding = context.expectedKind === "ending";
-  const lines = [
+  const lines: string[] = [];
+
+  if (context.continuation !== null) {
+    const option = context.continuation;
+    lines.push(
+      `The shot the player is watching right now: ${option.previousClipPrompt}`,
+      "",
+      `The player has chosen: ${option.optionLabel}. ${option.optionAction}`,
+      option.optionTarget === null ? "" : `What they are heading for is the ${option.optionTarget}.`,
+      "",
+      "Write the very next beat of that choice happening, as one shot. The shot must show the choice actually happening, and it must end on a stop that the player can answer from what that shot shows. If the stop is a puzzle, the answer must be visible or hearable in the shot you write.",
+      "",
+    );
+  }
+
+  lines.push(
     `Episode: ${context.episodeTitle}`,
     `Premise: ${context.premise}`,
     "",
@@ -158,7 +223,7 @@ export function buildDirectorMessages(context: DirectorContext, previousError?: 
     `This is beat ${context.beatIndex + 1} of at most ${context.beatsTotal}. You have ${context.beatsLeft} beat(s) left including this one.`,
     `The path so far: ${context.pathLabels.length === 0 ? "(the player has just arrived)" : context.pathLabels.join(" -> ")}`,
     `Hidden state carried forward: items=${JSON.stringify(context.state.items)}, trust=${context.state.trust}, clues=${JSON.stringify(context.state.clues)}`,
-  ];
+  );
 
   if (context.lastPlayerText !== null) {
     lines.push(
@@ -225,7 +290,7 @@ export function validateBeat(
         beat_id: beatId,
         clip_prompt: clipPrompt,
         narration,
-        spoken_line: topSpoken ?? narration,
+        spoken_line: shortenSpokenLine(topSpoken ?? narration),
         stop: null,
         state,
         ending,
@@ -234,9 +299,11 @@ export function validateBeat(
   }
 
   if (ending !== null) return { ok: false, error: "ending must be null before the last beat" };
-  const stop = validateStop(source.stop, options.expectedKind);
+  const stop = validateStop(source.stop, options.expectedKind, clipPrompt);
   if (!stop.ok) return { ok: false, error: stop.error };
-  const spokenLine = topSpoken ?? (stop.stop.kind === "puzzle" ? stop.stop.question : DEFAULT_SPOKEN_LINE);
+  const spokenLine = shortenSpokenLine(
+    topSpoken ?? (stop.stop.kind === "puzzle" ? stop.stop.question : DEFAULT_SPOKEN_LINE),
+  );
   return {
     ok: true,
     beat: { beat_id: beatId, clip_prompt: clipPrompt, narration, spoken_line: spokenLine, stop: stop.stop, state, ending: null },
@@ -246,6 +313,7 @@ export function validateBeat(
 function validateStop(
   raw: unknown,
   expectedKind: "choice" | "puzzle" | "ending",
+  clipPrompt: string,
 ): { ok: true; stop: DirectorStop } | { ok: false; error: string } {
   if (raw === null || typeof raw !== "object") return { ok: false, error: "stop must be an object on a non-final beat" };
   const stop = raw as Record<string, unknown>;
@@ -269,14 +337,21 @@ function validateStop(
       id = id.toLowerCase().replace(/[^a-z]/g, "").slice(0, 8);
       if (id === "" || used.has(id)) id = String.fromCharCode(97 + parsed.length);
       used.add(id);
+      const resolvedTarget = target ?? label;
+      if (!targetIsVisible(resolvedTarget, clipPrompt)) {
+        return {
+          ok: false,
+          error: `the option "${label}" names "${resolvedTarget}", which the shot you wrote for this beat does not show. Name something the shot actually shows, using its words.`,
+        };
+      }
       parsed.push({
         id,
         label,
-        target: target ?? label,
+        target: resolvedTarget,
         leads_to: leadsTo,
         clip_prompt: asText(option.clip_prompt ?? option.clipPrompt) ?? undefined,
         narration: asText(option.narration) ?? undefined,
-        spoken_line: asText(option.spoken_line ?? option.spokenLine) ?? label,
+        spoken_line: shortenSpokenLine(asText(option.spoken_line ?? option.spokenLine) ?? label),
       });
       if (parsed.length === CHOICE_OPTION_COUNT) break;
     }
@@ -294,6 +369,13 @@ function validateStop(
   }
   const answers = asStringArray(stop.answers ?? stop.accepted_answers);
   if (answers.length === 0) return { ok: false, error: "a puzzle stop needs at least one accepted answer" };
+  if (!answersAgree(answers, answerType)) {
+    return {
+      ok: false,
+      error:
+        "the accepted answers are not all the same answer. A puzzle has one correct answer; every string in answers must be another way of saying it.",
+    };
+  }
   let choices = asStringArray(stop.choices);
   if (answerType === "pick") {
     if (choices.length < 2) choices = answers.slice(0, 4);
@@ -336,9 +418,30 @@ function validateChildIntent(
       leads_to: leadsTo,
       clip_prompt: asText(child.clip_prompt ?? child.clipPrompt) ?? undefined,
       narration: asText(child.narration) ?? undefined,
-      spoken_line: asText(child.spoken_line ?? child.spokenLine) ?? label,
+      spoken_line: shortenSpokenLine(asText(child.spoken_line ?? child.spokenLine) ?? label),
     },
   };
+}
+
+export function answersAgree(answers: string[], answerType: "pick" | "number" | "text"): boolean {
+  if (answers.length <= 1) return true;
+  const normalised = answers.map((answer) =>
+    answer.toLowerCase().normalize("NFKD").replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim(),
+  );
+  if (answerType === "number") {
+    const digits = answers.map((answer) => answer.replace(/[^0-9]/g, "").replace(/^0+/, ""));
+    return digits.every((value) => value !== "" && value === digits[0]);
+  }
+  const tokenSets = normalised.map((answer) => new Set(answer.split(" ").filter(Boolean)));
+  const first = tokenSets[0];
+  return tokenSets.every((tokens) => {
+    if (tokens.size === 0 || first.size === 0) return false;
+    let hits = 0;
+    for (const token of tokens) {
+      if (first.has(token)) hits += 1;
+    }
+    return hits / Math.max(first.size, tokens.size) >= (answerType === "pick" ? 0.8 : 0.6);
+  });
 }
 
 function validateState(raw: unknown, beatsLeft: number): DirectorBeatState {

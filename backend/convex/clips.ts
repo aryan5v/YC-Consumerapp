@@ -4,6 +4,7 @@ import { Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
 import { childSpecs } from "./lib/story";
 import { MAX_GENERATE_ATTEMPTS, maybeFinish, maybePrefetch } from "./lib/orchestration";
+import { heldClipUrl } from "./lib/config";
 
 async function clipForBeat(ctx: { db: QueryCtx["db"] }, beatId: Id<"beats">) {
   return await ctx.db
@@ -48,7 +49,6 @@ export const work = internalQuery({
         continuityVideoUrl: parentClip?.url ?? null,
         characterSheetUrl: episode.characterSheetUrl,
         styleImageUrl: episode.styleImageUrl,
-        voiceRefUrl: episode.voiceRefUrl,
       },
     };
   },
@@ -89,14 +89,33 @@ export const ensureForBeat = internalMutation({
   },
 });
 
-export const setJob = internalMutation({
-  args: { beatId: v.id("beats"), jobId: v.string() },
-  returns: v.null(),
-  handler: async (ctx, { beatId, jobId }) => {
+export const claimAttempt = internalMutation({
+  args: { beatId: v.id("beats") },
+  returns: v.union(v.string(), v.null()),
+  handler: async (ctx, { beatId }) => {
     const clip = await clipForBeat(ctx, beatId);
     if (clip === null || clip.status !== "queued") return null;
-    await ctx.db.patch(clip._id, { jobId, status: "generating" });
-    return null;
+    const token = crypto.randomUUID();
+    await ctx.db.patch(clip._id, {
+      status: "generating",
+      attempts: clip.attempts + 1,
+      attemptToken: token,
+      attemptAt: Date.now(),
+      jobId: undefined,
+      error: undefined,
+    });
+    return token;
+  },
+});
+
+export const setJob = internalMutation({
+  args: { beatId: v.id("beats"), jobId: v.string(), attemptToken: v.string() },
+  returns: v.boolean(),
+  handler: async (ctx, { beatId, jobId, attemptToken }) => {
+    const clip = await clipForBeat(ctx, beatId);
+    if (clip === null || clip.status !== "generating" || clip.attemptToken !== attemptToken) return false;
+    await ctx.db.patch(clip._id, { jobId });
+    return true;
   },
 });
 
@@ -110,7 +129,6 @@ export const markReady = internalMutation({
       status: "ready",
       url,
       lastFrameUrl,
-      attempts: clip.attempts + 1,
       readyAt: Date.now(),
     });
     const beat = await ctx.db.get(beatId);
@@ -132,18 +150,40 @@ export const markFailed = internalMutation({
   handler: async (ctx, { beatId, error, retryable }) => {
     const clip = await clipForBeat(ctx, beatId);
     if (clip === null || clip.status === "cancelled" || clip.status === "ready") return null;
-    const attempts = clip.attempts + 1;
-    if (retryable === true && attempts < MAX_GENERATE_ATTEMPTS) {
-      await ctx.db.patch(clip._id, { status: "queued", attempts, jobId: undefined, error });
+    if (retryable === true && clip.attempts < MAX_GENERATE_ATTEMPTS) {
+      await ctx.db.patch(clip._id, {
+        status: "queued",
+        jobId: undefined,
+        attemptToken: undefined,
+        error,
+      });
       await ctx.scheduler.runAfter(0, internal.tray.startClip, { beatId });
       return null;
     }
-    await ctx.db.patch(clip._id, { status: "failed", error, attempts });
     const beat = await ctx.db.get(beatId);
-    if (beat !== null && beat.status === "generating") {
-      await ctx.db.patch(beatId, { status: "failed", error });
-    }
+    const parentClip =
+      beat === null || beat.parentBeatId === undefined ? null : await clipForBeat(ctx, beat.parentBeatId);
+    const held = parentClip?.url ?? heldClipUrl();
+    await ctx.db.patch(clip._id, {
+      status: "ready",
+      url: held,
+      lastFrameUrl: parentClip?.lastFrameUrl,
+      error: `held clip: ${error}`,
+      readyAt: Date.now(),
+    });
+    if (beat === null) return null;
+    if (beat.status === "generating") await ctx.db.patch(beatId, { status: "ready", error });
     await maybePrefetch(ctx, beatId);
+    await maybeFinish(ctx, beat.runId, beatId);
+    const run = await ctx.db.get(beat.runId);
+    if (
+      run !== null &&
+      run.currentBeatId === beatId &&
+      beat.stop !== undefined &&
+      parentClip?.lastFrameUrl !== undefined
+    ) {
+      await ctx.scheduler.runAfter(0, internal.tray.runDetect, { beatId });
+    }
     return null;
   },
 });
@@ -156,17 +196,5 @@ export const setBoxes = internalMutation({
     if (clip === null) return null;
     await ctx.db.patch(clip._id, { boxes });
     return null;
-  },
-});
-
-export const bumpAttempt = internalMutation({
-  args: { beatId: v.id("beats") },
-  returns: v.number(),
-  handler: async (ctx, { beatId }) => {
-    const clip = await clipForBeat(ctx, beatId);
-    if (clip === null) return 0;
-    const attempts = clip.attempts + 1;
-    await ctx.db.patch(clip._id, { attempts });
-    return attempts;
   },
 });

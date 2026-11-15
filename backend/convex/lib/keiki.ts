@@ -71,8 +71,15 @@ export function endingPrompt(args: { characterName: string; code: string; line: 
   return `Text ${args.code} to ${args.line} and ${who} will answer.`;
 }
 
+function usableLine(raw: string | null): string | null {
+  if (raw === null) return null;
+  const trimmed = raw.trim();
+  if (trimmed === "" || trimmed.startsWith("@")) return trimmed === "" ? null : trimmed;
+  return normalizePhone(trimmed);
+}
+
 export function sharedLine(): string | null {
-  const configured = envFlag("KEIKI_LINE");
+  const configured = usableLine(envFlag("KEIKI_LINE"));
   if (configured !== null) return configured;
   return keikiConfigured() ? null : MOCK_SHARED_LINE;
 }

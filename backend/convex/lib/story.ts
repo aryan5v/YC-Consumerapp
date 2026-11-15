@@ -33,16 +33,6 @@ export function childSpecs(stop: DirectorStop): ChildSpec[] {
   }));
 }
 
-export function composeChildPrompt(parentClipPrompt: string, spec: ChildSpec): string {
-  const previous = parentClipPrompt.trim().replace(/\s+/g, " ");
-  const parts: string[] = [];
-  if (previous !== "") parts.push(`The previous shot: ${previous}`);
-  parts.push(`Next shot: ${spec.clipPrompt ?? spec.action}`);
-  if (spec.target !== null) parts.push(`The ${spec.target} is clearly visible and well separated in the frame.`);
-  parts.push("The camera cuts to a new angle on the same character in the same location at the same moment.");
-  return parts.join(" ");
-}
-
 export function checkAnswer(stop: DirectorPuzzleStop, answer: string): boolean {
   const given = normalizeAnswer(answer);
   if (given === "") return false;
@@ -62,7 +52,7 @@ export function outcomeLabel(stop: DirectorPuzzleStop, correct: boolean): string
   return child.label;
 }
 
-function normalizeAnswer(raw: string): string {
+export function normalizeAnswer(raw: string): string {
   return raw
     .toLowerCase()
     .normalize("NFKD")
@@ -71,11 +61,11 @@ function normalizeAnswer(raw: string): string {
     .trim();
 }
 
-function digitsOnly(raw: string): string {
+export function digitsOnly(raw: string): string {
   return raw.replace(/[^0-9]/g, "").replace(/^0+/, "");
 }
 
-function tokenOverlap(left: string, right: string): number {
+export function tokenOverlap(left: string, right: string): number {
   const leftTokens = new Set(left.split(" ").filter(Boolean));
   const rightTokens = new Set(right.split(" ").filter(Boolean));
   if (leftTokens.size === 0 || rightTokens.size === 0) return 0;

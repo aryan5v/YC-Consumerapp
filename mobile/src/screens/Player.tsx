@@ -8,6 +8,7 @@ import { Animated, Pressable, Share, StyleSheet, Text, useWindowDimensions, View
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AsciiDissolve } from "../components/AsciiDissolve";
 import { BeatDots } from "../components/BeatDots";
+import { CaseHud, SolveSheet } from "../components/CaseUi";
 import { Captions } from "../components/Captions";
 import { ChoiceOverlay, chipsHeight } from "../components/ChoiceOverlay";
 import { EndingCard } from "../components/EndingCard";
@@ -15,7 +16,7 @@ import { MicButton } from "../components/MicButton";
 import { Presence } from "../components/Presence";
 import { PuzzleSheet, type PuzzleState } from "../components/PuzzleSheet";
 import { SettingsGlyph, SettingsSheet } from "../components/SettingsSheet";
-import { audioSource, useStory, videoSource, type Ending, type Stop } from "../data";
+import { audioSource, useStory, videoSource, type CaseInfo, type Ending, type Stop } from "../data";
 import { useReduceMotion } from "../a11y";
 import { useSettings } from "../settings";
 import { Glass } from "../components/Glass";
@@ -27,12 +28,13 @@ const PUZZLE_FEEDBACK_MS = 900;
 const HEARD_MS = 550;
 const DUCKED_VOLUME = 0.25;
 const TARGET_TOP_CLEARANCE = 82;
+const CASE_TOP_CLEARANCE = 132;
 const PUZZLE_LIFT = 150;
 const CAPTION_CLEARANCE = 96;
 const MIC_SPACE = 72;
 
 type Slot = { url: string | null; ready: boolean; aspect: number | null; retries: number; backdrop: VideoThumbnail | null };
-type Snap = { beatId: string; clipUrl: string; narration: string; stop: Stop | null; ending: Ending | null; beatIndex: number; beatsTotal: number };
+type Snap = { case: CaseInfo | null; beatId: string; clipUrl: string; narration: string; stop: Stop | null; ending: Ending | null; beatIndex: number; beatsTotal: number };
 type Commit = { fromBeatId: string; optionId?: string; actionId?: string; url: string | null };
 
 function setup(player: VideoPlayer) {
@@ -83,6 +85,8 @@ export function Player({
   const [puzzleState, setPuzzleState] = useState<PuzzleState>("idle");
   const [captionsOn, setCaptionsOn] = useState(true);
   const [chrome, setChrome] = useState(false);
+  const [solveOpen, setSolveOpen] = useState(false);
+  const [solving, setSolving] = useState(false);
   const holdScale = useRef(new Animated.Value(1)).current;
   const reduceMotion = useReduceMotion();
   const sceneLift = useRef(new Animated.Value(0)).current;
@@ -193,6 +197,8 @@ export function Player({
       setActive(i);
       setPhase("playing");
       setPicked(null);
+      setSolveOpen(false);
+      setSolving(false);
       setPuzzleState("idle");
       setHeard(null);
       setReply(null);
@@ -241,6 +247,7 @@ export function Player({
   useEffect(() => {
     if (!view || !displayedUrl || view.current.clipUrl !== displayedUrl) return;
     setSnap({
+      case: view.case ?? null,
       beatId: view.current.beatId,
       clipUrl: displayedUrl,
       narration: view.current.narration,
@@ -276,7 +283,7 @@ export function Player({
     stale && commit?.optionId && view?.stop?.kind === "choice"
       ? view.stop.options.find((o) => o.id === commit.optionId)?.actions.find((a) => a.id === commit.actionId)
       : undefined;
-  const generating = !!pendingAction && !(pendingAction.childStatus === "ready" && pendingAction.childClipUrl);
+  const generating = solving || !!pendingAction && !(pendingAction.childStatus === "ready" && pendingAction.childClipUrl);
   const choice = held && current.stop?.kind === "choice" ? current.stop : null;
   const puzzle = held && current.stop?.kind === "puzzle" ? current.stop : null;
   const puzzleOpen = puzzle !== null;
@@ -415,6 +422,20 @@ export function Player({
     });
   };
 
+  const solve = async (answerId: string) => {
+    if (!current || !story.solve || solving) return;
+    setSolving(true);
+    setSolveOpen(false);
+    setCommit({ fromBeatId: current.beatId, url: null });
+    notBefore.current = 0;
+    try {
+      await story.solve(runId, answerId, current.beatId);
+    } catch {
+      setSolving(false);
+      setCommit(null);
+    }
+  };
+
   const submit = async (answer: string) => {
     if (!current || puzzleState !== "idle" || voiceBusy) return;
     setPuzzleState("submitting");
@@ -433,7 +454,9 @@ export function Player({
   const share = () => {
     if (!current?.ending) return;
     Share.share({
-      message: `Synqui \u00B7 ${episodeTitle}\nI reached \u201C${current.ending.title}\u201D.\n${current.ending.path.join(" \u2192 ")}\n${streak}-day streak.`,
+      message: current.ending.result
+        ? `Synqui · Case 1 · ${current.ending.result.solved ? `solved in ${current.ending.result.movesUsed} of ${current.ending.result.movesTotal}` : "not solved"}\n${streak}-day streak.`
+        : `Synqui \u00B7 ${episodeTitle}\nI reached \u201C${current.ending.title}\u201D.\n${current.ending.path.join(" \u2192 ")}\n${streak}-day streak.`,
     }).catch(() => {});
   };
 
@@ -533,7 +556,7 @@ export function Player({
               onPick={pick}
               bottomInset={insets.bottom + micSpace}
               screenWidth={width}
-              safe={{ top: insets.top + TARGET_TOP_CLEARANCE, bottom: height - insets.bottom - CAPTION_CLEARANCE - captionLift }}
+              safe={{ top: insets.top + (current.case ? CASE_TOP_CLEARANCE : TARGET_TOP_CLEARANCE), bottom: height - insets.bottom - CAPTION_CLEARANCE - captionLift }}
             />
           )}
         </Presence>
@@ -567,6 +590,22 @@ export function Player({
             {current && <BeatDots index={current.beatIndex} total={current.beatsTotal} />}
           </View>
         </Presence>
+
+        <Presence show={!!current?.case && held && choice !== null && !ending && !solving}>
+          {current?.case && (
+            <CaseHud
+              info={current.case}
+              top={insets.top + 34}
+              showQuestion={current.beatIndex === 0}
+              canSolve={!!story.solve && !!current.case.solveChoices && current.case.movesLeft < current.case.movesTotal && picked === null}
+              onSolve={() => setSolveOpen(true)}
+            />
+          )}
+        </Presence>
+
+        {current?.case && (
+          <SolveSheet info={current.case} open={solveOpen} bottomInset={insets.bottom} busy={solving} onPick={solve} onClose={() => setSolveOpen(false)} />
+        )}
 
         <Presence show={chrome && !ending}>
           <View pointerEvents="box-none" style={[styles.chrome, { top: insets.top + 2 }]}>

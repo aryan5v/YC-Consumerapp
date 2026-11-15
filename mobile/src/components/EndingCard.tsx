@@ -107,7 +107,11 @@ export function EndingCard({
           contentContainerStyle={[styles.content, { paddingTop: topInset + 24, paddingBottom: bottomInset + 14 }]}
         >
         <Animated.View style={rise(steps[0])}>
-          <Text style={styles.kicker}>Your ending</Text>
+          <Text style={styles.kicker}>
+            {ending.result
+              ? `Case 1 · ${ending.result.solved ? `solved in ${ending.result.movesUsed} of ${ending.result.movesTotal}` : "not solved"}`
+              : "Your ending"}
+          </Text>
           <Text style={styles.title}>{ending.title}</Text>
           <Text style={styles.summary}>{ending.summary}</Text>
         </Animated.View>

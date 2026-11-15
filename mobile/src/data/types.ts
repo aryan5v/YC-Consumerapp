@@ -26,7 +26,9 @@ export type PuzzleStop = {
 export type Stop = ChoiceStop | PuzzleStop;
 
 export type EndingText = { character: string; number: string | null; prompt: string };
-export type Ending = { title: string; summary: string; path: string[]; text?: EndingText | null };
+export type CaseInfo = { question: string; movesLeft: number; movesTotal: number; solveChoices: { id: string; label: string }[] | null };
+export type CaseResult = { solved: boolean; movesUsed: number; movesTotal: number; answerLabel?: string | null };
+export type Ending = { title: string; summary: string; path: string[]; text?: EndingText | null; result?: CaseResult | null };
 
 export type RunView = {
   status: "active" | "ended";
@@ -35,6 +37,7 @@ export type RunView = {
   current: { beatId: string; clipUrl: string | null; narration: string; status: ClipStatus };
   stop: Stop | null;
   ending: Ending | null;
+  case?: CaseInfo | null;
 };
 
 export type SpeakResult = {
@@ -72,6 +75,7 @@ export interface StoryProvider {
   startToday(): Promise<string>;
   choose(runId: string, optionId: string, actionId: string, expectedBeatId: string): Promise<void>;
   answer(runId: string, answer: string, expectedBeatId: string): Promise<{ correct: boolean }>;
+  solve?(runId: string, answerId: string, expectedBeatId: string): Promise<void>;
   setPhone(phone: string): Promise<void>;
   speak?(runId: string, recordingUri: string, expectedBeatId: string): Promise<SpeakResult>;
   voiceReady?(runId: string, expectedBeatId: string): Promise<boolean>;

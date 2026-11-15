@@ -77,7 +77,22 @@ function buildRun(r: Run): RunView {
               choices: node.stop.choices,
               outcomes: { success: child(node.stop.success.to), failure: child(node.stop.failure.to) },
             },
-    ending: node.ending ? { ...node.ending, path: r.path } : null,
+    ending: node.ending
+      ? { ...node.ending, path: r.path, result: { solved: r.node === "dawn", movesUsed: Math.min(5, Math.max(1, r.beatIndex - 1)), movesTotal: 5 } }
+      : null,
+    case:
+      node.stop?.kind === "choice"
+        ? {
+            question: "Where is the parcel?",
+            movesLeft: Math.max(0, 5 - r.beatIndex),
+            movesTotal: 5,
+            solveChoices: [
+              { id: "a", label: "In the lobby" },
+              { id: "b", label: "Behind the gate" },
+              { id: "c", label: "In the offices" },
+            ],
+          }
+        : null,
   };
 }
 
@@ -197,6 +212,11 @@ export const mockProvider: StoryProvider = {
     const branch = correct ? stop.success : stop.failure;
     advance(r, branch.to, branch.label);
     return { correct };
+  },
+  async solve(runId, answerId, expectedBeatId) {
+    await latency();
+    const r = activeRun(runId, expectedBeatId);
+    advance(r, answerId === "a" ? "dawn" : "tower", answerId === "a" ? "Solved the case" : "Named the wrong answer");
   },
   async setPhone() {
     await latency();

@@ -1,34 +1,31 @@
 import * as THREE from 'three';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 
-const rows = [
-  '        ', '        ', '        ', '        ', '        ', '        ', '        ', '        ',
-  '        ', '   ##   ', '   ##   ', '        ', '        ', '        ', '        ', '        ',
-  '   #    ', '   #    ', '        ', '   #    ', '   #    ', '        ', '        ', '        ',
-  '        ', ' ###### ', '        ', '        ', ' ###### ', '        ', '        ', '        ',
-  '   #    ', '   #    ', ' #####  ', '   #    ', '   #    ', '        ', '        ', '        ',
-  '        ', ' #   #  ', '  # #   ', '   #    ', '  # #   ', ' #   #  ', '        ', '        ',
-  ' # # #  ', '####### ', ' # # #  ', '####### ', ' # # #  ', '        ', '        ', '        ',
-  '########', '########', '########', '########', '########', '########', '########', '########',
-];
+const RAMP = ' .:-=+*#%@';
+const GW = 28;
+const GH = 48;
 
 function atlas() {
-  const count = 8;
-  const size = 8;
-  const data = new Uint8Array(count * size * size);
-  for (let glyph = 0; glyph < count; glyph++) {
-    for (let y = 0; y < size; y++) {
-      const row = rows[glyph * size + y] ?? '';
-      for (let x = 0; x < size; x++) data[(y * count + glyph) * size + x] = row[x] === '#' ? 255 : 0;
-    }
-  }
-  const texture = new THREE.DataTexture(data, count * size, size, THREE.RedFormat);
-  texture.magFilter = THREE.NearestFilter;
-  texture.minFilter = THREE.NearestFilter;
-  texture.wrapS = THREE.ClampToEdgeWrapping;
-  texture.wrapT = THREE.ClampToEdgeWrapping;
+  const canvas = document.createElement('canvas');
+  canvas.width = GW * RAMP.length;
+  canvas.height = GH;
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.magFilter = THREE.LinearFilter;
+  texture.minFilter = THREE.LinearFilter;
+  texture.generateMipmaps = false;
   texture.colorSpace = THREE.NoColorSpace;
-  texture.needsUpdate = true;
+  const draw = () => {
+    const g = canvas.getContext('2d')!;
+    g.clearRect(0, 0, canvas.width, canvas.height);
+    g.fillStyle = '#fff';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.font = '500 40px "Paper Mono", ui-monospace, monospace';
+    for (let i = 0; i < RAMP.length; i++) g.fillText(RAMP[i], i * GW + GW / 2, GH / 2 + 2);
+    texture.needsUpdate = true;
+  };
+  draw();
+  document.fonts?.load('500 40px "Paper Mono"').then(draw, () => {});
   return texture;
 }
 
@@ -50,22 +47,24 @@ export function createAsciiPass() {
       'uniform float amount;',
       'uniform vec2 resolution;',
       'uniform float cellScale;',
+      'const float COUNT = ' + RAMP.length.toFixed(1) + ';',
       'void main() {',
       '  vec3 source = texture2D(tDiffuse, vUv).rgb;',
-      '  vec2 cell = vec2(8.0 * cellScale);',
+      '  vec2 cell = vec2(7.0, 12.0) * cellScale;',
       '  vec2 grid = floor(gl_FragCoord.xy / cell);',
       '  vec2 center = (grid + 0.5) * cell / resolution;',
       '  vec3 sampleColor = texture2D(tDiffuse, center).rgb;',
       '  float lum = dot(sampleColor, vec3(0.2126, 0.7152, 0.0722));',
-      '  float index = clamp(floor(pow(max(lum, 0.0), 0.85) * 8.0), 0.0, 7.0);',
+      '  float warm = clamp((sampleColor.r - sampleColor.b) * 2.5, 0.0, 1.0) * smoothstep(0.25, 0.6, lum);',
+      '  float index = clamp(floor(pow(clamp(lum * 1.6, 0.0, 1.0), 0.8) * COUNT), 0.0, COUNT - 1.0);',
       '  vec2 glyph = fract(gl_FragCoord.xy / cell);',
-      '  glyph.y = 1.0 - glyph.y;',
-      '  float ink = texture2D(atlas, vec2((glyph.x + index) / 8.0, glyph.y)).r;',
-      '  vec3 paper = vec3(0.012, 0.014, 0.02);',
-      '  vec3 silver = vec3(0.78, 0.84, 0.9);',
-      '  vec3 amber = vec3(1.0, 0.58, 0.22);',
-      '  vec3 tone = mix(silver, amber, smoothstep(0.18, 0.72, lum));',
-      '  gl_FragColor = vec4(mix(source, mix(paper, tone, ink), amount), 1.0);',
+      '  float ink = texture2D(atlas, vec2((glyph.x + index) / COUNT, glyph.y)).r;',
+      '  vec3 paper = vec3(0.012, 0.016, 0.026);',
+      '  vec3 silver = vec3(0.80, 0.86, 0.94);',
+      '  vec3 amber = vec3(1.0, 0.66, 0.30);',
+      '  vec3 tone = mix(silver * (0.45 + lum * 0.9), amber, warm);',
+      '  float wave = smoothstep(0.0, 1.0, amount * 1.6 - (1.0 - vUv.y) * 0.6);',
+      '  gl_FragColor = vec4(mix(source, mix(paper, tone, ink), wave), 1.0);',
       '}',
     ].join('\n'),
   });

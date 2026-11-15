@@ -17,7 +17,7 @@ const canvas=document.querySelector<HTMLCanvasElement>('#world')!;
 const renderer=new THREE.WebGLRenderer({canvas,antialias:false,powerPreference:'high-performance',preserveDrawingBuffer:false});
 renderer.outputColorSpace=THREE.SRGBColorSpace;
 renderer.toneMapping=THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure=1.15;
+renderer.toneMappingExposure=1;
 let ratio=Math.min(devicePixelRatio,1.75);
 const scene=new THREE.Scene();
 const camera=new THREE.PerspectiveCamera(62,innerWidth/innerHeight,.1,300);
@@ -30,10 +30,11 @@ const sky=new Sky(scene);
 const composer=new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene,camera));
 const outline=new OutlinePass(new THREE.Vector2(innerWidth,innerHeight),scene,camera);
-outline.visibleEdgeColor.set('#e4eefb');outline.hiddenEdgeColor.set('#000000');outline.edgeStrength=3;outline.edgeGlow=.55;outline.edgeThickness=1;outline.pulsePeriod=3;
+outline.visibleEdgeColor.set('#f2f6ff');outline.hiddenEdgeColor.set('#000000');outline.edgeStrength=3;outline.edgeGlow=.55;outline.edgeThickness=1;outline.pulsePeriod=3;
 composer.addPass(outline);composer.addPass(new OutputPass());
 const ascii=createAsciiPass();composer.addPass(ascii);
 const audio=new Soundscape();
+const carried=new THREE.PointLight('#cfdcff',0,22,1.1);scene.add(carried);
 let asciiFrom=0,asciiTo=0,asciiStart=0,asciiDuration=0;
 const velocity=new THREE.Vector3();
 let viewYaw=0,viewPitch=-.04,stepPhase=0;
@@ -115,15 +116,17 @@ function render(now:number){
   viewPitch+=(controls.pitch-viewPitch)*(1-Math.exp(-dt*14));
   camera.position.copy(player);camera.position.y+=Math.abs(Math.sin(stepPhase))*.05*Math.min(pace,1.4)-.02*Math.min(pace,1);
   camera.rotation.set(viewPitch+Math.sin(stepPhase*2)*.004*pace,viewYaw,Math.sin(stepPhase)*.006*pace);
+  carried.position.set(player.x+Math.cos(viewYaw)*.6,player.y+.6,player.z-Math.sin(viewYaw)*.6);carried.intensity=sky.night*1.4;
   if(asciiDuration>=0){const t=asciiDuration===0?1:Math.min(1,(now-asciiStart)/asciiDuration);const e=t*t*(3-2*t);ascii.uniforms.amount.value=asciiFrom+(asciiTo-asciiFrom)*e;ascii.enabled=ascii.uniforms.amount.value>.001;}
   audio.update(dt,{moving:Math.min(pace,1.6),surface:surfaceAt(player.x,player.z,seed),shore:Math.max(0,shore(player.z,seed)-player.x),hours:sky.hours,elapsed:sky.elapsed});
   terrain.update(player.x,player.z);sky.update(Math.min(raw,.5),player,scene);landmarks.update(player,sky.elapsed);
   const reachable=landmarks.reachable(player);
   outline.selectedObjects=[];
   for(const thing of reachable)thing.root.traverse(o=>{if(o instanceof THREE.Mesh&&!o.userData.effect)outline.selectedObjects.push(o);});
-  outline.enabled=outline.selectedObjects.length>0&&!interaction;
+  const dissolved=ascii.uniforms.amount.value>.02;
+  outline.enabled=outline.selectedObjects.length>0&&!interaction&&!dissolved;
   label.style.display='none';
-  if(reachable.length&&!interaction){
+  if(reachable.length&&!interaction&&!dissolved){
     const thing=reachable.sort((a,b)=>a.root.position.distanceToSquared(player)-b.root.position.distanceToSquared(player))[0];
     screenPosition.copy(thing.root.position).add(new THREE.Vector3(0,thing.kind==='lantern'?3.6:2.5,0)).project(camera);
     if(screenPosition.z<1&&screenPosition.z>-1&&Math.abs(screenPosition.x)<.9&&Math.abs(screenPosition.y)<.9){label.textContent=thing.name;label.style.display='block';label.style.left=`${(screenPosition.x*.5+.5)*innerWidth}px`;label.style.top=`${(-screenPosition.y*.5+.5)*innerHeight}px`;}

@@ -51,9 +51,9 @@ export class Terrain {
   private rockGeometry = new THREE.IcosahedronGeometry(1, 0);
   private grassGeometry = new THREE.PlaneGeometry(.13, .8);
   private bark = new THREE.MeshStandardMaterial({ color: '#4b4543', roughness: 1, flatShading: true });
-  private leaves = new THREE.MeshStandardMaterial({ color: '#84a99a', roughness: 1, flatShading: true });
+  private leaves = new THREE.MeshStandardMaterial({ color: '#4f6a63', roughness: 1, flatShading: true });
   private rock = new THREE.MeshStandardMaterial({ color: '#8c8d90', roughness: 1, flatShading: true });
-  private grass = new THREE.MeshStandardMaterial({ color: '#a2a489', roughness: 1, side: THREE.DoubleSide });
+  private grass = new THREE.MeshStandardMaterial({ color: '#8e9a92', roughness: 1, side: THREE.DoubleSide });
   private ground = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 });
 
   constructor(public seed: number) {
@@ -61,12 +61,15 @@ export class Terrain {
       material.onBeforeCompile=shader=>{
         shader.vertexShader='varying vec3 paintPosition;\n'+shader.vertexShader;
         shader.vertexShader=shader.vertexShader.replace('#include <worldpos_vertex>','#include <worldpos_vertex>\nvec4 paintWorld=vec4(transformed,1.);\n#ifdef USE_INSTANCING\npaintWorld=instanceMatrix*paintWorld;\n#endif\npaintPosition=(modelMatrix*paintWorld).xyz;');
-        shader.fragmentShader='varying vec3 paintPosition;\n'+shader.fragmentShader;
+        shader.fragmentShader='varying vec3 paintPosition;\nfloat phash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}\nfloat pnoise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(phash(i),phash(i+vec2(1.,0.)),f.x),mix(phash(i+vec2(0.,1.)),phash(i+vec2(1.,1.)),f.x),f.y);}\n'+shader.fragmentShader;
         shader.fragmentShader=shader.fragmentShader.replace('#include <color_fragment>',`#include <color_fragment>
-          vec3 p=paintPosition;vec2 cell=floor(vec2(p.x*9.+sin(p.z*3.),p.z*19.+p.y*11.));
-          float fleck=fract(sin(dot(cell,vec2(127.1,311.7)))*43758.5453);
-          float broad=sin(p.x*2.1+sin(p.z*1.7)*2.+p.y*3.);
-          diffuseColor.rgb*=.82+fleck*.3+broad*.07;
+          vec3 p=paintPosition;
+          float a=sin(p.x*.13+p.z*.07)*1.4;
+          vec2 q=mat2(cos(a),-sin(a),sin(a),cos(a))*p.xz;
+          float stroke=pnoise(vec2(q.x*1.1,q.y*5.5+p.y*2.))*.6+pnoise(vec2(q.x*2.7,q.y*11.))*.4;
+          float broad=pnoise(p.xz*.08);
+          diffuseColor.rgb*=.8+stroke*.32;
+          diffuseColor.rgb=mix(diffuseColor.rgb,diffuseColor.rgb*vec3(.9,.98,1.1),broad*.5);
         `);
       };
     }
@@ -101,7 +104,7 @@ export class Terrain {
       const x=p.getX(i)+cx*CHUNK+CHUNK/2,z=p.getZ(i)+cz*CHUNK+CHUNK/2;
       const h=heightAt(x,z,this.seed); p.setXYZ(i,x,h,z);
       const trail=Math.abs(x-pathX(z,this.seed));
-      color.set(h < -.3 ? '#9baba8' : trail < 1.7 ? '#9eaaa3' : '#537f72');
+      color.set(h < -.3 ? '#7f8486' : trail < 1.7 ? '#868a88' : h > 7 ? '#6c727c' : '#4a6158');
       color.multiplyScalar(.82+noise(x*.45,z*.45,this.seed+4)*.38);
       colors.push(color.r,color.g,color.b);
     }
@@ -130,7 +133,7 @@ export class Terrain {
           else if(type==='grass')dummy.scale.set(size,size,size);
           else dummy.scale.set(size,size*.65,size*.9);
           dummy.updateMatrix();mesh.setMatrixAt(index,dummy.matrix);
-          color.set(type==='crown'?'#8baf9c':'#ffffff').multiplyScalar(.65+r*.55);mesh.setColorAt(index++,color);
+          color.set(type==='crown'?(r>.6?'#8ea6a0':'#6f8a84'):'#ffffff').multiplyScalar(.65+r*.55);mesh.setColorAt(index++,color);
         }
       }
       mesh.computeBoundingSphere();group.add(mesh);

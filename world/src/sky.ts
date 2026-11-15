@@ -2,20 +2,21 @@ import * as THREE from 'three';
 import { hash, WATER } from './terrain';
 
 const palettes = [
-  {t:0,top:'#071025',horizon:'#2c405a',fog:'#172a3e',light:'#96b9f7',ground:'#253047',power:.35},
-  {t:5,top:'#1a2145',horizon:'#996b79',fog:'#5d6276',light:'#d5b8bd',ground:'#4b4359',power:.55},
-  {t:7,top:'#6e8eac',horizon:'#f4c79a',fog:'#b2aaa1',light:'#ffe1b3',ground:'#6d6976',power:2.1},
-  {t:12,top:'#598aa7',horizon:'#d9dfcf',fog:'#93b1b4',light:'#fff3d6',ground:'#63746d',power:2.5},
-  {t:17,top:'#526a8a',horizon:'#f2c08c',fog:'#afa29b',light:'#ffc996',ground:'#5d6375',power:1.8},
-  {t:18.5,top:'#283454',horizon:'#dc997d',fog:'#7b7b8a',light:'#ffb16a',ground:'#4c4d6d',power:1.1},
-  {t:20,top:'#0a1730',horizon:'#626580',fog:'#35465e',light:'#aec8ff',ground:'#26364e',power:.45},
-  {t:24,top:'#071025',horizon:'#2c405a',fog:'#172a3e',light:'#96b9f7',ground:'#253047',power:.35},
+  {t:0,top:'#050b1d',horizon:'#1d2c4c',fog:'#13203a',light:'#9fb0de',ground:'#121828',power:.45},
+  {t:5,top:'#141c3a',horizon:'#6a6f8e',fog:'#3e4a66',light:'#c6cde4',ground:'#2a3046',power:.6},
+  {t:7,top:'#5d7fa3',horizon:'#d9d6d0',fog:'#9aa8b8',light:'#f3eee4',ground:'#5a6474',power:2},
+  {t:12,top:'#4f7fa8',horizon:'#d6e2ea',fog:'#a3b8c6',light:'#ffffff',ground:'#5f6c78',power:2.4},
+  {t:17,top:'#46628a',horizon:'#d8cbbd',fog:'#9aa3b2',light:'#f6e6d2',ground:'#55607a',power:1.8},
+  {t:18.5,top:'#1f2b4e',horizon:'#a48a8c',fog:'#5d6580',light:'#e0c4b0',ground:'#3c4360',power:1.1},
+  {t:20,top:'#08122c',horizon:'#3a4462',fog:'#1f2a46',light:'#a9b8e0',ground:'#161c30',power:.55},
+  {t:24,top:'#050b1d',horizon:'#1d2c4c',fog:'#13203a',light:'#9fb0de',ground:'#121828',power:.45},
 ];
 
 export class Sky {
   hours=19.4;
   day=1;
   elapsed=0;
+  night=0;
   group=new THREE.Group();
   sunLight=new THREE.DirectionalLight('#ffcf99',1.8);
   ambient=new THREE.HemisphereLight('#adc3dc','#30374c',1.6);
@@ -49,6 +50,7 @@ export class Sky {
     const blend=(key:'top'|'horizon'|'fog'|'light'|'ground')=>new THREE.Color(a[key]).lerp(new THREE.Color(b[key]),f);
     this.skyMaterial.uniforms.top.value.copy(blend('top'));this.skyMaterial.uniforms.horizon.value.copy(blend('horizon'));this.skyMaterial.uniforms.time.value=this.elapsed;
     (scene.fog as THREE.FogExp2).color.copy(blend('fog'));
+    (scene.fog as THREE.FogExp2).density=.008+(1-THREE.MathUtils.smoothstep(Math.sin((this.hours-6)/24*Math.PI*2),-.1,.5))*.008;
     this.sunLight.color.copy(blend('light'));this.sunLight.intensity=THREE.MathUtils.lerp(a.power,b.power,f);
     this.ambient.color.copy(blend('light'));this.ambient.groundColor.copy(blend('ground'));
     this.ambient.intensity=1.2;
@@ -58,7 +60,7 @@ export class Sky {
     this.sunLight.position.copy(this.sun.position.y>0?this.sun.position:this.moon.position);
     this.group.position.copy(player);this.sea.position.x=player.x;this.sea.position.z=player.z;
     const night=1-THREE.MathUtils.smoothstep(Math.sin(angle),-.15,.2);
-    (this.stars.material as THREE.PointsMaterial).opacity=night*.9;
+    (this.stars.material as THREE.PointsMaterial).opacity=night*.9;this.night=night;
     this.seaMaterial.uniforms.time.value=this.elapsed;this.seaMaterial.uniforms.color.value.copy(blend('top')).multiplyScalar(.6);this.seaMaterial.uniforms.horizon.value.copy(blend('fog'));this.seaMaterial.uniforms.sun.value.copy(this.sun.position.y>0?this.sun.position:this.moon.position);this.seaMaterial.uniforms.night.value=night;
   }
 }

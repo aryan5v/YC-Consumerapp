@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { createThing, type Thing, type ThingKind } from './things';
 import { heightAt, pathX, shore, WATER } from './terrain';
+import { addRim } from './shading';
 
 const kinds:ThingKind[]=['lantern','stranger','well','arch','cabin','boat','lighthouse'];
 const offsets=[5,-6,-13,-25,-40,-48,-65];
@@ -21,6 +22,8 @@ export class Landmarks {
         const z=-s*192+offsets[i];
         const x=kind==='boat'?shore(z,this.seed)-1:kind==='lighthouse'?shore(z,this.seed)-9:pathX(z,this.seed)+side[i];
         const thing=createThing(kind,id);
+        const styled=new Set<THREE.Material>();
+        thing.root.traverse(o=>{if(o instanceof THREE.Mesh&&!o.userData.effect&&o.material instanceof THREE.MeshStandardMaterial&&!styled.has(o.material)){styled.add(o.material);o.material.color.lerp(new THREE.Color('#e8eef1'),.16);o.material.metalness*=.5;addRim(o.material,.4);}});
         thing.root.position.set(x,kind==='boat'?WATER+.14:heightAt(x,z,this.seed),z);
         if(kind==='boat')thing.root.rotation.y=-.65;
         thing.root.userData.sector=s;

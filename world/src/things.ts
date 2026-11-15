@@ -51,13 +51,13 @@ export function createThing(kind: ThingKind, id: string): Thing {
   const woodLight = material(0x9b7050);
   const woodDark = material(0x392f30);
   const iron = material(0x273546, 0.55, 0.55);
-  const brass = material(0xb58a50, 0.48, 0.55);
+  const brass = material(0xc5ced2, 0.48, 0.55);
   const slate = [material(0x293b54), material(0x354b65), material(0x405772)];
   const moss = material(0x52695c);
 
   function glow(intensity = 1.6): THREE.MeshStandardMaterial {
-    const value = material(0xe7ac57, 0.5);
-    value.emissive.setHex(0xffad48);
+    const value = material(0xff8e9e, 0.5);
+    value.emissive.setHex(0xff7f93);
     value.emissiveIntensity = intensity;
     luminous.set(value, intensity);
     return value;
@@ -89,7 +89,7 @@ export function createThing(kind: ThingKind, id: string): Thing {
   }
 
   function halo(parent: THREE.Object3D, size: number): THREE.Mesh {
-    const surface = new THREE.MeshBasicMaterial({ color: 0xffbd69, transparent: true, opacity: 0.055, depthWrite: false });
+    const surface = new THREE.MeshBasicMaterial({ color: 0xffa3b0, transparent: true, opacity: 0.055, depthWrite: false });
     materials.add(surface);
     const object = mesh(new THREE.SphereGeometry(size, 10, 6), surface, 0, 0, 0, parent);
     object.castShadow = false;
@@ -190,7 +190,7 @@ export function createThing(kind: ThingKind, id: string): Thing {
     root.add(beacon);
     cylinder(0.3, 0.3, 0.75, glow(3), 0, 0, 0, 8, beacon);
     halo(beacon, 1.55);
-    const beamMaterial = new THREE.MeshBasicMaterial({ color: 0xffcf87, transparent: true, opacity: 0.035, depthWrite: false, side: THREE.DoubleSide });
+    const beamMaterial = new THREE.MeshBasicMaterial({ color: 0xe8eef1, transparent: true, opacity: 0.035, depthWrite: false, side: THREE.DoubleSide });
     materials.add(beamMaterial);
     const shaft = mesh(new THREE.ConeGeometry(1.1, 9, 12, 1, true), beamMaterial, 0, 0, 5.1, beacon);
     shaft.rotation.x = -Math.PI / 2;
@@ -408,7 +408,7 @@ export function createThing(kind: ThingKind, id: string): Thing {
     beam(new THREE.Vector3(-0.24, 1.4, 0), new THREE.Vector3(-0.39, 0.94, 0.15), 0.115, cloakMaterial, figure);
     beam(new THREE.Vector3(0.24, 1.39, 0), new THREE.Vector3(0.47, 1.08, 0.19), 0.11, cloakMaterial, figure);
     beam(new THREE.Vector3(0.47, 1.08, 0.19), new THREE.Vector3(0.55, 1.1, 0.4), 0.075, cloakMaterial, figure);
-    mesh(new THREE.SphereGeometry(0.07, 6, 4), material(0xaa8068), 0.55, 1.1, 0.42, figure);
+    mesh(new THREE.SphereGeometry(0.07, 6, 4), material(0xd9c2b4), 0.55, 1.1, 0.42, figure);
     lantern(figure, 0.55, 0.78, 0.42, 0.58);
     const localPlayer = new THREE.Vector3();
     let last = -1;
@@ -487,7 +487,7 @@ export function createThing(kind: ThingKind, id: string): Thing {
         root.userData.lit = lit;
         for (const [surface, intensity] of luminous) {
           surface.emissiveIntensity = lit ? intensity : 0;
-          surface.color.setHex(lit ? 0xe7ac57 : 0x3b4652);
+          surface.color.setHex(lit ? 0xff8e9e : 0x3b4652);
         }
         for (const volume of lightVolumes) volume.visible = lit;
       }

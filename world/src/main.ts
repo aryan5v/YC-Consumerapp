@@ -6,6 +6,8 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { Terrain, heightAt, pathX, shore, surfaceAt, WATER } from './terrain';
 import { Soundscape } from './audio';
 import { createAsciiPass } from './ascii';
+import { shared } from './shading';
+import { theme } from './theme';
 import { Controls } from './controls';
 import { Sky } from './sky';
 import { Landmarks } from './landmarks';
@@ -16,7 +18,7 @@ import './style.css';
 const canvas=document.querySelector<HTMLCanvasElement>('#world')!;
 const renderer=new THREE.WebGLRenderer({canvas,antialias:false,powerPreference:'high-performance',preserveDrawingBuffer:false});
 renderer.outputColorSpace=THREE.SRGBColorSpace;
-renderer.toneMapping=THREE.ACESFilmicToneMapping;
+renderer.toneMapping=THREE.NeutralToneMapping;
 renderer.toneMappingExposure=1;
 let ratio=Math.min(devicePixelRatio,1.75);
 const scene=new THREE.Scene();
@@ -30,11 +32,11 @@ const sky=new Sky(scene);
 const composer=new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene,camera));
 const outline=new OutlinePass(new THREE.Vector2(innerWidth,innerHeight),scene,camera);
-outline.visibleEdgeColor.set('#f2f6ff');outline.hiddenEdgeColor.set('#000000');outline.edgeStrength=3;outline.edgeGlow=.55;outline.edgeThickness=1;outline.pulsePeriod=3;
+outline.visibleEdgeColor.set(theme.moonstone);outline.hiddenEdgeColor.set('#000000');outline.edgeStrength=3;outline.edgeGlow=.55;outline.edgeThickness=1;outline.pulsePeriod=3;
 composer.addPass(outline);composer.addPass(new OutputPass());
 const ascii=createAsciiPass();composer.addPass(ascii);
 const audio=new Soundscape();
-const carried=new THREE.PointLight('#cfdcff',0,22,1.1);scene.add(carried);
+
 let asciiFrom=0,asciiTo=0,asciiStart=0,asciiDuration=0;
 const velocity=new THREE.Vector3();
 let viewYaw=0,viewPitch=-.04,stepPhase=0;
@@ -45,8 +47,10 @@ const clock=document.querySelector<HTMLElement>('#clock')!;
 const label=document.querySelector<HTMLElement>('#label')!;
 const raycaster=new THREE.Raycaster();
 const screenPosition=new THREE.Vector3();
+renderer.info.autoReset=false;
+let frameCalls=0,frameTriangles=0;
 let paused=false,last=performance.now(),frames=0,frameSum=0,lastClock=-1,ready=false;
-let interaction:{thing:Thing;end:number;materials:Map<THREE.Mesh,THREE.Material|THREE.Material[]>;fill:THREE.ShaderMaterial}|null=null;
+let interaction:{thing:Thing;end:number;frames:number;materials:Map<THREE.Mesh,THREE.Material|THREE.Material[]>;fill:THREE.ShaderMaterial}|null=null;
 
 function clearInteraction(){
   if(!interaction)return;
@@ -66,9 +70,9 @@ function tap(x:number,y:number){
   const thing=landmarks.things.get(root.userData.thingId);
   if(!thing||!landmarks.reachable(player).includes(thing))return;
   const materials=new Map<THREE.Mesh,THREE.Material|THREE.Material[]>();
-  const fill=new THREE.ShaderMaterial({uniforms:{base:{value:thing.root.position.y}},vertexShader:'varying float h;uniform float base;void main(){vec4 w=modelMatrix*vec4(position,1.);h=w.y-base;gl_Position=projectionMatrix*viewMatrix*w;}',fragmentShader:'varying float h;void main(){gl_FragColor=vec4(mix(vec3(.65,.20,.025),vec3(1.,.82,.4),clamp(h/4.,0.,1.)),1.);}',side:THREE.DoubleSide});
+  const fill=new THREE.ShaderMaterial({uniforms:{base:{value:thing.root.position.y}},vertexShader:'varying float h;uniform float base;void main(){vec4 w=modelMatrix*vec4(position,1.);h=w.y-base;gl_Position=projectionMatrix*viewMatrix*w;}',fragmentShader:'varying float h;void main(){vec3 c=mix(vec3(1.,.42,.52),vec3(.91,.933,.945),smoothstep(0.,4.,h));gl_FragColor=vec4(c,1.);}',side:THREE.DoubleSide});
   thing.root.traverse(o=>{if(o instanceof THREE.Mesh&&!o.userData.effect){materials.set(o,o.material);o.material=fill;}});
-  interaction={thing,end:performance.now()+300,materials,fill};controls.enabled=false;controls.reset();
+  interaction={thing,end:performance.now()+300,frames:0,materials,fill};controls.enabled=false;controls.reset();
 }
 
 function screenshot(){
@@ -92,9 +96,9 @@ bridge(message=>{
     terrain=new Terrain(seed);landmarks=new Landmarks(seed);scene.add(terrain.group,landmarks.group);player.set(pathX(12,seed),0,12);controls.yaw=0;viewYaw=0;velocity.set(0,0,0);controls.reset();controls.enabled=!paused;
   }
   if(message.type==='applyOutcome')landmarks.apply(message.thingId,message.change);
-},()=>({position:player.toArray(),yaw:controls.yaw,timeOfDay:sky.hours,day:sky.day,seed,paused,ascii:ascii.uniforms.amount.value,audio:audio.state(),chunks:terrain.chunks.size,pixelRatio:ratio,drawCalls:renderer.info.render.calls,triangles:renderer.info.render.triangles,things:[...landmarks.things.values()].map(t=>{const v=t.root.position.clone().add(new THREE.Vector3(0,1,0)).project(camera);const onScreen=v.z>-1&&v.z<1&&Math.abs(v.x)<1&&Math.abs(v.y)<1;return {id:t.id,kind:t.kind,name:t.name,position:t.root.position.toArray(),visible:t.root.visible,reachable:landmarks.reachable(player).includes(t),screen:onScreen?[(v.x*.5+.5)*innerWidth,(-v.y*.5+.5)*innerHeight]:null};})}));
+},()=>({position:player.toArray(),yaw:controls.yaw,timeOfDay:sky.hours,day:sky.day,seed,paused,ascii:ascii.uniforms.amount.value,audio:audio.state(),chunks:terrain.chunks.size,pixelRatio:ratio,drawCalls:frameCalls,triangles:frameTriangles,things:[...landmarks.things.values()].map(t=>{const v=t.root.position.clone().add(new THREE.Vector3(0,1,0)).project(camera);const onScreen=v.z>-1&&v.z<1&&Math.abs(v.x)<1&&Math.abs(v.y)<1;return {id:t.id,kind:t.kind,name:t.name,position:t.root.position.toArray(),visible:t.root.visible,reachable:landmarks.reachable(player).includes(t),screen:onScreen?[(v.x*.5+.5)*innerWidth,(-v.y*.5+.5)*innerHeight]:null};})}));
 
-function resize(){renderer.setPixelRatio(ratio);renderer.setSize(innerWidth,innerHeight,false);composer.setPixelRatio(ratio);composer.setSize(innerWidth,innerHeight);renderer.getDrawingBufferSize(ascii.uniforms.resolution.value);ascii.uniforms.cellScale.value=Math.max(1,Math.round(ratio*1.2));camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();}
+function resize(){renderer.setPixelRatio(ratio);renderer.setSize(innerWidth,innerHeight,false);composer.setPixelRatio(ratio);composer.setSize(innerWidth,innerHeight);renderer.getDrawingBufferSize(ascii.uniforms.resolution.value);ascii.uniforms.cellScale.value=Math.max(1,Math.round(ratio*1.2));camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();sky.setPixelRatio(ratio);}
 window.addEventListener('resize',resize);resize();
 
 function render(now:number){
@@ -116,7 +120,7 @@ function render(now:number){
   viewPitch+=(controls.pitch-viewPitch)*(1-Math.exp(-dt*14));
   camera.position.copy(player);camera.position.y+=Math.abs(Math.sin(stepPhase))*.05*Math.min(pace,1.4)-.02*Math.min(pace,1);
   camera.rotation.set(viewPitch+Math.sin(stepPhase*2)*.004*pace,viewYaw,Math.sin(stepPhase)*.006*pace);
-  carried.position.set(player.x+Math.cos(viewYaw)*.6,player.y+.6,player.z-Math.sin(viewYaw)*.6);carried.intensity=sky.night*1.4;
+  shared.time.value=sky.elapsed;shared.rim.value.copy(sky.rim.value);
   if(asciiDuration>=0){const t=asciiDuration===0?1:Math.min(1,(now-asciiStart)/asciiDuration);const e=t*t*(3-2*t);ascii.uniforms.amount.value=asciiFrom+(asciiTo-asciiFrom)*e;ascii.enabled=ascii.uniforms.amount.value>.001;}
   audio.update(dt,{moving:Math.min(pace,1.6),surface:surfaceAt(player.x,player.z,seed),shore:Math.max(0,shore(player.z,seed)-player.x),hours:sky.hours,elapsed:sky.elapsed});
   terrain.update(player.x,player.z);sky.update(Math.min(raw,.5),player,scene);landmarks.update(player,sky.elapsed);
@@ -135,13 +139,16 @@ function render(now:number){
     lastClock=Math.floor(now/1000);const h=Math.floor(sky.hours),m=Math.floor(sky.hours%1*60);clock.textContent=`Day ${String(sky.day).padStart(2,'0')}  ·  ${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
     post({type:'clock',timeOfDay:sky.hours,day:sky.day});
   }
-  if(interaction&&now>=interaction.end){
+  if(interaction&&now>=interaction.end&&interaction.frames>=3){
     const thing=interaction.thing;clearInteraction();
     try{post({type:'interact',thingId:thing.id,name:thing.name,description:thing.description,screenshot:screenshot(),timeOfDay:sky.hours,day:sky.day,position:{x:player.x,y:player.y,z:player.z},seed});}
     catch{post({type:'error',code:'capture_failed',message:'Unable to capture this view.'});}
     controls.enabled=!paused;
   }
+  renderer.info.reset();
   composer.render();
+  if(interaction)interaction.frames++;
+  frameCalls=renderer.info.render.calls;frameTriangles=renderer.info.render.triangles;
   if(!ready){ready=true;post({type:'ready',version:1,seed});}
   if(raw<.2){frameSum+=raw;frames++;}
   if(frames>=90){const average=frameSum/frames;if(average>.022&&ratio>.65){ratio=Math.max(.65,ratio-.15);resize();}else if(average<.017&&ratio<Math.min(devicePixelRatio,1.75)){ratio=Math.min(devicePixelRatio,1.75,ratio+.05);resize();}frames=0;frameSum=0;}

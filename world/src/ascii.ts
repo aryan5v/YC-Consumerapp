@@ -61,7 +61,7 @@ export function createAsciiPass() {
       '  float ink = texture2D(atlas, vec2((glyph.x + index) / COUNT, glyph.y)).r;',
       '  vec3 paper = vec3(0.012, 0.016, 0.026);',
       '  vec3 silver = vec3(0.80, 0.86, 0.94);',
-      '  vec3 amber = vec3(1.0, 0.66, 0.30);',
+      '  vec3 amber = vec3(1.0, 0.56, 0.62);',
       '  vec3 tone = mix(silver * (0.45 + lum * 0.9), amber, warm);',
       '  float wave = smoothstep(0.0, 1.0, amount * 1.6 - (1.0 - vUv.y) * 0.6);',
       '  gl_FragColor = vec4(mix(source, mix(paper, tone, ink), wave), 1.0);',

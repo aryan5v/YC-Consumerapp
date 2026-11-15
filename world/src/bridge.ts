@@ -1,6 +1,6 @@
 export type WorldMessage =
   | {type:'setSeed';seed:number|string}
-  | {type:'setTime';timeOfDay:number;day?:number}
+  | {type:'setTime';timeOfDay:number;day?:number;transitionMs?:number}
   | {type:'pause'|'resume'}
   | {type:'mute';muted:boolean}
   | {type:'setSound';on:boolean}
@@ -30,7 +30,7 @@ export function bridge(receive:(message:WorldMessage)=>void,getState:()=>unknown
     const m=data as Record<string,unknown>;
     if(m.type==='pause'||m.type==='resume'){receive({type:m.type});return;}
     if(m.type==='setSeed'&&(typeof m.seed==='string'&&m.seed.length<256||typeof m.seed==='number'&&Number.isFinite(m.seed))){receive(m as WorldMessage);return;}
-    if(m.type==='setTime'&&typeof m.timeOfDay==='number'&&Number.isFinite(m.timeOfDay)&&(m.day===undefined||typeof m.day==='number'&&Number.isFinite(m.day)&&m.day>=1)){receive(m as WorldMessage);return;}
+    if(m.type==='setTime'&&typeof m.timeOfDay==='number'&&Number.isFinite(m.timeOfDay)&&(m.day===undefined||typeof m.day==='number'&&Number.isFinite(m.day)&&m.day>=1)&&(m.transitionMs===undefined||typeof m.transitionMs==='number'&&Number.isFinite(m.transitionMs)&&m.transitionMs>=0)){receive(m as WorldMessage);return;}
     if(m.type==='mute'&&typeof m.muted==='boolean'){receive(m as WorldMessage);return;}
     if((m.type==='setSound'||m.type==='setMusic')&&typeof m.on==='boolean'){receive(m as WorldMessage);return;}
     if(m.type==='setAscii'&&typeof m.amount==='number'&&Number.isFinite(m.amount)&&(m.durationMs===undefined||typeof m.durationMs==='number'&&Number.isFinite(m.durationMs)&&m.durationMs>=0)){receive(m as WorldMessage);return;}

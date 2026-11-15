@@ -1,4 +1,4 @@
-export type Surface = 'path' | 'grass' | 'rock' | 'shore';
+export type Surface = 'path' | 'grass' | 'rock' | 'shore' | 'snow';
 
 export class Soundscape {
   soundOn = true;
@@ -11,6 +11,8 @@ export class Soundscape {
   private wind: GainNode | null = null;
   private water: GainNode | null = null;
   private windFilter: BiquadFilterNode | null = null;
+  private rain: GainNode | null = null;
+  private drip = 0;
   private tones: { osc: OscillatorNode; gain: GainNode }[] = [];
   private noise: AudioBuffer | null = null;
   private step = 0;
@@ -37,11 +39,17 @@ export class Soundscape {
     if (this.master) this.master.gain.value = on ? 0.85 : 0;
   }
 
-  update(dt: number, state: { moving: number; surface: Surface; shore: number; hours: number; elapsed: number }) {
+  update(dt: number, state: { moving: number; surface: Surface; shore: number; hours: number; elapsed: number; rain: number; snow: number }) {
     if (!this.ctx || !this.running) return;
     const gust = 0.55 + 0.45 * Math.sin(state.elapsed * 0.17) * Math.sin(state.elapsed * 0.05);
-    if (this.wind) this.wind.gain.value = 0.08 + gust * 0.1;
-    if (this.windFilter) this.windFilter.frequency.value = 280 + gust * 220;
+    if (this.wind) this.wind.gain.value = (0.08 + gust * 0.1) * (1 - state.snow * 0.35 + state.rain * 0.3);
+    if (this.windFilter) this.windFilter.frequency.value = (280 + gust * 220) * (1 - state.snow * 0.45);
+    if (this.rain) this.rain.gain.value = state.rain * 0.3;
+    this.drip -= dt;
+    if (state.rain > 0.2 && this.drip <= 0 && this.soundOn) {
+      this.drip = (0.02 + Math.random() * 0.12) / state.rain;
+      this.patter(state.rain);
+    }
     if (this.water) this.water.gain.value = Math.max(0, 1 - state.shore / 22) * 0.28;
     this.retune(state.hours);
     if (state.moving > 0.2 && this.soundOn) {
@@ -51,7 +59,7 @@ export class Soundscape {
         this.footstep(state.surface, state.moving);
       }
     } else this.step = Math.min(this.step, 0.35);
-    const night = state.hours >= 19.5 || state.hours < 5.2;
+    const night = (state.hours >= 19.5 || state.hours < 5.2) && state.rain < 0.3 && state.snow < 0.3;
     this.chirp -= dt;
     if (night && this.chirp <= 0 && this.soundOn) {
       this.chirp = 0.35 + Math.random() * 1.4;
@@ -106,6 +114,17 @@ export class Soundscape {
     this.water.gain.value = 0;
     waterSource.connect(waterFilter).connect(this.water).connect(this.sound);
     waterSource.start();
+    const rainSource = ctx.createBufferSource();
+    rainSource.buffer = buffer;
+    rainSource.loop = true;
+    rainSource.playbackRate.value = 2.6;
+    const rainFilter = ctx.createBiquadFilter();
+    rainFilter.type = 'highpass';
+    rainFilter.frequency.value = 700;
+    this.rain = ctx.createGain();
+    this.rain.gain.value = 0;
+    rainSource.connect(rainFilter).connect(this.rain).connect(this.sound);
+    rainSource.start();
     for (const frequency of [55, 82.4, 123.5]) {
       const osc = ctx.createOscillator();
       osc.type = 'sine';
@@ -137,19 +156,38 @@ export class Soundscape {
     if (!this.ctx || !this.noise || !this.sound) return;
     const source = this.ctx.createBufferSource();
     source.buffer = this.noise;
-    source.playbackRate.value = surface === 'rock' ? 1.8 : surface === 'shore' ? 0.45 : surface === 'path' ? 1.15 : 0.8;
+    source.playbackRate.value = surface === 'rock' ? 1.8 : surface === 'shore' ? 0.45 : surface === 'path' ? 1.15 : surface === 'snow' ? 1.4 : 0.8;
     const filter = this.ctx.createBiquadFilter();
-    filter.type = surface === 'rock' ? 'highpass' : 'lowpass';
-    filter.frequency.value = surface === 'rock' ? 1400 : surface === 'path' ? 1600 : surface === 'shore' ? 500 : 780;
+    filter.type = surface === 'rock' ? 'highpass' : surface === 'snow' ? 'bandpass' : 'lowpass';
+    filter.frequency.value = surface === 'rock' ? 1400 : surface === 'path' ? 1600 : surface === 'shore' ? 500 : surface === 'snow' ? 1100 : 780;
     const gain = this.ctx.createGain();
     const now = this.ctx.currentTime;
     const loud = (surface === 'shore' ? 0.22 : 0.14) * (0.7 + moving * 0.4);
     gain.gain.setValueAtTime(0.0001, now);
     gain.gain.exponentialRampToValueAtTime(loud, now + 0.012);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + (surface === 'shore' ? 0.16 : 0.07));
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + (surface === 'shore' ? 0.16 : surface === 'snow' ? 0.13 : 0.07));
     source.connect(filter).connect(gain).connect(this.sound);
     source.start(now);
     source.stop(now + 0.2);
+  }
+
+  private patter(rain: number) {
+    if (!this.ctx || !this.noise || !this.sound) return;
+    const source = this.ctx.createBufferSource();
+    source.buffer = this.noise;
+    source.playbackRate.value = 2 + Math.random() * 2;
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.value = 1800 + Math.random() * 2600;
+    filter.Q.value = 3;
+    const gain = this.ctx.createGain();
+    const now = this.ctx.currentTime;
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(0.05 * rain * (0.4 + Math.random() * 0.6), now + 0.004);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.04);
+    source.connect(filter).connect(gain).connect(this.sound);
+    source.start(now, Math.random() * 1.5);
+    source.stop(now + 0.06);
   }
 
   private insect() {

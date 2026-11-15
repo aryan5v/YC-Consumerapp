@@ -29,10 +29,12 @@ npm run build    # writes dist/
 | Message | When |
 | --- | --- |
 | `{ type: 'ready', version: 1, seed }` | First frame rendered |
-| `{ type: 'clock', timeOfDay, day }` | Once per second while running. `timeOfDay` is in fractional hours, 0–24 |
-| `{ type: 'interact', thingId, name, description, screenshot, timeOfDay, day, position: {x,y,z}, seed }` | 300 ms after a tap on a thing in reach |
+| `{ type: 'clock', timeOfDay, day, state }` | Once per second while running. `timeOfDay` is in fractional hours, 0–24. `state` is the world state, below |
+| `{ type: 'interact', thingId, name, description, screenshot, timeOfDay, day, state, position: {x,y,z}, seed }` | 300 ms after a tap on a thing in reach |
 | `{ type: 'error', code: 'capture_failed', message }` | Capture threw |
-| `{ type: 'configured', preset, seed, timeOfDay }` | After a `configure` |
+| `{ type: 'configured', preset, seed, timeOfDay, transitionMs, state }` | After a `configure`. `state` already holds the new weather, palette and mood; `timeOfDay` is the clock when the message was handled |
+
+**World state.** One shape, `state: { timeOfDay, day, weather, palette, mood }`, is the source of truth for conditions. The host or the story LLM changes it with `configure` and `setTime`; the world reports it back in every `clock`, `interact` and `configured`, so the backend can prompt each generated scene with exactly what the player sees. `timeOfDay` and `day` are the clock as shown on screen, including mid-transition. `weather` is `fair` (the default), `clear`, `cloudy`, `mist`, `rain` or `snow`. `palette` holds the configured colours after clamping, as `#rrggbb` (`sky`, `fog`, `ground`, `water`, `accentLight`); an empty object means the default Synqui palette. `mood` is the free text last set by `configure` (up to 160 characters), empty by default; the world stores and reports it but does not render it. `getState()` also returns `state`, plus `transitioning: true` while a time or style transition is running.
 
 `screenshot` is a `data:image/jpeg;base64,…` URL, 1280 px wide, at the current aspect ratio (about 1280×2770 on an iPhone in portrait). It is rendered straight from the scene, so it never contains the outline, the selection fill, the ASCII effect, the clock, the name pill or the touch ring.
 
@@ -43,26 +45,29 @@ npm run build    # writes dist/
 | Message | Effect |
 | --- | --- |
 | `{ type: 'setSeed', seed: number \| string }` | Rebuilds the world and returns the player to the start |
-| `{ type: 'setTime', timeOfDay: number, day?: number }` | Jumps the clock. `timeOfDay` is in hours and wraps to 0–24. `day` must be 1 or more |
+| `{ type: 'setTime', timeOfDay: number, day?: number, transitionMs?: number }` | Sets the clock. `timeOfDay` is in hours and wraps to 0–24. `day` must be 1 or more. Without `transitionMs` the clock jumps. With it, the clock runs forward quickly to the new time over that many milliseconds (up to 120000), crossing midnight if needed, so the sky, sun, moon and light move through every hour between; `day` is applied when it arrives. A target less than 30 minutes behind the current time is set directly instead of running a full day |
 | `{ type: 'pause' }` / `{ type: 'resume' }` | Freezes or continues simulation and input. Pause silences all audio |
 | `{ type: 'setAscii', amount: 0..1, durationMs?: number }` | Eases between the normal picture (0) and full Paper Mono ASCII (1), sweeping from the top down. Default 600 ms |
 | `{ type: 'setSound', on: boolean }` | Ambience and footsteps |
 | `{ type: 'setMusic', on: boolean }` | Music bed |
 | `{ type: 'mute', muted: boolean }` | Both of the above |
 | `{ type: 'applyOutcome', thingId, change }` | Changes a thing after a scene. `change` keys: `lit: boolean` (lanterns, windows, lighthouse), `doorOpen: boolean` (cabin, lighthouse), `gone: boolean` (hides it, for example the boat), `position: {x?,y?,z?}` in world metres (for example the stranger moved). Outcomes persist while the seed is unchanged, including when chunks reload |
-| `{ type: 'configure', preset?, seed?, timeOfDay?, palette?: { sky?, fog?, ground?, water?, accentLight? }, weather?, landmarks?: [{ slot, name, description }] }` | Restyles the world without a reload. See below |
+| `{ type: 'configure', preset?, seed?, timeOfDay?, palette?: { sky?, fog?, ground?, water?, accentLight? }, weather?, mood?, landmarks?: [{ slot, name, description }], transitionMs? }` | Restyles the world without a reload. See below |
 
 ### configure (Dream a world)
 
-Each `configure` is a complete restyle. Fields you leave out go back to the defaults, unknown fields are ignored, and invalid values are dropped.
+Each `configure` is a complete restyle: send the whole intended state each time. Palette, weather and landmark names you leave out go back to the defaults; `timeOfDay` and `mood` keep their current value when left out. Unknown fields are ignored and invalid values are dropped.
+
+- `transitionMs`: blend to the new conditions over this many milliseconds (0–120000, default 0, which snaps). Sky, fog, light, water, ground tint, cloud cover, rain and snow density all ease together, and `timeOfDay` runs the clock forward as `setTime` does. A new `configure` during a transition starts from whatever is on screen, so there is no jump. A `seed` change still rebuilds the terrain at once.
 
 - `preset`: one of `misty-dawn-coast`, `golden-meadow`, `moonlit-snow` or `cloud-sea`. Other fields in the same message override the preset. The same presets load from the URL, for example `index.html?preset=cloud-sea`, so a world can be shown without the backend.
 - `seed`: rebuilds the terrain and resets the player, as `setSeed` does. `timeOfDay`: hours, wrapped to 0–24.
 - `palette`: `#rgb` or `#rrggbb` colours only. Each colour is clamped so the world stays readable: sky lightness 0.14–0.8 and saturation at most 0.45, fog lightness 0.2–0.95, water lightness 0.06–0.95, accent light lightness 0.45–0.95. `sky` tints the zenith, horizon, ambient light and far mountains. `fog` tints the haze, the horizon and the clouds. `ground` tints the terrain, grass and leaves (a very light ground, such as snow, tints strongly). `water` sets the sea's deep colour. `accentLight` tints the sunlight and moonlight. Sky and fog tints are weaker at night, so nights stay dark. Blossom stays reserved for the selection fill.
-- `weather`: `clear` (fewer clouds), `cloudy`, `mist` (thick haze), `rain` (overcast with haze) or `snow` (falling snow, pale ground at night).
+- `weather`: `fair` (the default), `clear` (fewer clouds), `cloudy`, `mist` (thick haze), `rain` or `snow`. Rain greys the sky and dims the sun and moon, adds falling streaks around the player, darkens the ground with a wet sheen, and plays rain hiss with pattering drops. Snow drifts down in the wind, settles white on upward-facing ground, grass, trees and landmarks, muffles the wind and makes footsteps crunch. Night insects are silent in rain and snow.
+- `mood`: free text for the story director, for example `melancholy, waiting`. Reported in `state`.
 - `landmarks`: `slot` is a landmark kind (`lighthouse`, `arch`, `boat`, `cabin`, `lantern`, `well`, `stranger`). `name` (up to 60 characters) and `description` (up to 280) replace what the name pill shows and what `interact` sends, for every instance of that kind. Slots you don't list keep their built-in names.
 
-The world answers with `{ type: 'configured', preset, seed, timeOfDay }`.
+The world answers with `{ type: 'configured', preset, seed, timeOfDay, transitionMs, state }`.
 
 `window.SynquiWorld.getState()` returns diagnostics for integration tests: position, yaw, time, seed, paused, ASCII amount, audio state, chunk count, pixel ratio, and every thing with its screen position and reachability. It shows nothing on screen.
 

@@ -1,6 +1,6 @@
 import type { ThingKind } from './things';
 
-export type Weather = 'clear' | 'cloudy' | 'mist' | 'snow' | 'rain';
+export type Weather = 'fair' | 'clear' | 'cloudy' | 'mist' | 'snow' | 'rain';
 
 export interface WorldStyle {
   seed?: number | string;

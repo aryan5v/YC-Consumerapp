@@ -12,15 +12,34 @@ export interface SkyStyle {
   fog: THREE.Color | null;
   water: THREE.Color | null;
   accent: THREE.Color | null;
+  ground: THREE.Color | null;
   coverage: number;
   fogScale: number;
   snow: number;
+  rain: number;
 }
 
-export const defaultSkyStyle = (): SkyStyle => ({ sky: null, fog: null, water: null, accent: null, coverage: 0, fogScale: 1, snow: 0 });
+export const defaultSkyStyle = (): SkyStyle => ({ sky: null, fog: null, water: null, accent: null, ground: null, coverage: 0, fogScale: 1, snow: 0, rain: 0 });
+
+const SLOTS = ['sky', 'fog', 'water', 'accent', 'ground'] as const;
+const AMOUNTS = ['coverage', 'fogScale', 'snow', 'rain'] as const;
+type Slot = typeof SLOTS[number];
+export interface SkyMix { color: Record<Slot, THREE.Color>; weight: Record<Slot, number>; coverage: number; fogScale: number; snow: number; rain: number }
+const blankMix = (): SkyMix => ({ color: Object.fromEntries(SLOTS.map(s => [s, new THREE.Color('#ffffff')])) as Record<Slot, THREE.Color>, weight: Object.fromEntries(SLOTS.map(s => [s, 0])) as Record<Slot, number>, coverage: 0, fogScale: 1, snow: 0, rain: 0 });
+function copyMix(to: SkyMix, from: SkyMix) {
+  for (const s of SLOTS) { to.color[s].copy(from.color[s]); to.weight[s] = from.weight[s]; }
+  for (const k of AMOUNTS) to[k] = from[k];
+}
 
 export class Sky {
-  style: SkyStyle = defaultSkyStyle();
+  mix = blankMix();
+  private from = blankMix();
+  private to = blankMix();
+  private blendLeft = 0;
+  private blendTotal = 0;
+  private skip = 0;
+  private skipRate = 0;
+  private skipDay: number | undefined;
   hours = theme.startHour;
   day = 1;
   elapsed = 0;
@@ -147,6 +166,22 @@ export class Sky {
   private spireMaterial = new THREE.MeshBasicMaterial({ color: '#7f97a3', fog: false });
   private spireGlow: THREE.Mesh;
   private motes: THREE.Points;
+  private rain: THREE.Points;
+  private rainMaterial = new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, fog: false,
+    uniforms: { time: { value: 0 }, center: { value: new THREE.Vector3() }, color: { value: new THREE.Color(theme.moonstone) }, amount: { value: 0 }, scale: { value: 300 } },
+    vertexShader: `uniform float time,scale,amount;uniform vec3 center;attribute float seed;varying float vA;
+      void main(){
+        vec3 p=position;
+        float y=mod(p.y-time*(13.+seed*6.),16.);
+        vec2 rel=mod(p.xz-center.xz+15.,30.)-15.;
+        vec3 w=vec3(center.x+rel.x+y*.06,center.y-3.+y,center.z+rel.y);
+        vA=step(seed,amount)*(1.-smoothstep(8.,15.,length(rel)));
+        vec4 mv=viewMatrix*vec4(w,1.);
+        gl_PointSize=vA>0.?scale*.55/-mv.z:0.;
+        gl_Position=projectionMatrix*mv;}`,
+    fragmentShader: 'uniform vec3 color;varying float vA;void main(){vec2 c=gl_PointCoord-.5;float a=smoothstep(.07,.0,abs(c.x-c.y*.12))*(1.-abs(c.y)*2.);gl_FragColor=vec4(color,a*vA*.8);}',
+  });
   private moteMaterial = new THREE.ShaderMaterial({
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false,
     uniforms: { time: { value: 0 }, center: { value: new THREE.Vector3() }, color: { value: new THREE.Color(theme.moonstone) }, strength: { value: 0 }, scale: { value: 300 }, snow: { value: 0 }, petal: { value: new THREE.Color(theme.blossom) }, day: { value: 1 } },
@@ -154,14 +189,14 @@ export class Sky {
       void main(){
         vSeed=seed;vec3 p=position;
         p.y+=mix(mod(time*(.15+seed*.2)+seed*10.,8.)-4.,4.-mod(time*(.9+seed*.6)+seed*10.,8.),snow);
-        p.x+=sin(time*.4+seed*20.)*.8;p.z+=cos(time*.33+seed*13.)*.8;
+        p.x+=sin(time*.4+seed*20.)*.8*(1.+snow*1.5)+snow*time*.7;p.z+=cos(time*.33+seed*13.)*.8+snow*time*.25;
         vec3 rel=mod(p-center+20.,40.)-20.;
         vec3 w=center+rel;w.y=center.y+p.y-1.;
-        vFade=(1.-smoothstep(10.,20.,length(rel.xz)))*mix(.5+.5*sin(time*1.7+seed*30.),1.,snow);
+        vFade=(1.-smoothstep(10.,20.,length(rel.xz)))*mix(.5+.5*sin(time*1.7+seed*30.),1.,snow)*mix(step(seed,.62),1.,snow);
         vec4 mv=viewMatrix*vec4(w,1.);
         gl_PointSize=scale*(.05+seed*.05)*(1.+snow*.6)/-mv.z;
         gl_Position=projectionMatrix*mv;}`,
-    fragmentShader: 'uniform vec3 color,petal;uniform float strength,day;varying float vFade;varying float vSeed;void main(){float d=length(gl_PointCoord-.5);float a=smoothstep(.5,0.,d);vec3 c=mix(color,petal,step(.55,vSeed)*day);gl_FragColor=vec4(c*a*a*vFade*strength,1.);}',
+    fragmentShader: 'uniform vec3 color,petal;uniform float strength,day;varying float vFade;varying float vSeed;void main(){float d=length(gl_PointCoord-.5);float a=smoothstep(.5,0.,d);vec3 c=mix(color,petal,step(.55,fract(vSeed*7.31))*day);gl_FragColor=vec4(c*a*a*vFade*strength,1.);}',
   });
 
   constructor(scene: THREE.Scene) {
@@ -169,12 +204,20 @@ export class Sky {
     this.mountains.renderOrder = -9;
     this.mountains.position.y = 20;
     this.group.add(this.dome);
-    const count = 260, pos = new Float32Array(count * 3), seed = new Float32Array(count);
+    const count = 420, pos = new Float32Array(count * 3), seed = new Float32Array(count);
     for (let i = 0; i < count; i++) { pos[i * 3] = Math.random() * 40; pos[i * 3 + 1] = Math.random() * 4; pos[i * 3 + 2] = Math.random() * 40; seed[i] = Math.random(); }
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     geometry.setAttribute('seed', new THREE.BufferAttribute(seed, 1));
     this.motes = new THREE.Points(geometry, this.moteMaterial);
+    const drops = 1400, rainPos = new Float32Array(drops * 3), rainSeed = new Float32Array(drops);
+    for (let i = 0; i < drops; i++) { rainPos[i * 3] = Math.random() * 30; rainPos[i * 3 + 1] = Math.random() * 16; rainPos[i * 3 + 2] = Math.random() * 30; rainSeed[i] = Math.random(); }
+    const rainGeometry = new THREE.BufferGeometry();
+    rainGeometry.setAttribute('position', new THREE.BufferAttribute(rainPos, 3));
+    rainGeometry.setAttribute('seed', new THREE.BufferAttribute(rainSeed, 1));
+    this.rain = new THREE.Points(rainGeometry, this.rainMaterial);
+    this.rain.frustumCulled = false;
+    this.rain.visible = false;
     const plane = new THREE.PlaneGeometry(1, 1);
     plane.translate(0, .5, 0);
     for (let i = 0; i < 6; i++) {
@@ -209,7 +252,7 @@ export class Sky {
     this.spire.renderOrder = -8.5;
     this.spire.traverse(o => { o.frustumCulled = false; });
     this.motes.frustumCulled = false;
-    scene.add(this.group, this.cumulus, this.spire, this.mountains, this.sunLight, this.sunLight.target, this.ambient, this.sea, this.motes);
+    scene.add(this.group, this.cumulus, this.spire, this.mountains, this.sunLight, this.sunLight.target, this.ambient, this.sea, this.motes, this.rain);
     this.sea.rotation.x = -Math.PI / 2;
     this.sea.position.y = WATER;
     scene.fog = new THREE.FogExp2('#c4e1ea', .011);
@@ -220,26 +263,63 @@ export class Sky {
     return 1 - THREE.MathUtils.smoothstep(Math.sin(angle), -.12, .12);
   }
 
-  setPixelRatio(ratio: number) { this.moteMaterial.uniforms.scale.value = 300 * ratio * (innerHeight / 844); }
+  setPixelRatio(ratio: number) { this.moteMaterial.uniforms.scale.value = this.rainMaterial.uniforms.scale.value = 300 * ratio * (innerHeight / 844); }
+
+  setStyle(style: SkyStyle, ms: number) {
+    copyMix(this.from, this.mix);
+    for (const s of SLOTS) {
+      const c = style[s];
+      this.to.color[s].copy(c ?? this.mix.color[s]);
+      this.to.weight[s] = !c ? 0 : s === 'ground' ? (c.getHSL({ h: 0, s: 0, l: 0 }).l > .82 ? .85 : .32) : 1;
+      if (!this.from.weight[s]) this.from.color[s].copy(this.to.color[s]);
+    }
+    for (const k of AMOUNTS) this.to[k] = style[k];
+    this.blendTotal = this.blendLeft = Math.max(0, ms) / 1000;
+    if (!this.blendTotal) copyMix(this.mix, this.to);
+  }
+
+  setTime(hours: number, day: number | undefined, ms: number) {
+    const target = ((hours % 24) + 24) % 24;
+    const ahead = (target - this.hours + 24) % 24;
+    this.skip = ms > 0 && ahead < 23.5 ? ahead : 0;
+    this.skipRate = this.skip / Math.max(ms / 1000, .001);
+    this.skipDay = day === undefined ? undefined : Math.floor(day);
+    if (this.skip > 0) return;
+    this.hours = target;
+    if (this.skipDay !== undefined) this.day = this.skipDay;
+    this.skipDay = undefined;
+  }
+
+  get transitioning() { return this.skip > 0 || this.blendLeft > 0; }
 
   update(dt: number, player: THREE.Vector3, scene: THREE.Scene) {
     this.elapsed += dt;
-    this.hours += dt * .1;
-    if (this.hours >= 24) { this.hours -= 24; this.day++; }
+    const skipped = Math.min(this.skip, this.skipRate * dt);
+    this.skip -= skipped;
+    this.hours += this.skip > 0 || skipped > 0 ? skipped : dt * .1;
+    while (this.hours >= 24) { this.hours -= 24; this.day++; }
+    if (this.skip <= 0 && this.skipDay !== undefined) { this.day = this.skipDay; this.skipDay = undefined; }
+    if (this.blendLeft > 0) {
+      this.blendLeft = Math.max(0, this.blendLeft - dt);
+      const k = THREE.MathUtils.smootherstep(1 - this.blendLeft / this.blendTotal, 0, 1);
+      for (const s of SLOTS) { this.mix.color[s].copy(this.from.color[s]).lerp(this.to.color[s], k); this.mix.weight[s] = THREE.MathUtils.lerp(this.from.weight[s], this.to.weight[s], k); }
+      for (const key of AMOUNTS) this.mix[key] = THREE.MathUtils.lerp(this.from[key], this.to[key], k);
+    }
     const i = Math.max(0, skyKeys.findIndex(k => k.t > this.hours) - 1), a = skyKeys[i], b = skyKeys[i + 1];
     const f = THREE.MathUtils.smoothstep(this.hours, a.t, b.t);
     for (const key of Object.keys(this.colors) as ColorKey[]) this.colors[key].set(a[key]).lerp(new THREE.Color(b[key]), f);
-    const power = THREE.MathUtils.lerp(a.power, b.power, f);
-    const st = this.style, keep = 1 - this.dayNight() * .55;
-    if (st.sky) { this.colors.zenith.lerp(st.sky, .65 * keep); this.colors.horizon.lerp(st.sky, .22 * keep); this.colors.sky.lerp(st.sky, .4 * keep); this.colors.mountain.lerp(st.sky, .3 * keep); }
-    if (st.fog) { this.colors.haze.lerp(st.fog, .75 * keep); this.colors.horizon.lerp(st.fog, .4 * keep); this.colors.cloudLit.lerp(st.fog, .2 * keep); this.colors.cloudShade.lerp(st.fog, .3 * keep); }
-    if (st.accent) this.colors.light.lerp(st.accent, .35);
+    const st = this.mix, w = st.weight, sc = st.color, keep = 1 - this.dayNight() * .55;
+    const power = THREE.MathUtils.lerp(a.power, b.power, f) * (1 - st.rain * .45);
+    this.colors.zenith.lerp(sc.sky, .65 * keep * w.sky); this.colors.horizon.lerp(sc.sky, .22 * keep * w.sky); this.colors.sky.lerp(sc.sky, .4 * keep * w.sky); this.colors.mountain.lerp(sc.sky, .3 * keep * w.sky);
+    this.colors.haze.lerp(sc.fog, .75 * keep * w.fog); this.colors.horizon.lerp(sc.fog, .4 * keep * w.fog); this.colors.cloudLit.lerp(sc.fog, .2 * keep * w.fog); this.colors.cloudShade.lerp(sc.fog, .3 * keep * w.fog);
+    this.colors.light.lerp(sc.accent, .35 * w.accent);
+    if (st.rain > 0) for (const key of ['zenith', 'horizon', 'haze', 'sky', 'cloudLit', 'cloudShade', 'mountain'] as ColorKey[]) { const col = this.colors[key], l = col.r * .3 + col.g * .59 + col.b * .11; col.lerp(new THREE.Color(l * .85, l * .9, l * .95), st.rain * .55); }
     const angle = (this.hours - 6) / 24 * Math.PI * 2;
     this.sunDir.set(Math.cos(angle) * .9, Math.sin(angle), -.45).normalize();
     const phase = ((this.hours - 16 + 24) % 24) / 15;
     const az = Math.PI * (.36 + Math.min(phase, 1) * .28);
     this.moonDir.set(Math.cos(az) * .9, Math.sin(Math.min(phase, 1) * Math.PI) * .36 + (phase > 1 ? -.3 : .1), -.85).normalize();
-    this.skyMaterial.uniforms.moonVis.value = THREE.MathUtils.smoothstep(this.moonDir.y, -.01, .08);
+    this.skyMaterial.uniforms.moonVis.value = THREE.MathUtils.smoothstep(this.moonDir.y, -.01, .08) * (1 - this.mix.rain * .75);
     this.night = 1 - THREE.MathUtils.smoothstep(this.sunDir.y, -.12, .12);
     const c = this.colors;
     const u = this.skyMaterial.uniforms;
@@ -271,12 +351,15 @@ export class Sky {
     const s = this.seaMaterial.uniforms;
     s.time.value = this.elapsed; s.horizon.value.copy(c.horizon).lerp(c.haze, .3); s.sky.value.copy(c.zenith); s.sunDir.value.copy(lightDir); s.sunColor.value.copy(c.light); s.night.value = this.night;
     s.deep.value.set(theme.lagoon).lerp(c.zenith, .25 * (1 - this.night));
-    if (st.water) s.deep.value.copy(st.water).lerp(c.zenith, .15 * (1 - this.night));
+    s.deep.value.lerp(new THREE.Color().copy(sc.water).lerp(c.zenith, .15 * (1 - this.night)), w.water);
     const dusk = Math.max(this.night, 1 - Math.min(1, Math.abs(this.sunDir.y) / .25));
     this.moteMaterial.uniforms.time.value = this.elapsed;
     this.moteMaterial.uniforms.center.value.copy(player);
     this.moteMaterial.uniforms.strength.value = Math.max(.55 + dusk * .7, st.snow * 1.3);
     this.moteMaterial.uniforms.snow.value = st.snow;
-    this.moteMaterial.uniforms.day.value = (1 - this.night) * (1 - st.snow);
+    this.moteMaterial.uniforms.day.value = (1 - this.night) * (1 - st.snow) * (1 - st.rain);
+    const r = this.rainMaterial.uniforms;
+    this.rain.visible = st.rain > .01;
+    r.time.value = this.elapsed; r.center.value.copy(player); r.amount.value = st.rain; r.color.value.copy(c.haze).lerp(new THREE.Color(theme.lagoon), .35 * (1 - this.night)).lerp(new THREE.Color(theme.moonstone), .35 * this.night).multiplyScalar(1 - this.night * .45);
   }
 }

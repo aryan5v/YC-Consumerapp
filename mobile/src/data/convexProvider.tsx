@@ -42,6 +42,10 @@ export function createConvexProvider(url: string): StoryProvider {
       const { storageId } = (await upload.json()) as { storageId: string };
       return client.action(api.speak, { runId, audioStorageId: storageId, ...guard(expectedBeatId) });
     },
+    voiceReady: () => client.mutation(api.speakUploadUrl, {}).then(
+      () => true,
+      () => false,
+    ),
     setPhone: async (phone) => {
       await client.mutation(api.setPhone, { phone });
     },

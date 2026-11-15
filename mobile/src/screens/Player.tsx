@@ -86,6 +86,14 @@ export function Player({
   const holdScale = useRef(new Animated.Value(1)).current;
   const reduceMotion = useReduceMotion();
   const sceneLift = useRef(new Animated.Value(0)).current;
+  const [voiceOk, setVoiceOk] = useState(!speakUnavailable && !story.voiceReady);
+  useEffect(() => {
+    if (speakUnavailable || !story.voiceReady) return;
+    story.voiceReady().then((ok) => {
+      if (!ok) speakUnavailable = true;
+      setVoiceOk(ok);
+    });
+  }, [story]);
   const settings = useSettings();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [listening, setListening] = useState(false);
@@ -359,7 +367,7 @@ export function Player({
     }
   };
 
-  const micOn = settings.microphone && !!story.speak && !!current?.stop?.spokenAudioUrl && !speakUnavailable && !micDenied;
+  const micOn = settings.microphone && voiceOk && !!story.speak && !!current?.stop?.spokenAudioUrl && !speakUnavailable && !micDenied;
   const mic = (bare: boolean) => (
     <MicButton
       bare={bare}

@@ -953,7 +953,8 @@ class LastFrameError(Exception):
 
 def run_ffmpeg(args, timeout=None):
     proc = subprocess.run(
-        [FFMPEG, "-hide_banner", "-loglevel", "error"] + args,
+        [FFMPEG, "-nostdin", "-hide_banner", "-loglevel", "error"] + args,
+        stdin=subprocess.DEVNULL,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         timeout=timeout or FFMPEG_TIMEOUT,

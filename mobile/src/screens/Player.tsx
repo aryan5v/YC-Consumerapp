@@ -15,7 +15,7 @@ import { MicButton } from "../components/MicButton";
 import { Presence } from "../components/Presence";
 import { PuzzleSheet, type PuzzleState } from "../components/PuzzleSheet";
 import { SettingsGlyph, SettingsSheet } from "../components/SettingsSheet";
-import { audioSource, useStory, videoSource, preloadClip, type Ending, type Stop } from "../data";
+import { audioSource, useStory, videoSource, type Ending, type Stop } from "../data";
 import { useReduceMotion } from "../a11y";
 import { useSettings } from "../settings";
 import { Glass } from "../components/Glass";
@@ -166,7 +166,6 @@ export function Player({
     if (view.stop?.kind === "puzzle") {
       for (const o of [view.stop.outcomes.success, view.stop.outcomes.failure]) if (o.status === "ready" && o.clipUrl) wanted.push(o.clipUrl);
     }
-    wanted.forEach((url) => { void preloadClip(url); });
     const resident = [...new Set(wanted)].slice(0, SLOTS.length - (previousRef.current >= 0 ? 1 : 0));
     for (const url of resident) {
       if (slots.some((s) => s.url === url)) continue;

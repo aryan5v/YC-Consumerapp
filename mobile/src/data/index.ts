@@ -12,4 +12,4 @@ export const StoryContext = createContext<StoryProvider>(convexStory ?? mockStor
 export const useStory = () => useContext(StoryContext);
 
 export * from "./types";
-export { audioSource, imageSource, videoSource, preloadClip } from "./assets";
+export { audioSource, imageSource, videoSource } from "./assets";

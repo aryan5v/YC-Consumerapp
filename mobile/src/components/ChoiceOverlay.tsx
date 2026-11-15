@@ -9,7 +9,7 @@ import { Ring } from "./Ring";
 export type Rect = { x: number; y: number; w: number; h: number };
 
 const CHIP_HEIGHT = 56;
-const SIDE_MARGIN = 12;
+const SIDE_MARGIN = 24;
 const MIN_TARGET = 64;
 const LABEL_ROOM = 30;
 const CHIP_GAP = 12;

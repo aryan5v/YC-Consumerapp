@@ -114,7 +114,7 @@ export function PuzzleSheet({
           {puzzle.answerType === "number" && (
             <>
               <View style={styles.display}>
-                <Text maxFontSizeMultiplier={1.4} style={[styles.digits, value === "" && { color: colors.faint }]}>{value === "" ? "\u2013 \u2013 \u2013" : value}</Text>
+                <Text maxFontSizeMultiplier={1.4} style={[styles.digits, value === "" && { color: colors.faint }]}>{value === "" ? "\u2013" : value}</Text>
               </View>
               <View style={styles.pad}>
                 {KEYS.map((key) => (

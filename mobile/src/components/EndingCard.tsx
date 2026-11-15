@@ -1,7 +1,8 @@
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import { useEffect, useRef, useState } from "react";
-import { Animated, Keyboard, Linking, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Animated, Keyboard, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useReduceMotion } from "../a11y";
 import { useStory, type Ending } from "../data";
 import { colors, ease, fonts, gradients, motion, radius, type } from "../theme";
@@ -29,6 +30,7 @@ export function EndingCard({
   bottomInset: number;
 }) {
   const story = useStory();
+  const topInset = useSafeAreaInsets().top;
   const reduceMotion = useReduceMotion();
   const steps = useRef([0, 1, 2, 3, 4].map(() => new Animated.Value(0))).current;
   const keyboard = useRef(new Animated.Value(0)).current;
@@ -93,7 +95,13 @@ export function EndingCard({
         style={StyleSheet.absoluteFill}
       />
       <Pressable accessible={false} style={StyleSheet.absoluteFill} onPress={Keyboard.dismiss} />
-      <Animated.View pointerEvents="box-none" style={[styles.body, { paddingBottom: bottomInset + 14, transform: [{ translateY: keyboard }] }]}>
+      <Animated.View pointerEvents="box-none" style={[styles.body, { transform: [{ translateY: keyboard }] }]}>
+        <ScrollView
+          bounces={false}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={[styles.content, { paddingTop: topInset + 24, paddingBottom: bottomInset + 14 }]}
+        >
         <Animated.View style={rise(steps[0])}>
           <Text style={styles.kicker}>Your ending</Text>
           <Text style={styles.title}>{ending.title}</Text>
@@ -182,13 +190,15 @@ export function EndingCard({
             <Text maxFontSizeMultiplier={1.4} style={styles.doneText}>Done</Text>
           </Pressable>
         </Animated.View>
+        </ScrollView>
       </Animated.View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  body: { flex: 1, justifyContent: "flex-end", paddingHorizontal: 26 },
+  body: { flex: 1 },
+  content: { flexGrow: 1, justifyContent: "flex-end", paddingHorizontal: 26 },
   kicker: { fontFamily: fonts.ui, fontWeight: "600", fontSize: type.micro, letterSpacing: 2.6, textTransform: "uppercase", color: colors.dim, marginBottom: 10 },
   title: { fontFamily: fonts.display, fontSize: type.endTitle, lineHeight: 50, color: colors.text },
   summary: { fontFamily: fonts.ui, fontWeight: "400", fontSize: type.body, lineHeight: 24, color: colors.dim, marginTop: 8 },

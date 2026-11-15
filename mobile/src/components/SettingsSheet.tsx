@@ -158,7 +158,7 @@ export function SettingsSheet({ onClose, bottomInset }: { onClose: () => void; b
             <Text maxFontSizeMultiplier={1.4} style={[styles.kicker, styles.group]}>Story</Text>
             <Switch
             label="Demo story"
-            detail="Play the built-in offline episode instead of today\u2019s live one."
+            detail={"Play the built-in offline episode instead of today\u2019s live one."}
             value={settings.demo}
             onChange={(value) => setSetting("demo", value)}
           />

@@ -8,6 +8,9 @@ import { Soundscape } from './audio';
 import { createAsciiPass } from './ascii';
 import { shared } from './shading';
 import { theme } from './theme';
+import { defaultSkyStyle } from './sky';
+import { presets, type WorldStyle } from './presets';
+import { kinds } from './layout';
 import { Controls } from './controls';
 import { Sky } from './sky';
 import { Landmarks } from './landmarks';
@@ -91,12 +94,58 @@ bridge(message=>{
   if(message.type==='setAscii'){asciiFrom=ascii.uniforms.amount.value;asciiTo=THREE.MathUtils.clamp(message.amount,0,1);asciiStart=performance.now();asciiDuration=Math.max(0,message.durationMs??600);}
   if(message.type==='resume'){paused=false;controls.enabled=true;last=performance.now();document.body.classList.remove('paused');}
   if(message.type==='setTime'){sky.hours=((message.timeOfDay%24)+24)%24;if(message.day!==undefined)sky.day=Math.floor(message.day);lastClock=-1;}
-  if(message.type==='setSeed'){
-    clearInteraction();scene.remove(terrain.group,landmarks.group);terrain.dispose();landmarks.dispose();seed=seedNumber(message.seed);
-    terrain=new Terrain(seed);landmarks=new Landmarks(seed);scene.add(terrain.group,landmarks.group);player.set(pathX(12,seed),0,12);controls.yaw=0;viewYaw=0;velocity.set(0,0,0);controls.reset();controls.enabled=!paused;
-  }
+  if(message.type==='setSeed')reseed(message.seed);
+  if(message.type==='configure')configure(message.config);
   if(message.type==='applyOutcome')landmarks.apply(message.thingId,message.change);
 },()=>({position:player.toArray(),yaw:controls.yaw,timeOfDay:sky.hours,day:sky.day,seed,paused,ascii:ascii.uniforms.amount.value,audio:audio.state(),chunks:terrain.chunks.size,pixelRatio:ratio,drawCalls:frameCalls,triangles:frameTriangles,things:[...landmarks.things.values()].map(t=>{const v=t.root.position.clone().add(new THREE.Vector3(0,1,0)).project(camera);const onScreen=v.z>-1&&v.z<1&&Math.abs(v.x)<1&&Math.abs(v.y)<1;return {id:t.id,kind:t.kind,name:t.name,position:t.root.position.toArray(),visible:t.root.visible,reachable:landmarks.reachable(player).includes(t),screen:onScreen?[(v.x*.5+.5)*innerWidth,(-v.y*.5+.5)*innerHeight]:null};})}));
+
+function reseed(value:number|string){
+  clearInteraction();scene.remove(terrain.group,landmarks.group);terrain.dispose();const names=landmarks.names;landmarks.dispose();seed=seedNumber(value);
+  terrain=new Terrain(seed);landmarks=new Landmarks(seed,names);scene.add(terrain.group,landmarks.group);player.set(pathX(12,seed),0,12);controls.yaw=0;viewYaw=0;velocity.set(0,0,0);controls.reset();controls.enabled=!paused;
+}
+
+function color(value:unknown,minL:number,maxL:number,maxS:number){
+  if(typeof value!=='string'||!/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(value.trim()))return null;
+  const c=new THREE.Color(value.trim()),hsl={h:0,s:0,l:0};c.getHSL(hsl);
+  return c.setHSL(hsl.h,Math.min(hsl.s,maxS),THREE.MathUtils.clamp(hsl.l,minL,maxL));
+}
+
+const text=(value:unknown,max:number)=>typeof value==='string'?value.replace(/\s+/g,' ').trim().slice(0,max):'';
+
+function configure(input:Record<string,unknown>){
+  const preset=typeof input.preset==='string'&&presets[input.preset]?input.preset:undefined;
+  const base:WorldStyle=preset?presets[preset]:{};
+  const palette={...(base.palette??{}),...(input.palette&&typeof input.palette==='object'?input.palette as Record<string,unknown>:{})};
+  const seedIn=input.seed??base.seed;
+  if(typeof seedIn==='string'&&seedIn.length&&seedIn.length<256||typeof seedIn==='number'&&Number.isFinite(seedIn))reseed(seedIn);
+  const hour=input.timeOfDay??base.timeOfDay;
+  if(typeof hour==='number'&&Number.isFinite(hour)){sky.hours=((hour%24)+24)%24;lastClock=-1;}
+  const style=defaultSkyStyle();
+  style.sky=color(palette.sky,.14,.8,.45);
+  style.fog=color(palette.fog,.2,.95,.55);
+  style.water=color(palette.water,.06,.95,.65);
+  style.accent=color(palette.accentLight,.45,.95,.85);
+  const ground=color(palette.ground,.2,.95,.65);
+  shared.tint.value.copy(ground??new THREE.Color('#ffffff'));
+  shared.tintAmount.value=ground?(ground.getHSL({h:0,s:0,l:0}).l>.82?.85:.32):0;
+  const weather=input.weather??base.weather;
+  if(weather==='clear')style.coverage=-.6;
+  if(weather==='cloudy')style.coverage=.9;
+  if(weather==='mist'){style.coverage=.3;style.fogScale=1.9;}
+  if(weather==='rain'){style.coverage=1;style.fogScale=1.6;}
+  if(weather==='snow'){style.coverage=.5;style.fogScale=1.35;style.snow=1;}
+  sky.style=style;
+  const names=new Map<string,{name:string;description:string}>();
+  const list=Array.isArray(input.landmarks)?input.landmarks:base.landmarks??[];
+  for(const entry of list.slice(0,kinds.length)){
+    if(!entry||typeof entry!=='object')continue;
+    const e=entry as Record<string,unknown>;
+    if(typeof e.slot!=='string'||!kinds.includes(e.slot as never))continue;
+    names.set(e.slot,{name:text(e.name,60),description:text(e.description,280)});
+  }
+  landmarks.rename(names);
+  post({type:'configured',preset:preset??null,seed,timeOfDay:sky.hours});
+}
 
 function resize(){renderer.setPixelRatio(ratio);renderer.setSize(innerWidth,innerHeight,false);composer.setPixelRatio(ratio);composer.setSize(innerWidth,innerHeight);renderer.getDrawingBufferSize(ascii.uniforms.resolution.value);ascii.uniforms.cellScale.value=Math.max(1,Math.round(ratio*1.2));camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();sky.setPixelRatio(ratio);}
 window.addEventListener('resize',resize);resize();
@@ -120,7 +169,7 @@ function render(now:number){
   viewPitch+=(controls.pitch-viewPitch)*(1-Math.exp(-dt*14));
   camera.position.copy(player);camera.position.y+=Math.abs(Math.sin(stepPhase))*.05*Math.min(pace,1.4)-.02*Math.min(pace,1);
   camera.rotation.set(viewPitch+Math.sin(stepPhase*2)*.004*pace,viewYaw,Math.sin(stepPhase)*.006*pace);
-  shared.time.value=sky.elapsed;shared.night.value=THREE.MathUtils.smoothstep(-sky.sunDir.y,.0,.22);shared.rim.value.copy(sky.rim.value);
+  shared.time.value=sky.elapsed;shared.night.value=THREE.MathUtils.smoothstep(-sky.sunDir.y,.0,.22)*(1-sky.style.snow*.65);shared.rim.value.copy(sky.rim.value);
   if(asciiDuration>=0){const t=asciiDuration===0?1:Math.min(1,(now-asciiStart)/asciiDuration);const e=t*t*(3-2*t);ascii.uniforms.amount.value=asciiFrom+(asciiTo-asciiFrom)*e;ascii.enabled=ascii.uniforms.amount.value>.001;}
   audio.update(dt,{moving:Math.min(pace,1.6),surface:surfaceAt(player.x,player.z,seed),shore:Math.max(0,shore(player.z,seed)-player.x),hours:sky.hours,elapsed:sky.elapsed});
   terrain.update(player.x,player.z);sky.update(Math.min(raw,.5),player,scene);landmarks.update(player,sky.elapsed);
@@ -154,3 +203,5 @@ function render(now:number){
   if(frames>=90){const average=frameSum/frames;if(average>.022&&ratio>.65){ratio=Math.max(.65,ratio-.15);resize();}else if(average<.017&&ratio<Math.min(devicePixelRatio,1.75)){ratio=Math.min(devicePixelRatio,1.75,ratio+.05);resize();}frames=0;frameSum=0;}
 }
 requestAnimationFrame(render);
+const startPreset=new URLSearchParams(location.search).get('preset');
+if(startPreset)configure({preset:startPreset});

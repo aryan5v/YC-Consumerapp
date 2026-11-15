@@ -17,9 +17,9 @@ npm run build    # writes dist/
 - Touch: drag the left half to walk (a glass thumb ring appears) and the right half to look. Both thumbs work at the same time. A tap with no drag interacts. Desktop: WASD or arrow keys to walk, Shift to run, drag the mouse to look, click to interact.
 - The camera eases its turns and its speed, with a gentle head bob and sway tied to the steps.
 - Render resolution drops when frames run over 22 ms and climbs back when they're under 17 ms.
-- Time of day: one game day lasts 240 real seconds. Sky gradient, sun, moon, stars, fog and light colour change through dawn, day, dusk and night. The palette is cool, with silver light. Amber is kept for warm sources: windows, lanterns and the selection fill.
+- Time of day: one game day lasts 240 real seconds, starting at dusk. A painted sky with soft clouds, a sun, a large moon, stars, haze mountains, fog and light colour change through dawn, day, dusk and night. The theme lives in `src/theme.ts`: Moonstone (#E8EEF1) for light, outlines and text, Lagoon (#0E2C36 to #071A21) for water and night depth, and Blossom (#FF8E9E) only for the selection fill and one small warm light per landmark. Wind-blown grass, pale flowers and drifting motes fill the near field.
 - Overlays, in Paper Mono, styled as minimal glass: the day and clock pill, the thumb ring, and the name pill of the thing in reach. Nothing else.
-- Things, placed by the seed along the path and repeated every 192 m: lantern, cloaked stranger (turns to face you), well, stone arch, cabin, rowboat at the shore, lighthouse. Within reach (about 5.5 m beyond the thing's radius), a thing gets a silver silhouette outline. A tap fills it with an amber gradient for 300 ms, then the world sends `interact`.
+- Things, placed by the seed along the path and repeated every 192 m: lantern, cloaked stranger (turns to face you), well, stone arch, cabin, rowboat at the shore, lighthouse. Within reach (about 5.5 m beyond the thing's radius), a thing gets a Moonstone silhouette outline. A tap fills it with a Blossom-to-Moonstone gradient for 300 ms, then the world sends `interact`.
 - Sound, all synthesised with WebAudio: wind in gusts, footsteps that change with the ground (path, grass, rock, shore), surf near the shore, night insects, and a quiet drone chord that shifts with the time of day. Audio starts on the first touch, because iOS requires a user gesture.
 
 ## Host bridge (version 1)
@@ -32,8 +32,9 @@ npm run build    # writes dist/
 | `{ type: 'clock', timeOfDay, day }` | Once per second while running. `timeOfDay` is in fractional hours, 0–24 |
 | `{ type: 'interact', thingId, name, description, screenshot, timeOfDay, day, position: {x,y,z}, seed }` | 300 ms after a tap on a thing in reach |
 | `{ type: 'error', code: 'capture_failed', message }` | Capture threw |
+| `{ type: 'configured', preset, seed, timeOfDay }` | After a `configure` |
 
-`screenshot` is a `data:image/jpeg;base64,…` URL, 1280 px wide, at the current aspect ratio (about 1280×2770 on an iPhone in portrait). It is rendered straight from the scene, so it never contains the outline, the amber fill, the ASCII effect, the clock, the name pill or the touch ring.
+`screenshot` is a `data:image/jpeg;base64,…` URL, 1280 px wide, at the current aspect ratio (about 1280×2770 on an iPhone in portrait). It is rendered straight from the scene, so it never contains the outline, the selection fill, the ASCII effect, the clock, the name pill or the touch ring.
 
 `thingId` is stable for a given seed: `<seed>:<sector>:<kind>`, for example `8741:0:stranger`. Kinds are `lighthouse`, `arch`, `boat`, `cabin`, `lantern`, `well` and `stranger`.
 
@@ -49,6 +50,19 @@ npm run build    # writes dist/
 | `{ type: 'setMusic', on: boolean }` | Music bed |
 | `{ type: 'mute', muted: boolean }` | Both of the above |
 | `{ type: 'applyOutcome', thingId, change }` | Changes a thing after a scene. `change` keys: `lit: boolean` (lanterns, windows, lighthouse), `doorOpen: boolean` (cabin, lighthouse), `gone: boolean` (hides it, for example the boat), `position: {x?,y?,z?}` in world metres (for example the stranger moved). Outcomes persist while the seed is unchanged, including when chunks reload |
+| `{ type: 'configure', preset?, seed?, timeOfDay?, palette?: { sky?, fog?, ground?, water?, accentLight? }, weather?, landmarks?: [{ slot, name, description }] }` | Restyles the world without a reload. See below |
+
+### configure (Dream a world)
+
+Each `configure` is a complete restyle. Fields you leave out go back to the defaults, unknown fields are ignored, and invalid values are dropped.
+
+- `preset`: one of `misty-dawn-coast`, `golden-meadow`, `moonlit-snow` or `cloud-sea`. Other fields in the same message override the preset. The same presets load from the URL, for example `index.html?preset=cloud-sea`, so a world can be shown without the backend.
+- `seed`: rebuilds the terrain and resets the player, as `setSeed` does. `timeOfDay`: hours, wrapped to 0–24.
+- `palette`: `#rgb` or `#rrggbb` colours only. Each colour is clamped so the world stays readable: sky lightness 0.14–0.8 and saturation at most 0.45, fog lightness 0.2–0.95, water lightness 0.06–0.95, accent light lightness 0.45–0.95. `sky` tints the zenith, horizon, ambient light and far mountains. `fog` tints the haze, the horizon and the clouds. `ground` tints the terrain, grass and leaves (a very light ground, such as snow, tints strongly). `water` sets the sea's deep colour. `accentLight` tints the sunlight and moonlight. Sky and fog tints are weaker at night, so nights stay dark. Blossom stays reserved for the selection fill.
+- `weather`: `clear` (fewer clouds), `cloudy`, `mist` (thick haze), `rain` (overcast with haze) or `snow` (falling snow, pale ground at night).
+- `landmarks`: `slot` is a landmark kind (`lighthouse`, `arch`, `boat`, `cabin`, `lantern`, `well`, `stranger`). `name` (up to 60 characters) and `description` (up to 280) replace what the name pill shows and what `interact` sends, for every instance of that kind. Slots you don't list keep their built-in names.
+
+The world answers with `{ type: 'configured', preset, seed, timeOfDay }`.
 
 `window.SynquiWorld.getState()` returns diagnostics for integration tests: position, yaw, time, seed, paused, ASCII amount, audio state, chunk count, pixel ratio, and every thing with its screen position and reachability. It shows nothing on screen.
 

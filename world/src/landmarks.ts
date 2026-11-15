@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { createThing, type Thing } from './things';
+import { createThing, identity, type Thing } from './things';
 import { heightAt, WATER } from './terrain';
 import { kinds, spot, SECTOR } from './layout';
 import { addRim } from './shading';
@@ -9,7 +9,17 @@ export class Landmarks {
   group=new THREE.Group();
   things=new Map<string,Thing>();
   outcomes=new Map<string,Record<string,unknown>>();
-  constructor(public seed:number){}
+  constructor(public seed:number,public names=new Map<string,{name:string;description:string}>()){}
+
+  rename(names:Map<string,{name:string;description:string}>){
+    this.names=names;
+    for(const thing of this.things.values())this.label(thing);
+  }
+
+  private label(thing:Thing){
+    const base=identity(thing.kind),custom=this.names.get(thing.kind);
+    thing.name=custom?.name||base.name;thing.description=custom?.description||base.description;
+  }
 
   update(player:THREE.Vector3,elapsed:number){
     const sector=Math.round(-player.z/SECTOR);
@@ -24,6 +34,7 @@ export class Landmarks {
         thing.root.position.set(x,kind==='boat'?WATER+.14:heightAt(x,z,this.seed),z);
         if(kind==='boat')thing.root.rotation.y=-.65;
         thing.root.userData.sector=s;
+        this.label(thing);
         const outcome=this.outcomes.get(id);if(outcome)thing.apply(outcome);
         this.things.set(id,thing);this.group.add(thing.root);
       }

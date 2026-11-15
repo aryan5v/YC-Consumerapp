@@ -4,7 +4,11 @@ export const shared = {
   rim: { value: new THREE.Color('#E8EEF1') },
   time: { value: 0 },
   night: { value: 0 },
+  tint: { value: new THREE.Color('#ffffff') },
+  tintAmount: { value: 0 },
 };
+
+export const tintSnippet = (k: number) => `diffuseColor.rgb = mix(diffuseColor.rgb, tintColor * (.8 + .4 * dot(diffuseColor.rgb, vec3(.3, .59, .11))), tintAmount * ${k.toFixed(2)});`;
 
 export const NIGHT_GRADE = 'diffuseColor.rgb = mix(diffuseColor.rgb, vec3(dot(diffuseColor.rgb, vec3(.3, .59, .11))) * vec3(.55, .8, .95), nightGrade * .7);';
 

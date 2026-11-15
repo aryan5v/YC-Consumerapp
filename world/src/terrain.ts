@@ -40,7 +40,7 @@ export function heightAt(x: number, z: number, seed: number) {
   return -3 + coast * (4 + hills * (1 - path * .65)) + THREE.MathUtils.smoothstep(inland,45,150)*hills*3;
 }
 
-import { addRim, NIGHT_GRADE, shared, toon } from './shading';
+import { addRim, NIGHT_GRADE, shared, tintSnippet, toon } from './shading';
 import { clearance } from './layout';
 
 const dummy = new THREE.Object3D();
@@ -70,7 +70,9 @@ function windy(material: THREE.Material) {
   addRim(material, 0, shader => {
     shader.uniforms.time = shared.time;
     shader.uniforms.nightGrade = shared.night;
-    shader.fragmentShader = 'uniform float nightGrade;\n' + shader.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>\n' + NIGHT_GRADE);
+    shader.uniforms.tintColor = shared.tint;
+    shader.uniforms.tintAmount = shared.tintAmount;
+    shader.fragmentShader = 'uniform float nightGrade;\nuniform vec3 tintColor;\nuniform float tintAmount;\n' + shader.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>\n' + tintSnippet(.8) + '\n' + NIGHT_GRADE);
     shader.fragmentShader = shader.fragmentShader.replace('#include <normal_fragment_begin>', '#include <normal_fragment_begin>\nnormal = normalize((viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz);');
     shader.vertexShader = 'uniform float time;\n' + shader.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
       vec3 root = instanceMatrix[3].xyz;
@@ -81,11 +83,13 @@ function windy(material: THREE.Material) {
   });
 }
 
-function painted(material: THREE.Material, rim: number) {
+function painted(material: THREE.Material, rim: number, tint: number) {
   addRim(material, rim, shader => {
     shader.uniforms.nightGrade = shared.night;
+    shader.uniforms.tintColor = shared.tint;
+    shader.uniforms.tintAmount = shared.tintAmount;
     shader.vertexShader = 'varying vec3 paintPosition;\n' + shader.vertexShader.replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvec4 paintWorld=vec4(transformed,1.);\n#ifdef USE_INSTANCING\npaintWorld=instanceMatrix*paintWorld;\n#endif\npaintPosition=(modelMatrix*paintWorld).xyz;');
-    shader.fragmentShader = 'uniform float nightGrade;\nvarying vec3 paintPosition;\nfloat phash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}\nfloat pnoise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(phash(i),phash(i+vec2(1.,0.)),f.x),mix(phash(i+vec2(0.,1.)),phash(i+vec2(1.,1.)),f.x),f.y);}\n' + shader.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+    shader.fragmentShader = 'uniform float nightGrade;\nuniform vec3 tintColor;\nuniform float tintAmount;\nvarying vec3 paintPosition;\nfloat phash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}\nfloat pnoise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(phash(i),phash(i+vec2(1.,0.)),f.x),mix(phash(i+vec2(0.,1.)),phash(i+vec2(1.,1.)),f.x),f.y);}\n' + shader.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
       vec3 pp = paintPosition;
       float ang = sin(pp.x * .11 + pp.z * .07) * 1.3;
       vec2 q = mat2(cos(ang), -sin(ang), sin(ang), cos(ang)) * pp.xz;
@@ -93,6 +97,7 @@ function painted(material: THREE.Material, rim: number) {
       float broad = pnoise(pp.xz * .05);
       diffuseColor.rgb *= .9 + stroke * .16;
       diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(1.06, 1.08, .92), broad * .6);
+      ${tintSnippet(tint)}
       ${NIGHT_GRADE}`);
   });
 }
@@ -113,9 +118,9 @@ export class Terrain {
   private ground = toon({ vertexColors: true });
 
   constructor(public seed: number) {
-    painted(this.ground, 0);
-    painted(this.leaves, .28);
-    painted(this.rock, .22);
+    painted(this.ground, 0, 1);
+    painted(this.leaves, .28, .35);
+    painted(this.rock, .22, .5);
     addRim(this.bark, .3);
     windy(this.grass);
     windy(this.flower);

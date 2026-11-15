@@ -44,6 +44,11 @@ CLOUDFLARED=/usr/local/bin/cloudflared ./run.sh
 If the two endpoints are already public, skip the tunnel and put this behind the ingress you
 already have — the gateway is an ordinary HTTP server.
 
+A fresh quick tunnel takes a moment: cloudflared prints the `trycloudflare.com` URL before that
+hostname resolves publicly, so a request in the first 30 to 60 seconds can fail with a DNS error.
+Retry once it settles. If your resolver prefers IPv6 and the box has no IPv6 route, those first
+requests can also hang until they fall back to IPv4.
+
 ## Frames only
 
 The four instances are already public, so the proxy is optional. `/gateway/last-frame` on its own
@@ -156,6 +161,12 @@ Starts three fake UniServe-shaped instances plus a dead address and a wedged add
 gateway against real HTTP: `401` handling, even spread over the live upstreams, three concurrent
 requests landing on three instances, a dead upstream never being used, failover off a wedged one,
 byte-identical 48 MB streaming without buffering it, 8 MB uploads with and without chunked encoding,
-transparent methods/paths/query strings/headers, `DELETE` with no body, job-id stickiness, `ffmpeg`
-last-frame extraction compared against an independently decoded last frame, and the token appearing
-neither upstream nor in the log. 29 checks, all passing as of the last run.
+transparent methods/paths/query strings/headers, `DELETE` with no body, a `401` that leaves the
+connection reusable for the next request, job-id stickiness, `ffmpeg` last-frame extraction compared
+against an independently decoded last frame, and the token appearing neither upstream nor in the log.
+30 checks, all passing as of the last run.
+
+`run.sh` itself was checked end to end against two fake upstreams with `GATEWAY_NO_TUNNEL=1`, and in
+frames-only mode: the banner values, `.gateway.env` at mode 600, a health request, a proxied `POST`,
+a last-frame render, the frames-only `503` on a proxied path, and `run.sh` cleaning up the gateway
+when it is signalled (17 checks).

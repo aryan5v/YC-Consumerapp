@@ -14,7 +14,6 @@ import hashlib
 import http.client
 import json
 import os
-import random
 import secrets
 import shutil
 import socket
@@ -122,6 +121,16 @@ def call_chunked(method, url, body, headers=None, token=None, timeout=120):
         conn.close()
 
 
+def pseudo_bytes(seed, size):
+    """Deterministic filler bytes that work on python 3.8 (no random.randbytes)."""
+    out = bytearray()
+    block = hashlib.sha256(seed.encode("ascii")).digest()
+    while len(out) < size:
+        out += block
+        block = hashlib.sha256(block).digest()
+    return bytes(out[:size])
+
+
 def json_or_none(data):
     try:
         return json.loads(data.decode("utf-8"))
@@ -191,7 +200,7 @@ def main():
     )
     ref_hash, ref_frames = true_last_frame_hash(mp4, (320, 180))
     print("reference: %d frames, last frame sha256(rgb24)=%s" % (ref_frames, ref_hash[:16]), flush=True)
-    upload_body = random.Random(7).randbytes(UPLOAD_BYTES)
+    upload_body = pseudo_bytes("fork-tray-upload", UPLOAD_BYTES)
 
     ports = {name: free_port() for name in ("A", "B", "C", "D", "BH")}
     cports = {name: free_port() for name in ("A", "B", "C")}
@@ -238,6 +247,30 @@ def main():
               sum(1 for name in ("A", "B", "C")
                   for entry in control(cports[name])["log"]
                   if entry["path"] == "/v1/videos") == 0)
+
+        # a client behind a tunnel reuses connections: a rejected request must not kill one
+        keep_alive = []
+        for label, request in (
+            ("GET with no body", lambda conn: conn.request("GET", "/gateway/health")),
+            ("POST with a body", lambda conn: conn.request(
+                "POST", "/v1/videos", body=b'{"prompt":"x"}',
+                headers={"Content-Type": "application/json"})),
+        ):
+            conn = http.client.HTTPConnection("127.0.0.1", g1_port, timeout=10)
+            try:
+                request(conn)
+                first = conn.getresponse()
+                first.read()
+                conn.request("GET", "/gateway/health", headers={"Authorization": "Bearer " + TOKEN})
+                second = conn.getresponse()
+                second.read()
+                keep_alive.append((label, first.status == 401 and second.status in (200, 503),
+                                   first.status, second.status, conn.sock is not None))
+            finally:
+                conn.close()
+        check("a 401 leaves the connection reusable",
+              all(ok for _, ok, _, _, _ in keep_alive),
+              "; ".join("%s: %s then %s" % (label, a, b) for label, _, a, b, _ in keep_alive))
 
         # ---- wait for the dead address to be probed out -----------------------
         deadline = time.time() + 15

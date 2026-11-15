@@ -49,6 +49,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 CHUNK = 65536
 JSON_INSPECT_MAX = 65536
+DRAIN_LIMIT = 1048576
 PIN_LIMIT = 2000
 LAST_FRAME_MAGIC = b"\x89PNG\r\n\x1a\n"
 
@@ -376,19 +377,19 @@ class Handler(BaseHTTPRequestHandler):
         self.proxied_status = None
         parsed = urllib.parse.urlsplit(self.path)
         path = parsed.path or "/"
+        self.body_consumed = not self.has_request_body()
         started = time.time()
         try:
             if not self.authorized():
                 log("%s %s -> 401 (missing or wrong gateway token)" % (self.command, path))
+                self.drain_request_body()
                 self.send_json(
                     401,
                     {
                         "error": "unauthorized",
                         "message": "send Authorization: Bearer <GATEWAY_TOKEN>",
                     },
-                    close=True,
                 )
-                self.drain_request_body()
                 return
             if path == "/gateway/health" and self.command in ("GET", "HEAD"):
                 self.handle_health()
@@ -419,30 +420,50 @@ class Handler(BaseHTTPRequestHandler):
             return False
         return hmac.compare_digest(parts[1].strip(), TOKEN)
 
+    def has_request_body(self):
+        if "chunked" in (self.headers.get("Transfer-Encoding") or "").lower():
+            return True
+        length = self.headers.get("Content-Length")
+        return bool(length and length.isdigit() and int(length) > 0)
+
     def drain_request_body(self):
-        """Read a small rejected body so the client sees our response instead of a reset."""
-        length_header = self.headers.get("Content-Length")
+        """Read a rejected body so the client sees our response instead of a reset.
+
+        Returns True when the body is fully consumed, which is what makes it safe to keep
+        the connection alive for the next request (a client behind a tunnel reuses it).
+        """
+        if not self.has_request_body():
+            self.body_consumed = True
+            return True
+        if self.body_consumed:
+            return True
         if "chunked" in (self.headers.get("Transfer-Encoding") or "").lower():
             total = 0
             for piece in self.chunked_body():
                 total += len(piece)
-                if total > 1048576:
-                    break
-            return
-        if not length_header or not length_header.isdigit():
-            return
-        remaining = min(int(length_header), 1048576)
+                if total > DRAIN_LIMIT:
+                    return False
+            return True
+        remaining = int(self.headers["Content-Length"])
+        if remaining > DRAIN_LIMIT:
+            return False
         while remaining > 0:
             try:
                 piece = self.rfile.read(min(CHUNK, remaining))
             except (OSError, ValueError):
-                return
+                return False
             if not piece:
-                return
+                return False
             remaining -= len(piece)
+        self.body_consumed = True
+        return True
 
-    def send_json(self, status, payload, close=False):
+    def send_json(self, status, payload, close=None):
         body = (json.dumps(payload, indent=2) + "\n").encode("utf-8")
+        if close is None:
+            # Only drop the connection when a request body is still unread; a tunneled
+            # client reuses connections and a needless close shows up as a 502 there.
+            close = not self.body_consumed
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
@@ -504,6 +525,7 @@ class Handler(BaseHTTPRequestHandler):
                 raise ClientGone("client closed before sending its whole body")
             remaining -= len(piece)
             yield piece
+        self.body_consumed = True
 
     def chunked_body(self):
         while True:
@@ -523,6 +545,7 @@ class Handler(BaseHTTPRequestHandler):
                     trailer = self.rfile.readline(1024)
                     if trailer in (b"\r\n", b"\n", b""):
                         break
+                self.body_consumed = True
                 return
             remaining = size
             while remaining > 0:
@@ -551,6 +574,7 @@ class Handler(BaseHTTPRequestHandler):
         key = POOL.pin_for_path(path)
         upstream = POOL.acquire(key)
         if upstream is None:
+            self.drain_request_body()
             self.send_json(
                 503,
                 {
@@ -558,7 +582,6 @@ class Handler(BaseHTTPRequestHandler):
                     "message": "this gateway has no UPSTREAMS configured; it serves "
                                "/gateway/health and /gateway/last-frame only",
                 },
-                close=True,
             )
             return
         tried = []
@@ -592,7 +615,6 @@ class Handler(BaseHTTPRequestHandler):
                         "message": redact(error) if error else "upstream request failed",
                         "upstreams_tried": tried,
                     },
-                    close=True,
                 )
         finally:
             POOL.release(upstream)
@@ -691,6 +713,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def handle_last_frame(self):
         if not FFMPEG or not os.path.exists(FFMPEG):
+            self.drain_request_body()
             self.send_json(
                 501,
                 {
@@ -698,23 +721,27 @@ class Handler(BaseHTTPRequestHandler):
                     "message": "the gateway cannot extract frames: ffmpeg was not found on PATH "
                                "(install it on the tray node, or point FFMPEG at the binary)",
                 },
-                close=True,
             )
             return
         body = b""
-        length_header = self.headers.get("Content-Length")
-        if length_header and length_header.isdigit() and int(length_header) > 0:
-            size = int(length_header)
-            if size > MAX_UPLOAD:
-                self.send_json(413, {"error": "too_large", "message": "body over GATEWAY_MAX_UPLOAD_MB"}, close=True)
-                return
-            remaining = size
-            while remaining > 0:
-                piece = self.rfile.read(min(CHUNK, remaining))
-                if not piece:
-                    break
-                remaining -= len(piece)
-                body += piece
+        if self.has_request_body():
+            length_header = self.headers.get("Content-Length")
+            if length_header and length_header.isdigit():
+                size = int(length_header)
+                if size > MAX_UPLOAD:
+                    self.send_json(413, {"error": "too_large",
+                                         "message": "body over GATEWAY_MAX_UPLOAD_MB"})
+                    return
+                remaining = size
+                complete = True
+                while remaining > 0:
+                    piece = self.rfile.read(min(CHUNK, remaining))
+                    if not piece:
+                        complete = False
+                        break
+                    remaining -= len(piece)
+                    body += piece
+                self.body_consumed = complete
 
         source_url = None
         raw_video = None
@@ -727,7 +754,7 @@ class Handler(BaseHTTPRequestHandler):
                 try:
                     payload = json.loads(body.decode("utf-8", "replace"))
                 except ValueError as exc:
-                    self.send_json(400, {"error": "bad_json", "message": str(exc)}, close=True)
+                    self.send_json(400, {"error": "bad_json", "message": str(exc)})
                     return
                 if isinstance(payload, dict):
                     for key in ("url", "video_url", "video"):
@@ -740,11 +767,11 @@ class Handler(BaseHTTPRequestHandler):
             elif "multipart/form-data" in content_type:
                 match = re.search(r'boundary="?([^";]+)"?', self.headers.get("Content-Type", ""))
                 if not match:
-                    self.send_json(400, {"error": "bad_multipart", "message": "no boundary in Content-Type"}, close=True)
+                    self.send_json(400, {"error": "bad_multipart", "message": "no boundary in Content-Type"})
                     return
                 parts = parse_multipart(body, match.group(1).encode("ascii", "ignore"))
                 if not parts:
-                    self.send_json(400, {"error": "bad_multipart", "message": "no part found"}, close=True)
+                    self.send_json(400, {"error": "bad_multipart", "message": "no part found"})
                     return
                 chosen = None
                 for name, filename, data in parts:
@@ -765,14 +792,13 @@ class Handler(BaseHTTPRequestHandler):
                     "message": "send a JSON body {\"url\": \"https://.../clip.mp4\"}, a multipart/form-data "
                                "file, a raw video body, or ?url=...",
                 },
-                close=True,
             )
             return
 
         try:
             png = last_frame_png(source_url, raw_video)
         except LastFrameError as exc:
-            self.send_json(exc.status, {"error": exc.code, "message": exc.message}, close=True)
+            self.send_json(exc.status, {"error": exc.code, "message": exc.message})
             return
         self.send_response(200)
         self.send_header("Content-Type", "image/png")

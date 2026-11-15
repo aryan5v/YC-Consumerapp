@@ -24,6 +24,16 @@ CHUNK = 65536
 STATE_LOCK = threading.Lock()
 
 
+def pseudo_bytes(seed, size):
+    """Deterministic filler bytes that work on python 3.8 (no random.randbytes)."""
+    out = bytearray()
+    block = hashlib.sha256(seed.encode("ascii")).digest()
+    while len(out) < size:
+        out += block
+        block = hashlib.sha256(block).digest()
+    return bytes(out[:size])
+
+
 class State(object):
     def __init__(self, name, blob=None, big=b""):
         self.name = name
@@ -279,9 +289,7 @@ def main():
     if args.blob:
         with open(args.blob, "rb") as handle:
             blob = handle.read()
-    import random
-
-    big = random.Random(20261115).randbytes(args.big_size) if args.big_size else b""
+    big = pseudo_bytes("fork-tray-verify", args.big_size) if args.big_size else b""
     STATE = State(args.name, blob, big)
     control = ThreadingHTTPServer(("127.0.0.1", args.control_port), ControlHandler)
     control.daemon_threads = True

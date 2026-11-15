@@ -1,0 +1,27 @@
+{
+  "name": "fork-backend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "convex dev",
+    "deploy": "convex deploy",
+    "codegen": "convex codegen",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "e2e": "vitest run tests/episode.test.ts --reporter=verbose",
+    "seed-episodes": "convex run episodes:seed '{\"days\":8}'",
+    "smoke": "node scripts/play-live.mjs",
+    "custom": "node scripts/custom.mjs"
+  },
+  "dependencies": {
+    "convex": "^1.50.0"
+  },
+  "devDependencies": {
+    "@edge-runtime/vm": "^5.0.0",
+    "@types/node": "^26.6.6",
+    "convex-test": "^0.0.71",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.0"
+  }
+}

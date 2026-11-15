@@ -1,0 +1,72 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Synqui story tools",
+    "version": "1.0.0",
+    "description": "The two tools the Keiki agent uses against the Synqui backend. Add the header x-keiki-secret with the shared secret on every request."
+  },
+  "servers": [{ "url": "https://reliable-opossum-456.convex.site" }],
+  "components": {
+    "securitySchemes": {
+      "keikiSecret": { "type": "apiKey", "in": "header", "name": "x-keiki-secret" }
+    },
+    "schemas": {
+      "StoryRequest": {
+        "type": "object",
+        "properties": {
+          "phone": { "type": "string", "description": "The sender's phone number in E.164." },
+          "code": { "type": "string", "description": "The five-letter code from their ending card." },
+          "text": { "type": "string", "description": "What the player just said." }
+        }
+      },
+      "ReplyRequest": {
+        "type": "object",
+        "required": ["text"],
+        "properties": {
+          "phone": { "type": "string", "description": "The sender's phone number in E.164." },
+          "code": { "type": "string", "description": "The five-letter code from their ending card." },
+          "text": { "type": "string", "description": "What the player said, in their own words." }
+        }
+      }
+    }
+  },
+  "security": [{ "keikiSecret": [] }],
+  "paths": {
+    "/keiki/story": {
+      "post": {
+        "summary": "Look up the player and the story so far",
+        "description": "Call this as soon as a message arrives, before you reply. Returns the character you are playing, the episode, the player's path and summary, their last reply, recent messages, and an instruction for what to do next.",
+        "operationId": "get_story",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/StoryRequest" } } }
+        },
+        "responses": {
+          "200": {
+            "description": "The story for the matched player, or matched_by: none with an instruction to ask for the code.",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          },
+          "401": { "description": "Missing or wrong shared secret." },
+          "503": { "description": "KEIKI_TOOL_SECRET is not set on the deployment." }
+        }
+      }
+    },
+    "/keiki/reply": {
+      "post": {
+        "summary": "Save what the player said",
+        "description": "Records the player's message so it can change the next episode, and returns a short instruction for the reply.",
+        "operationId": "record_reply",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReplyRequest" } } }
+        },
+        "responses": {
+          "200": { "description": "The saved message and who it was matched to.", "content": { "application/json": { "schema": { "type": "object" } } } },
+          "400": { "description": "text is required." },
+          "401": { "description": "Missing or wrong shared secret." },
+          "503": { "description": "KEIKI_TOOL_SECRET is not set on the deployment." }
+        }
+      }
+    }
+  }
+}

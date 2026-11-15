@@ -1,10 +1,18 @@
-import { DirectorBeat, DirectorBeatState, DirectorStop } from "./director";
+import {
+  DirectorBeat,
+  DirectorBeatState,
+  DirectorPuzzleStop,
+  LegacyChoiceStop,
+  StopObject,
+  legacyStopToObjects,
+  optionToObject,
+} from "./director";
 
 type FixtureEntry = {
   clip_prompt: string;
   narration: string;
   spoken_line: string;
-  stop: DirectorStop;
+  stop: LegacyChoiceStop | DirectorPuzzleStop;
   items?: string[];
   clues?: string[];
   trust?: number;
@@ -252,6 +260,12 @@ const FIXTURE: FixtureEntry[] = [
   },
 ];
 
+export function fixtureObjectsFor(depth: number, objectCount: number): StopObject[] {
+  const entry = FIXTURE[depth] ?? FIXTURE[FIXTURE.length - 1];
+  if (entry.stop.kind !== "choice") return [];
+  return entry.stop.options.slice(0, objectCount).map(optionToObject);
+}
+
 export function fixtureBeat(options: {
   depth: number;
   beatsTotal: number;
@@ -288,7 +302,7 @@ export function fixtureBeat(options: {
     clip_prompt: entry.clip_prompt,
     narration: entry.narration,
     spoken_line: entry.spoken_line,
-    stop: entry.stop,
+    stop: entry.stop.kind === "choice" ? legacyStopToObjects(entry.stop) : entry.stop,
     state: {
       items: entry.items ?? state.items,
       trust: entry.trust ?? state.trust,

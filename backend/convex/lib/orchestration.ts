@@ -3,6 +3,7 @@ import { Doc, Id } from "../_generated/dataModel";
 import { MutationCtx, QueryCtx } from "../_generated/server";
 import { childSpecs } from "./story";
 import { clipPrompt } from "./style";
+import { stuckClipMs } from "./config";
 import { expectedStopKind } from "./director";
 import { bumpStreak } from "./streak";
 import {
@@ -151,6 +152,7 @@ export async function promoteTo(
   optionId: string,
 ): Promise<void> {
   await ctx.db.patch(run._id, {
+    lastActivityAt: Date.now(),
     currentBeatId: child._id,
     path: [...run.path, label].slice(-24),
     optionPath: [...run.optionPath, optionId].slice(-24),
@@ -194,4 +196,48 @@ export async function kickRun(ctx: MutationCtx, run: Doc<"runs">): Promise<void>
     return;
   }
   await maybePrefetch(ctx, beatId);
+}
+
+// A clip whose poll chain died stays "generating" forever, which is what leaves a phone with a
+// clip and no options after it. Restart the chain for anything that has not moved in a while.
+export async function rescueStuckClips(
+  ctx: MutationCtx,
+): Promise<{ resumed: number; restarted: number }> {
+  const now = Date.now();
+  const cutoff = now - stuckClipMs();
+  let resumed = 0;
+  let restarted = 0;
+  for (const clip of await ctx.db
+    .query("clips")
+    .withIndex("by_status_created", (q) => q.eq("status", "generating").lt("createdAt", cutoff))
+    .take(60)) {
+    const startedAt = clip.attemptAt ?? clip.createdAt;
+    if (startedAt > cutoff) continue;
+    if (clip.attemptToken === undefined) {
+      await ctx.db.patch(clip._id, { status: "queued", jobId: undefined });
+      await ctx.scheduler.runAfter(0, internal.tray.startClip, { beatId: clip.beatId });
+      restarted += 1;
+      continue;
+    }
+    if (clip.jobId === undefined) {
+      await ctx.db.patch(clip._id, { status: "queued", jobId: undefined });
+      await ctx.scheduler.runAfter(0, internal.tray.startClip, { beatId: clip.beatId });
+      restarted += 1;
+      continue;
+    }
+    await ctx.scheduler.runAfter(0, internal.tray.pollClip, {
+      beatId: clip.beatId,
+      attempt: 1,
+      attemptToken: clip.attemptToken,
+    });
+    resumed += 1;
+  }
+  for (const clip of await ctx.db
+    .query("clips")
+    .withIndex("by_status_created", (q) => q.eq("status", "queued").lt("createdAt", cutoff))
+    .take(60)) {
+    await ctx.scheduler.runAfter(0, internal.tray.startClip, { beatId: clip.beatId });
+    restarted += 1;
+  }
+  return { resumed, restarted };
 }

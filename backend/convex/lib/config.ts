@@ -54,7 +54,18 @@ export function customRunsPerHour(): number {
 }
 
 export function maxActiveRuns(): number {
-  return Math.max(1, Math.round(envNumber("MAX_ACTIVE_RUNS", 12)));
+  return Math.max(1, Math.round(envNumber("MAX_ACTIVE_RUNS", 60)));
+}
+
+// A run with no activity for this long is ended by the sweeper, so abandoned test runs cannot
+// eat the capacity a demo needs.
+export function idleRunTtlMs(): number {
+  return Math.max(60_000, envNumber("IDLE_RUN_TTL_MS", 10 * 60_000));
+}
+
+// A clip that has not moved in this long gets its poll chain restarted.
+export function stuckClipMs(): number {
+  return Math.max(15_000, envNumber("STUCK_CLIP_MS", 60_000));
 }
 
 export function activeRunTtlMs(): number {

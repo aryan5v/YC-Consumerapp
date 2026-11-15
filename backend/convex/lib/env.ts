@@ -46,6 +46,8 @@ export type EnvName =
   | "HELD_CLIP_URL"
   | "MAX_ACTIVE_RUNS"
   | "ACTIVE_RUN_TTL_MS"
+  | "IDLE_RUN_TTL_MS"
+  | "STUCK_CLIP_MS"
   | "SPEECH_ATTEMPTS_PER_BEAT"
   | "MAX_UPLOAD_BYTES"
   | "DEMO_CACHE"
@@ -148,6 +150,10 @@ export function env(name: EnvName): string | undefined {
       return process.env.MAX_ACTIVE_RUNS;
     case "ACTIVE_RUN_TTL_MS":
       return process.env.ACTIVE_RUN_TTL_MS;
+    case "IDLE_RUN_TTL_MS":
+      return process.env.IDLE_RUN_TTL_MS;
+    case "STUCK_CLIP_MS":
+      return process.env.STUCK_CLIP_MS;
     case "SPEECH_ATTEMPTS_PER_BEAT":
       return process.env.SPEECH_ATTEMPTS_PER_BEAT;
     case "MAX_UPLOAD_BYTES":

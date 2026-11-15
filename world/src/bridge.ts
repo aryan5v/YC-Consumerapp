@@ -6,7 +6,8 @@ export type WorldMessage =
   | {type:'setSound';on:boolean}
   | {type:'setMusic';on:boolean}
   | {type:'setAscii';amount:number;durationMs?:number}
-  | {type:'applyOutcome';thingId:string;change:Record<string,unknown>};
+  | {type:'applyOutcome';thingId:string;change:Record<string,unknown>}
+  | {type:'configure';config:Record<string,unknown>};
 
 declare global {
   interface Window {
@@ -33,6 +34,7 @@ export function bridge(receive:(message:WorldMessage)=>void,getState:()=>unknown
     if(m.type==='mute'&&typeof m.muted==='boolean'){receive(m as WorldMessage);return;}
     if((m.type==='setSound'||m.type==='setMusic')&&typeof m.on==='boolean'){receive(m as WorldMessage);return;}
     if(m.type==='setAscii'&&typeof m.amount==='number'&&Number.isFinite(m.amount)&&(m.durationMs===undefined||typeof m.durationMs==='number'&&Number.isFinite(m.durationMs)&&m.durationMs>=0)){receive(m as WorldMessage);return;}
+    if(m.type==='configure'){receive({type:'configure',config:m});return;}
     if(m.type==='applyOutcome'&&typeof m.thingId==='string'&&m.change&&typeof m.change==='object'&&!Array.isArray(m.change)){receive(m as WorldMessage);}
   };
   const event=(e:MessageEvent)=>accept(e.data);

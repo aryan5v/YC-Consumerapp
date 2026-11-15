@@ -7,7 +7,20 @@ const OUT = '\n#include <tonemapping_fragment>\n#include <colorspace_fragment>\n
 
 type ColorKey = Exclude<keyof SkyKey, 't' | 'power'>;
 
+export interface SkyStyle {
+  sky: THREE.Color | null;
+  fog: THREE.Color | null;
+  water: THREE.Color | null;
+  accent: THREE.Color | null;
+  coverage: number;
+  fogScale: number;
+  snow: number;
+}
+
+export const defaultSkyStyle = (): SkyStyle => ({ sky: null, fog: null, water: null, accent: null, coverage: 0, fogScale: 1, snow: 0 });
+
 export class Sky {
+  style: SkyStyle = defaultSkyStyle();
   hours = theme.startHour;
   day = 1;
   elapsed = 0;
@@ -21,9 +34,9 @@ export class Sky {
   moonDir = new THREE.Vector3();
   private skyMaterial = new THREE.ShaderMaterial({
     side: THREE.BackSide, depthWrite: false, fog: false,
-    uniforms: { zenith: { value: new THREE.Color() }, horizon: { value: new THREE.Color() }, cloudLit: { value: new THREE.Color() }, cloudShade: { value: new THREE.Color() }, sunDir: { value: new THREE.Vector3() }, moonDir: { value: new THREE.Vector3() }, sunColor: { value: new THREE.Color() }, moon: { value: new THREE.Color(theme.moonstone) }, time: { value: 0 }, night: { value: 0 }, moonVis: { value: 0 } },
+    uniforms: { zenith: { value: new THREE.Color() }, horizon: { value: new THREE.Color() }, cloudLit: { value: new THREE.Color() }, cloudShade: { value: new THREE.Color() }, sunDir: { value: new THREE.Vector3() }, moonDir: { value: new THREE.Vector3() }, sunColor: { value: new THREE.Color() }, moon: { value: new THREE.Color(theme.moonstone) }, time: { value: 0 }, night: { value: 0 }, moonVis: { value: 0 }, coverage: { value: 0 } },
     vertexShader: 'varying vec3 vDir;void main(){vDir=position;vec4 p=projectionMatrix*modelViewMatrix*vec4(position,1.);gl_Position=p.xyww;}',
-    fragmentShader: 'varying vec3 vDir;uniform vec3 zenith,horizon,cloudLit,cloudShade,sunDir,moonDir,sunColor,moon;uniform float time,night,moonVis;' + NOISE + `
+    fragmentShader: 'varying vec3 vDir;uniform vec3 zenith,horizon,cloudLit,cloudShade,sunDir,moonDir,sunColor,moon;uniform float time,night,moonVis,coverage;' + NOISE + `
       void main(){
         vec3 d=normalize(vDir);
         float up=max(d.y,0.);
@@ -44,7 +57,7 @@ export class Sky {
         vec2 uv=d.xz/(d.y+.22);
         vec2 drift=vec2(time*.006,time*.002);
         float base=fbm(uv*.9+drift);
-        float shape=smoothstep(.56,.68,base+fbm(uv*3.1-drift)*.16-.1-smoothstep(.3,.8,d.y)*.12);
+        float shape=smoothstep(.56,.68,base+fbm(uv*3.1-drift)*.16-.1-smoothstep(.3,.8,d.y)*.12+coverage*.14);
         float lit=fbm(uv*.9+drift-sunDir.xz*.06);
         vec3 cloud=mix(cloudShade,cloudLit,clamp(.4+(base-lit)*6.,0.,1.));
         cloud+=sunColor*pow(sd,6.)*.25*(1.-night);
@@ -107,17 +120,17 @@ export class Sky {
   private motes: THREE.Points;
   private moteMaterial = new THREE.ShaderMaterial({
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false,
-    uniforms: { time: { value: 0 }, center: { value: new THREE.Vector3() }, color: { value: new THREE.Color(theme.moonstone) }, strength: { value: 0 }, scale: { value: 300 } },
-    vertexShader: `uniform float time,scale;uniform vec3 center;attribute float seed;varying float vFade;
+    uniforms: { time: { value: 0 }, center: { value: new THREE.Vector3() }, color: { value: new THREE.Color(theme.moonstone) }, strength: { value: 0 }, scale: { value: 300 }, snow: { value: 0 } },
+    vertexShader: `uniform float time,scale,snow;uniform vec3 center;attribute float seed;varying float vFade;
       void main(){
         vec3 p=position;
-        p.y+=mod(time*(.15+seed*.2)+seed*10.,8.)-4.;
+        p.y+=mix(mod(time*(.15+seed*.2)+seed*10.,8.)-4.,4.-mod(time*(.9+seed*.6)+seed*10.,8.),snow);
         p.x+=sin(time*.4+seed*20.)*.8;p.z+=cos(time*.33+seed*13.)*.8;
         vec3 rel=mod(p-center+20.,40.)-20.;
         vec3 w=center+rel;w.y=center.y+p.y-1.;
-        vFade=(1.-smoothstep(10.,20.,length(rel.xz)))*(.5+.5*sin(time*1.7+seed*30.));
+        vFade=(1.-smoothstep(10.,20.,length(rel.xz)))*mix(.5+.5*sin(time*1.7+seed*30.),1.,snow);
         vec4 mv=viewMatrix*vec4(w,1.);
-        gl_PointSize=scale*(.05+seed*.05)/-mv.z;
+        gl_PointSize=scale*(.05+seed*.05)*(1.+snow*.6)/-mv.z;
         gl_Position=projectionMatrix*mv;}`,
     fragmentShader: 'uniform vec3 color;uniform float strength;varying float vFade;void main(){float d=length(gl_PointCoord-.5);float a=smoothstep(.5,0.,d);gl_FragColor=vec4(color*a*a*vFade*strength,1.);}',
   });
@@ -140,6 +153,11 @@ export class Sky {
     scene.fog = new THREE.FogExp2('#c4e1ea', .011);
   }
 
+  private dayNight() {
+    const angle = (this.hours - 6) / 24 * Math.PI * 2;
+    return 1 - THREE.MathUtils.smoothstep(Math.sin(angle), -.12, .12);
+  }
+
   setPixelRatio(ratio: number) { this.moteMaterial.uniforms.scale.value = 300 * ratio * (innerHeight / 844); }
 
   update(dt: number, player: THREE.Vector3, scene: THREE.Scene) {
@@ -150,6 +168,10 @@ export class Sky {
     const f = THREE.MathUtils.smoothstep(this.hours, a.t, b.t);
     for (const key of Object.keys(this.colors) as ColorKey[]) this.colors[key].set(a[key]).lerp(new THREE.Color(b[key]), f);
     const power = THREE.MathUtils.lerp(a.power, b.power, f);
+    const st = this.style, keep = 1 - this.dayNight() * .55;
+    if (st.sky) { this.colors.zenith.lerp(st.sky, .65 * keep); this.colors.horizon.lerp(st.sky, .22 * keep); this.colors.sky.lerp(st.sky, .4 * keep); this.colors.mountain.lerp(st.sky, .3 * keep); }
+    if (st.fog) { this.colors.haze.lerp(st.fog, .75 * keep); this.colors.horizon.lerp(st.fog, .4 * keep); this.colors.cloudLit.lerp(st.fog, .2 * keep); this.colors.cloudShade.lerp(st.fog, .3 * keep); }
+    if (st.accent) this.colors.light.lerp(st.accent, .35);
     const angle = (this.hours - 6) / 24 * Math.PI * 2;
     this.sunDir.set(Math.cos(angle) * .9, Math.sin(angle), -.45).normalize();
     const phase = ((this.hours - 16 + 24) % 24) / 15;
@@ -160,17 +182,17 @@ export class Sky {
     const c = this.colors;
     const u = this.skyMaterial.uniforms;
     u.zenith.value.copy(c.zenith); u.horizon.value.copy(c.horizon); u.cloudLit.value.copy(c.cloudLit); u.cloudShade.value.copy(c.cloudShade);
-    u.sunDir.value.copy(this.sunDir); u.moonDir.value.copy(this.moonDir); u.sunColor.value.copy(c.light); u.time.value = this.elapsed; u.night.value = this.night;
+    u.sunDir.value.copy(this.sunDir); u.moonDir.value.copy(this.moonDir); u.sunColor.value.copy(c.light); u.time.value = this.elapsed; u.night.value = this.night; u.coverage.value = st.coverage;
     const fog = scene.fog as THREE.FogExp2;
     fog.color.copy(c.haze);
-    fog.density = .0105 + this.night * .003;
+    fog.density = (.0105 + this.night * .003) * st.fogScale;
     const lightDir = this.night > .5 ? this.moonDir : this.sunDir;
     this.sunLight.position.copy(player).addScaledVector(lightDir, 80);
     this.sunLight.target.position.copy(player);
     this.sunLight.color.copy(c.light);
     this.sunLight.intensity = power;
     this.ambient.color.copy(c.sky); this.ambient.groundColor.copy(c.ground);
-    this.ambient.intensity = 1.25 - this.night * .45;
+    this.ambient.intensity = 1.25 - this.night * .45 + st.snow * .5;
     this.rim.value.copy(c.horizon).lerp(new THREE.Color(theme.moonstone), .4 + this.night * .4);
     this.group.position.copy(player);
     this.mountains.position.set(player.x, 35, player.z);
@@ -180,9 +202,11 @@ export class Sky {
     const s = this.seaMaterial.uniforms;
     s.time.value = this.elapsed; s.horizon.value.copy(c.horizon).lerp(c.haze, .3); s.sky.value.copy(c.zenith); s.sunDir.value.copy(lightDir); s.sunColor.value.copy(c.light); s.night.value = this.night;
     s.deep.value.set(theme.lagoon).lerp(c.zenith, .25 * (1 - this.night));
+    if (st.water) s.deep.value.copy(st.water).lerp(c.zenith, .15 * (1 - this.night));
     const dusk = Math.max(this.night, 1 - Math.min(1, Math.abs(this.sunDir.y) / .25));
     this.moteMaterial.uniforms.time.value = this.elapsed;
     this.moteMaterial.uniforms.center.value.copy(player);
-    this.moteMaterial.uniforms.strength.value = .25 + dusk * .9;
+    this.moteMaterial.uniforms.strength.value = Math.max(.25 + dusk * .9, st.snow * 1.3);
+    this.moteMaterial.uniforms.snow.value = st.snow;
   }
 }

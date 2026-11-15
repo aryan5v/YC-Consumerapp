@@ -25,6 +25,10 @@ const identities: Record<ThingKind, { name: string; description: string; radius:
   stranger: { name: 'The Cloaked Stranger', description: 'A hooded traveler holds a tiny lantern. Their face is lost in the blue dark.', radius: 0.65 },
 };
 
+export function identity(kind: ThingKind) {
+  return identities[kind];
+}
+
 export function createThing(kind: ThingKind, id: string): Thing {
   const root = new THREE.Group();
   root.name = `${kind}:${id}`;

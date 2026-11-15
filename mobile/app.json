@@ -8,9 +8,6 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "backgroundColor": "#07070A",
-    "splash": {
-      "backgroundColor": "#07070A"
-    },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.aryan5v.fork",
@@ -28,6 +25,7 @@
     "plugins": [
       "expo-video",
       "expo-image",
+      "expo-asset",
       [
         "expo-audio",
         {

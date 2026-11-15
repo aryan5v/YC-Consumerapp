@@ -1,3 +1,4 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Crypto from "expo-crypto";
 import * as SecureStore from "expo-secure-store";
 import { useEffect, useState } from "react";
@@ -5,11 +6,27 @@ import { useEffect, useState } from "react";
 const KEY = "fork.deviceToken";
 let pending: Promise<string> | null = null;
 
+async function read() {
+  try {
+    const stored = await SecureStore.getItemAsync(KEY);
+    if (stored) return stored;
+  } catch {}
+  return AsyncStorage.getItem(KEY).catch(() => null);
+}
+
+async function write(token: string) {
+  try {
+    await SecureStore.setItemAsync(KEY, token);
+    return;
+  } catch {}
+  await AsyncStorage.setItem(KEY, token).catch(() => {});
+}
+
 export function getDeviceToken() {
-  pending ??= SecureStore.getItemAsync(KEY).then(async (stored) => {
+  pending ??= read().then(async (stored) => {
     if (stored) return stored;
     const token = Crypto.randomUUID();
-    await SecureStore.setItemAsync(KEY, token);
+    await write(token);
     return token;
   });
   return pending;
@@ -17,15 +34,14 @@ export function getDeviceToken() {
 
 export function useDeviceToken() {
   const [token, setToken] = useState<string | null>(null);
-  const [error, setError] = useState<Error | null>(null);
   useEffect(() => {
     let active = true;
-    getDeviceToken().then(
-      (value) => { if (active) setToken(value); },
-      (reason) => { if (active) setError(reason instanceof Error ? reason : new Error("Unable to load device identity")); },
-    );
-    return () => { active = false; };
+    getDeviceToken().then((value) => {
+      if (active) setToken(value);
+    });
+    return () => {
+      active = false;
+    };
   }, []);
-  if (error) throw error;
   return token;
 }

@@ -1,7 +1,4 @@
 import { setAudioModeAsync } from "expo-audio";
-import { CormorantGaramond_500Medium, CormorantGaramond_500Medium_Italic } from "@expo-google-fonts/cormorant-garamond";
-import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold } from "@expo-google-fonts/inter";
-import { JetBrainsMono_400Regular, JetBrainsMono_500Medium } from "@expo-google-fonts/jetbrains-mono";
 import { useFonts } from "expo-font";
 import { StatusBar } from "expo-status-bar";
 import { Component, type ReactNode, useCallback, useRef, useState } from "react";
@@ -12,7 +9,7 @@ import { convexStory, mockStory, StoryContext, useStory } from "./src/data";
 import { setSetting, useSettings } from "./src/settings";
 import { Home } from "./src/screens/Home";
 import { Player } from "./src/screens/Player";
-import { colors, ease, fonts, motion, radius, type } from "./src/theme";
+import { colors, ease, fontFiles, fonts, motion, radius, type } from "./src/theme";
 
 setAudioModeAsync({ playsInSilentMode: true, allowsRecording: false }).catch(() => {});
 
@@ -95,15 +92,7 @@ function Story() {
 }
 
 export default function App() {
-  const [loaded] = useFonts({
-    CormorantGaramond_500Medium,
-    CormorantGaramond_500Medium_Italic,
-    Inter_400Regular,
-    Inter_500Medium,
-    Inter_600SemiBold,
-    JetBrainsMono_400Regular,
-    JetBrainsMono_500Medium,
-  });
+  const [loaded] = useFonts(fontFiles);
   if (!loaded) return <View style={styles.root} />;
   return (
     <SafeAreaProvider>

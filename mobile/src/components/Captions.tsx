@@ -43,7 +43,7 @@ const styles = StyleSheet.create({
   text: {
     fontFamily: fonts.displayItalic,
     fontSize: type.caption,
-    lineHeight: 27,
+    lineHeight: 23,
     color: colors.text,
     textAlign: "left",
     textShadowColor: colors.textShadow,

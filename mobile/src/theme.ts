@@ -1,29 +1,29 @@
 import { Easing } from "react-native";
 
-// Direction A, Night cinema (handoffs/fork-design/tokens.md). Every visual token lives here so a
-// direction can be swapped in one pass.
+// Synqui: Paper Mono, minimal and glassy. Cool neutral base, silver-white light, amber only for
+// selection. Every visual token lives here so a direction can be swapped in one pass.
 
 const accent = "#F5A442";
 
 export const colors = {
-  bg: "#0C0A08",
+  bg: "#090B0F",
   black: "#000000",
   white: "#FFFFFF",
-  text: "#F2EBDF",
-  dim: "#A3988A",
-  faint: "rgba(242,235,223,0.38)",
-  inactive: "rgba(255,255,255,0.32)",
+  text: "#EEF1F5",
+  dim: "#9AA3AF",
+  faint: "rgba(238,241,245,0.38)",
+  inactive: "rgba(255,255,255,0.3)",
   passed: "#FFFFFF",
-  hairline: "rgba(242,235,223,0.14)",
-  wash: "rgba(242,235,223,0.045)",
-  washActive: "rgba(242,235,223,0.16)",
-  glass: "rgba(22,17,12,0.66)",
+  hairline: "rgba(238,241,245,0.12)",
+  wash: "rgba(238,241,245,0.05)",
+  washActive: "rgba(238,241,245,0.16)",
+  glass: "rgba(16,20,28,0.6)",
   scrim: "rgba(0,0,0,0.4)",
   holdDim: "rgba(0,0,0,0.16)",
   puzzleDim: "rgba(0,0,0,0.38)",
-  letterboxVeil: "rgba(12,10,8,0.5)",
+  letterboxVeil: "rgba(9,11,15,0.5)",
   textShadow: "rgba(0,0,0,0.85)",
-  tag: "rgba(8,8,10,0.62)",
+  tag: "rgba(10,13,18,0.55)",
   glow: accent,
   accent,
   accentInk: "#1A1007",
@@ -32,8 +32,8 @@ export const colors = {
 };
 
 export const gradients = {
-  home: { colors: ["rgba(12,10,8,0.62)", "rgba(12,10,8,0)", "rgba(12,10,8,0.55)", "rgba(12,10,8,0.96)"], locations: [0, 0.24, 0.56, 0.92] },
-  ending: { colors: ["rgba(12,10,8,0.15)", "rgba(12,10,8,0.8)", "rgba(12,10,8,0.97)"], locations: [0, 0.34, 0.72] },
+  home: { colors: ["rgba(9,11,15,0.62)", "rgba(9,11,15,0)", "rgba(9,11,15,0.55)", "rgba(9,11,15,0.96)"], locations: [0, 0.24, 0.56, 0.92] },
+  ending: { colors: ["rgba(9,11,15,0.15)", "rgba(9,11,15,0.8)", "rgba(9,11,15,0.97)"], locations: [0, 0.34, 0.72] },
   playerTop: { colors: ["rgba(0,0,0,0.5)", "rgba(0,0,0,0)"], locations: [0, 1] },
   playerBottom: { colors: ["rgba(0,0,0,0)", "rgba(0,0,0,0.72)"], locations: [0, 1] },
 } as const;
@@ -65,10 +65,10 @@ export const glow = {
 // Liquid Glass for controls floating over video. Fallback is a material blur where the system
 // effect is unavailable, and a solid fill when Reduce Transparency is on.
 export const glass = {
-  tint: "rgba(245,164,66,0.28)",
+  tint: "rgba(220,228,240,0.16)",
   fallbackBlur: 30,
-  fallbackFill: "rgba(22,17,12,0.55)",
-  solidFill: "rgba(22,17,12,0.94)",
+  fallbackFill: "rgba(16,20,28,0.5)",
+  solidFill: "rgba(16,20,28,0.94)",
   sheetBlur: 22,
 };
 
@@ -83,31 +83,40 @@ export const radius = {
   card: 16,
   sheet: 26,
   field: 14,
-  key: 12,
-  control: 5,
+  key: 20,
+  control: 15,
   bubble: 18,
 };
 
 export const fonts = {
-  display: "CormorantGaramond_500Medium",
-  displayItalic: "CormorantGaramond_500Medium_Italic",
-  ui: "Inter_400Regular",
-  uiMedium: "Inter_500Medium",
-  uiSemibold: "Inter_600SemiBold",
-  mono: "JetBrainsMono_400Regular",
-  monoMedium: "JetBrainsMono_500Medium",
+  title: "PaperMono-Thin",
+  display: "PaperMono-Light",
+  displayItalic: "PaperMono-Light",
+  ui: "PaperMono-Regular",
+  uiMedium: "PaperMono-Medium",
+  uiSemibold: "PaperMono-Medium",
+  mono: "PaperMono-Regular",
+  monoMedium: "PaperMono-Medium",
 };
 
-// Home ASCII scene (src/components/AsciiScene.tsx). Glyph advance is 0.6em in JetBrains Mono, so the
+export const fontFiles = {
+  "PaperMono-Thin": require("../assets/fonts/paper-mono/PaperMono-Thin.ttf"),
+  "PaperMono-ExtraLight": require("../assets/fonts/paper-mono/PaperMono-ExtraLight.ttf"),
+  "PaperMono-Light": require("../assets/fonts/paper-mono/PaperMono-Light.ttf"),
+  "PaperMono-Regular": require("../assets/fonts/paper-mono/PaperMono-Regular.ttf"),
+  "PaperMono-Medium": require("../assets/fonts/paper-mono/PaperMono-Medium.ttf"),
+};
+
+// Home ASCII scene (src/components/AsciiScene.tsx). Glyph advance is 0.606em in Paper Mono, so the
 // grid fits the screen width exactly at fontSize = width / (cols * advance).
 export const ascii = {
-  advance: 0.6,
+  advance: 0.606,
   lineHeight: 1,
-  silver: "#C8CDD4",
+  silver: "#C9D1DC",
   silverOpacity: 0.5,
-  amber: accent,
-  amberOpacity: 0.78,
-  highlight: "#FFE9B9",
+  amber: "#E8EEF6",
+  amberOpacity: 0.7,
+  highlight: "#FFFFFF",
   glow: [
     { period: 5200, delay: 0, min: 0.05, max: 1 },
     { period: 7300, delay: 1800, min: 0.1, max: 0.85 },
@@ -127,13 +136,13 @@ export const ascii = {
     caption: "·  the next scene is forming  ·",
     layers: [
       { color: "#C8CDD4", opacity: 0.38, density: 0.42, seed: 7, period: 2600 },
-      { color: "#F5A442", opacity: 0.55, density: 0.12, seed: 41, period: 3400 },
-      { color: "#FFE9B9", opacity: 0.8, density: 0.03, seed: 97, period: 1900 },
+      { color: "#E8EEF6", opacity: 0.5, density: 0.12, seed: 41, period: 3400 },
+      { color: "#F5A442", opacity: 0.7, density: 0.03, seed: 97, period: 1900 },
     ],
   },
   top: 70,
   ornament: "·  ─ ─ ─  ✦  ─ ─ ─  ·",
-  ornamentColor: "rgba(242,235,223,0.3)",
+  ornamentColor: "rgba(238,241,245,0.3)",
   ornamentSize: 12,
   ornamentTracking: 2,
   monoTracking: 1.2,
@@ -143,20 +152,20 @@ export const type = {
   micro: 11,
   tag: 11,
   small: 14,
-  label: 15,
-  control: 16,
-  body: 16,
-  lead: 17,
-  caption: 21,
-  teaser: 22,
-  key: 23,
-  question: 27,
-  wordmark: 28,
-  stat: 32,
-  digits: 44,
-  endTitle: 46,
-  endStat: 48,
-  hero: 44,
+  label: 14,
+  control: 15,
+  body: 14,
+  lead: 15,
+  caption: 16,
+  teaser: 18,
+  key: 20,
+  question: 21,
+  wordmark: 22,
+  stat: 28,
+  digits: 38,
+  endTitle: 34,
+  endStat: 40,
+  hero: 34,
   labelTracking: 1.5,
 };
 

@@ -124,7 +124,7 @@ export function Home({ starting, onPlay, onSettings }: { starting: boolean; onPl
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg, overflow: "hidden" },
   top: { position: "absolute", top: 0, left: 26, right: 26, flexDirection: "row", alignItems: "center" },
-  wordmark: { flex: 1, fontFamily: fonts.display, fontSize: type.wordmark, letterSpacing: 0.5, color: colors.text },
+  wordmark: { flex: 1, fontFamily: fonts.title, fontSize: type.wordmark, letterSpacing: 3, color: colors.text },
   settings: { width: 44, height: 44, marginLeft: 16, borderRadius: radius.round },
   settingsHit: { flex: 1, alignItems: "center", justifyContent: "center" },
   date: { fontFamily: fonts.mono, fontSize: type.micro, letterSpacing: ascii.monoTracking, textTransform: "uppercase", color: colors.dim },

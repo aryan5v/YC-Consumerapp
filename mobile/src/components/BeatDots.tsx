@@ -3,7 +3,7 @@ import { colors } from "../theme";
 
 export function BeatDots({ index, total }: { index: number; total: number }) {
   return (
-    <View style={styles.row}>
+    <View style={styles.row} accessible accessibilityRole="progressbar" accessibilityLabel={`Beat ${Math.min(index + 1, total)} of ${total}`}>
       {Array.from({ length: total }, (_, i) => (
         <View
           key={i}

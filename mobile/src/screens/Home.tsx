@@ -4,6 +4,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useEffect, useRef } from "react";
 import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useReduceMotion } from "../a11y";
 import { Ring } from "../components/Ring";
 import { SettingsGlyph } from "../components/SettingsSheet";
 import { imageSource, useStory } from "../data";
@@ -20,6 +21,7 @@ function dateLabel(iso: string) {
 
 export function Home({ starting, onPlay, onSettings }: { starting: boolean; onPlay: () => void; onSettings: () => void }) {
   const story = useStory();
+  const reduceMotion = useReduceMotion();
   const home = story.useHome();
   const insets = useSafeAreaInsets();
   const drift = useRef(new Animated.Value(0)).current;
@@ -27,6 +29,7 @@ export function Home({ starting, onPlay, onSettings }: { starting: boolean; onPl
   const loaded = home !== undefined;
 
   useEffect(() => {
+    if (reduceMotion) return;
     const loop = Animated.loop(
       Animated.sequence([
         Animated.timing(drift, { toValue: 1, duration: motion.drift, easing: ease.inOut, useNativeDriver: true }),
@@ -35,7 +38,7 @@ export function Home({ starting, onPlay, onSettings }: { starting: boolean; onPl
     );
     loop.start();
     return () => loop.stop();
-  }, [drift]);
+  }, [drift, reduceMotion]);
 
   useEffect(() => {
     if (loaded) Animated.timing(appear, { toValue: 1, duration: motion.slower, delay: 150, easing: ease.out, useNativeDriver: true }).start();
@@ -47,7 +50,7 @@ export function Home({ starting, onPlay, onSettings }: { starting: boolean; onPl
     <View style={styles.root}>
       {home && (
         <Animated.View
-          style={[StyleSheet.absoluteFill, { transform: [{ scale: drift.interpolate({ inputRange: [0, 1], outputRange: [1.02, 1.1] }) }] }]}
+          style={[StyleSheet.absoluteFill, { transform: [{ scale: drift.interpolate({ inputRange: [0, 1], outputRange: [1.02, reduceMotion ? 1.02 : 1.1] }) }] }]}
         >
           <Image source={imageSource(home.episode.posterUrl)} contentFit="cover" transition={600} style={StyleSheet.absoluteFill} />
         </Animated.View>
@@ -61,7 +64,7 @@ export function Home({ starting, onPlay, onSettings }: { starting: boolean; onPl
       <View style={[styles.top, { paddingTop: insets.top + 18 }]}>
         <Text style={styles.wordmark}>Fork</Text>
         {home && <Text style={styles.date}>{dateLabel(home.episode.date)}</Text>}
-        <Pressable accessibilityRole="button" accessibilityLabel="Settings" hitSlop={14} onPress={onSettings} style={styles.settings}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Settings" onPress={onSettings} style={styles.settings}>
           <SettingsGlyph />
         </Pressable>
       </View>
@@ -73,7 +76,7 @@ export function Home({ starting, onPlay, onSettings }: { starting: boolean; onPl
             {
               paddingBottom: insets.bottom + 22,
               opacity: appear,
-              transform: [{ translateY: appear.interpolate({ inputRange: [0, 1], outputRange: [18, 0] }) }],
+              transform: [{ translateY: appear.interpolate({ inputRange: [0, 1], outputRange: [reduceMotion ? 0 : 18, 0] }) }],
             },
           ]}
         >
@@ -106,7 +109,7 @@ export function Home({ starting, onPlay, onSettings }: { starting: boolean; onPl
             ) : (
               <>
                 <View style={styles.triangle} />
-                <Text style={styles.playText}>{action}</Text>
+                <Text maxFontSizeMultiplier={1.4} style={styles.playText}>{action}</Text>
               </>
             )}
           </Pressable>
@@ -120,7 +123,7 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg, overflow: "hidden" },
   top: { position: "absolute", top: 0, left: 26, right: 26, flexDirection: "row", alignItems: "center" },
   wordmark: { flex: 1, fontFamily: fonts.display, fontSize: type.wordmark, letterSpacing: 0.5, color: colors.text },
-  settings: { marginLeft: 16, opacity: 0.8 },
+  settings: { width: 44, height: 44, marginLeft: 4, marginRight: -12, alignItems: "center", justifyContent: "center", opacity: 0.8 },
   date: { fontFamily: fonts.ui, fontWeight: "600", fontSize: type.micro, letterSpacing: 2, textTransform: "uppercase", color: colors.dim },
   bottom: { position: "absolute", left: 26, right: 26, bottom: 0 },
   kicker: { fontFamily: fonts.ui, fontWeight: "600", fontSize: type.micro, letterSpacing: 2.6, textTransform: "uppercase", color: colors.dim, marginBottom: 12 },
@@ -140,7 +143,7 @@ const styles = StyleSheet.create({
   pip: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.inactive },
   pipOn: { backgroundColor: colors.text },
   play: {
-    height: 62,
+    minHeight: 62,
     borderRadius: radius.pill,
     marginTop: 24,
     flexDirection: "row",

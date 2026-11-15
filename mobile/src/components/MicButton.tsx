@@ -3,6 +3,7 @@ import { getRecordingPermissionsAsync, RecordingPresets, requestRecordingPermiss
 import * as Haptics from "expo-haptics";
 import { useEffect, useRef, useState } from "react";
 import { Animated, Pressable, StyleSheet, View } from "react-native";
+import { useReduceMotion } from "../a11y";
 import { colors, ease, motion, radius } from "../theme";
 import { Ring } from "./Ring";
 
@@ -21,6 +22,7 @@ export function MicButton({
   onRecording: (uri: string) => void;
   onDenied: () => void;
 }) {
+  const reduceMotion = useReduceMotion();
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const [listening, setListening] = useState(false);
   const held = useRef(false);
@@ -34,14 +36,14 @@ export function MicButton({
   }, [appear]);
 
   useEffect(() => {
-    if (!listening) {
+    if (!listening || reduceMotion) {
       pulse.setValue(0);
       return;
     }
     const loop = Animated.loop(Animated.timing(pulse, { toValue: 1, duration: motion.pulse, easing: ease.out, useNativeDriver: true }));
     loop.start();
     return () => loop.stop();
-  }, [listening, pulse]);
+  }, [listening, reduceMotion, pulse]);
 
   const playback = () => setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true }).catch(() => {});
 
@@ -75,6 +77,7 @@ export function MicButton({
       onDenied();
       return;
     }
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     try {
       await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
       await recorder.prepareToRecordAsync();
@@ -85,7 +88,6 @@ export function MicButton({
       recorder.record();
       recording.current = true;
       startedAt.current = Date.now();
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       setListening(true);
       onListening(true);
       if (!held.current) finish();
@@ -105,6 +107,7 @@ export function MicButton({
 
   return (
     <Animated.View style={{ opacity: Animated.multiply(appear, disabled && !busy ? 0.4 : 1) }}>
+      {!reduceMotion && (
       <Animated.View
         pointerEvents="none"
         style={[
@@ -116,9 +119,11 @@ export function MicButton({
           },
         ]}
       />
+      )}
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Hold to talk"
+        accessibilityHint="Double-tap and hold, then speak your answer."
         disabled={disabled || busy}
         hitSlop={8}
         onPressIn={pressIn}

@@ -4,6 +4,7 @@ import * as Haptics from "expo-haptics";
 import { useEffect, useRef, useState } from "react";
 import { Animated, AppState, Linking, PanResponder, Pressable, StyleSheet, Text, View } from "react-native";
 import { convexStory } from "../data";
+import { useReduceMotion } from "../a11y";
 import { setSetting, useSettings } from "../settings";
 import { colors, ease, fonts, motion, radius, type } from "../theme";
 
@@ -46,8 +47,8 @@ function Switch({ label, detail, value, onChange }: { label: string; detail: str
       style={styles.row}
     >
       <View style={{ flex: 1 }} accessible={false}>
-        <Text style={styles.label}>{label}</Text>
-        <Text style={styles.detail}>{detail}</Text>
+        <Text maxFontSizeMultiplier={1.4} style={styles.label}>{label}</Text>
+        <Text maxFontSizeMultiplier={1.4} style={styles.detail}>{detail}</Text>
       </View>
       <View style={styles.track} accessible={false}>
         <Animated.View style={[StyleSheet.absoluteFill, styles.trackOn, { opacity: knob }]} />
@@ -67,6 +68,7 @@ function Switch({ label, detail, value, onChange }: { label: string; detail: str
 
 export function SettingsSheet({ onClose, bottomInset }: { onClose: () => void; bottomInset: number }) {
   const settings = useSettings();
+  const reduceMotion = useReduceMotion();
   const appear = useRef(new Animated.Value(0)).current;
   const drag = useRef(new Animated.Value(0)).current;
   const [micBlocked, setMicBlocked] = useState(false);
@@ -117,13 +119,19 @@ export function SettingsSheet({ onClose, bottomInset }: { onClose: () => void; b
           {
             paddingBottom: bottomInset + 18,
             opacity: appear,
-            transform: [{ translateY: Animated.add(appear.interpolate({ inputRange: [0, 1], outputRange: [40, 0] }), drag) }],
+            transform: [{ translateY: Animated.add(appear.interpolate({ inputRange: [0, 1], outputRange: [reduceMotion ? 0 : 40, 0] }), drag) }],
           },
         ]}
       >
         <BlurView intensity={48} tint="dark" style={StyleSheet.absoluteFill} />
         <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.glass }]} />
-        <Text style={styles.kicker}>Sound</Text>
+        <View accessible={false} importantForAccessibility="no-hide-descendants" style={styles.grabber} />
+        <View style={styles.header}>
+          <Text maxFontSizeMultiplier={1.4} style={[styles.kicker, { marginBottom: 0 }]}>Sound</Text>
+          <Pressable accessibilityRole="button" accessibilityLabel="Done" hitSlop={8} onPress={close} style={styles.done}>
+            <Text maxFontSizeMultiplier={1.4} style={styles.doneText}>Done</Text>
+          </Pressable>
+        </View>
         <Switch
           label="Character voice"
           detail="Hear characters say their lines. Captions always stay."
@@ -141,13 +149,13 @@ export function SettingsSheet({ onClose, bottomInset }: { onClose: () => void; b
           <View style={styles.notice}>
             <Text style={styles.noticeText}>Microphone access is off in iOS Settings</Text>
             <Pressable accessibilityRole="button" accessibilityLabel="Open iOS Settings" hitSlop={10} onPress={() => Linking.openSettings()}>
-              <Text style={styles.noticeAction}>Open Settings</Text>
+              <Text maxFontSizeMultiplier={1.4} style={styles.noticeAction}>Open Settings</Text>
             </Pressable>
           </View>
         )}
         {convexStory && (
           <>
-            <Text style={[styles.kicker, styles.group]}>Story</Text>
+            <Text maxFontSizeMultiplier={1.4} style={[styles.kicker, styles.group]}>Story</Text>
             <Switch
             label="Demo story"
             detail="Play the built-in offline episode instead of today\u2019s live one."
@@ -180,10 +188,14 @@ const styles = StyleSheet.create({
   },
   kicker: { fontFamily: fonts.ui, fontWeight: "600", fontSize: type.micro, letterSpacing: 2.6, textTransform: "uppercase", color: colors.dim, marginBottom: 6 },
   divider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.hairline },
+  grabber: { position: "absolute", top: 8, alignSelf: "center", width: 36, height: 5, borderRadius: radius.pill, backgroundColor: colors.faint },
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 6 },
+  done: { minHeight: 44, minWidth: 44, alignItems: "flex-end", justifyContent: "center" },
+  doneText: { fontFamily: fonts.ui, fontWeight: "500", fontSize: type.control, color: colors.dim },
   group: { marginTop: 22 },
   notice: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 18, paddingBottom: 14 },
   noticeText: { flex: 1, fontFamily: fonts.ui, fontWeight: "400", fontSize: type.small, lineHeight: 19, color: colors.faint },
-  noticeAction: { fontFamily: fonts.ui, fontWeight: "600", fontSize: type.small, color: colors.text },
+  noticeAction: { minHeight: 44, textAlignVertical: "center", lineHeight: 44, fontFamily: fonts.ui, fontWeight: "600", fontSize: type.small, color: colors.text },
   row: { flexDirection: "row", alignItems: "center", gap: 18, paddingVertical: 14 },
   label: { fontFamily: fonts.ui, fontWeight: "500", fontSize: type.lead, color: colors.text },
   detail: { fontFamily: fonts.ui, fontWeight: "400", fontSize: type.small, lineHeight: 19, color: colors.dim, marginTop: 3 },

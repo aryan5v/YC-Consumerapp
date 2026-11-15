@@ -15,6 +15,7 @@ import { Presence } from "../components/Presence";
 import { PuzzleSheet, type PuzzleState } from "../components/PuzzleSheet";
 import { SettingsGlyph, SettingsSheet } from "../components/SettingsSheet";
 import { audioSource, useStory, videoSource, type Ending, type Stop } from "../data";
+import { useReduceMotion } from "../a11y";
 import { useSettings } from "../settings";
 import { colors, ease, fonts, gradients, letterbox, motion, radius, type } from "../theme";
 
@@ -81,6 +82,7 @@ export function Player({
   const [captionsOn, setCaptionsOn] = useState(true);
   const [chrome, setChrome] = useState(false);
   const holdScale = useRef(new Animated.Value(1)).current;
+  const reduceMotion = useReduceMotion();
   const settings = useSettings();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [listening, setListening] = useState(false);
@@ -116,7 +118,7 @@ export function Player({
           setTimeout(() => load(i), 800 * slots[i].retries);
         }
       }),
-      player.addListener("sourceLoad", ({ availableVideoTracks }) => {
+      player.addListener("sourceLoad", ({ availableVideoTracks, duration }) => {
         const size = availableVideoTracks[0]?.size;
         if (size && size.width > 0 && size.height > 0) {
           slots[i].aspect = size.width / size.height;
@@ -124,7 +126,7 @@ export function Player({
           if (slots[i].aspect >= 1) {
             const url = slots[i].url;
             player
-              .generateThumbnailsAsync(0.5, { maxWidth: letterbox.thumbWidth })
+              .generateThumbnailsAsync(duration > 0 ? duration / 2 : 1, { maxWidth: letterbox.thumbWidth })
               .then(([thumb]) => {
                 if (thumb && slots[i].url === url) {
                   slots[i].backdrop = thumb;
@@ -233,8 +235,8 @@ export function Player({
   }, [view, displayedUrl]);
 
   useEffect(() => {
-    if (phase !== "held") return;
     holdScale.setValue(1);
+    if (phase !== "held" || reduceMotion) return;
     const loop = Animated.loop(
       Animated.sequence([
         Animated.timing(holdScale, { toValue: motion.holdScale, duration: motion.hold, easing: ease.inOut, useNativeDriver: true }),
@@ -243,7 +245,7 @@ export function Player({
     );
     loop.start();
     return () => loop.stop();
-  }, [phase, holdScale]);
+  }, [phase, holdScale, reduceMotion]);
 
   useEffect(() => {
     if (!chrome) return;

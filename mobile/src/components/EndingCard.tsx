@@ -2,6 +2,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import { useEffect, useRef, useState } from "react";
 import { Animated, Keyboard, Linking, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { useReduceMotion } from "../a11y";
 import { useStory, type Ending } from "../data";
 import { colors, ease, fonts, gradients, motion, radius, type } from "../theme";
 import { Ring } from "./Ring";
@@ -28,6 +29,7 @@ export function EndingCard({
   bottomInset: number;
 }) {
   const story = useStory();
+  const reduceMotion = useReduceMotion();
   const steps = useRef([0, 1, 2, 3, 4].map(() => new Animated.Value(0))).current;
   const keyboard = useRef(new Animated.Value(0)).current;
   const [phone, setPhone] = useState("");
@@ -60,7 +62,7 @@ export function EndingCard({
 
   const rise = (v: Animated.Value) => ({
     opacity: v,
-    transform: [{ translateY: v.interpolate({ inputRange: [0, 1], outputRange: [16, 0] }) }],
+    transform: [{ translateY: v.interpolate({ inputRange: [0, 1], outputRange: [reduceMotion ? 0 : 16, 0] }) }],
   });
 
   const save = async () => {
@@ -106,7 +108,7 @@ export function EndingCard({
                 <View style={styles.node} />
                 <View style={[styles.line, i === ending.path.length - 1 && { opacity: 0 }]} />
               </View>
-              <Text numberOfLines={1} style={styles.stepText}>
+              <Text style={styles.stepText}>
                 {step}
               </Text>
             </View>
@@ -114,7 +116,7 @@ export function EndingCard({
         </Animated.View>
 
         <Animated.View style={[styles.streak, rise(steps[2])]}>
-          <Text style={styles.streakNumber}>{streak}</Text>
+          <Text maxFontSizeMultiplier={1.4} style={styles.streakNumber}>{streak}</Text>
           <Text style={styles.streakLabel}>day streak{"\n"}A new story tomorrow</Text>
         </Animated.View>
 
@@ -130,7 +132,9 @@ export function EndingCard({
                     onPress={() => Linking.openURL(`sms:${text.number}&body=${encodeURIComponent(text.prompt)}`).catch(() => {})}
                     style={({ pressed }) => [styles.textFirst, pressed && { opacity: 0.6 }]}
                   >
-                    <Text style={styles.textFirstLabel}>Text first</Text>
+                    <View style={styles.textFirstUnderline}>
+                      <Text maxFontSizeMultiplier={1.4} style={styles.textFirstLabel}>Text first</Text>
+                    </View>
                   </Pressable>
                 ) : (
                   <Text style={styles.hint}>Keep your phone close.</Text>
@@ -157,11 +161,11 @@ export function EndingCard({
                   />
                   {valid || phoneState === "saving" ? (
                     <Pressable accessibilityRole="button" accessibilityLabel="Save number" onPress={save} style={({ pressed }) => [styles.save, pressed && { opacity: 0.8 }]}>
-                      {phoneState === "saving" ? <Ring size={18} color={colors.bg} /> : <Text style={styles.saveText}>Save</Text>}
+                      {phoneState === "saving" ? <Ring size={18} color={colors.bg} /> : <Text maxFontSizeMultiplier={1.4} style={styles.saveText}>Save</Text>}
                     </Pressable>
                   ) : (
                     <Pressable accessibilityRole="button" accessibilityLabel="Not now" hitSlop={8} onPress={skip} style={({ pressed }) => [styles.skip, pressed && { opacity: 0.6 }]}>
-                      <Text style={styles.skipText}>Not now</Text>
+                      <Text maxFontSizeMultiplier={1.4} style={styles.skipText}>Not now</Text>
                     </Pressable>
                   )}
                 </View>
@@ -172,10 +176,10 @@ export function EndingCard({
 
         <Animated.View style={rise(steps[4])}>
           <Pressable accessibilityRole="button" onPress={onShare} style={({ pressed }) => [styles.share, pressed && { opacity: 0.8 }]}>
-            <Text style={styles.shareText}>Share your path</Text>
+            <Text maxFontSizeMultiplier={1.4} style={styles.shareText}>Share your path</Text>
           </Pressable>
           <Pressable accessibilityRole="button" onPress={onDone} hitSlop={8} style={({ pressed }) => [styles.done, pressed && { opacity: 0.6 }]}>
-            <Text style={styles.doneText}>Done</Text>
+            <Text maxFontSizeMultiplier={1.4} style={styles.doneText}>Done</Text>
           </Pressable>
         </Animated.View>
       </Animated.View>
@@ -189,7 +193,7 @@ const styles = StyleSheet.create({
   title: { fontFamily: fonts.display, fontSize: type.endTitle, lineHeight: 50, color: colors.text },
   summary: { fontFamily: fonts.ui, fontWeight: "400", fontSize: type.body, lineHeight: 24, color: colors.dim, marginTop: 8 },
   path: { marginTop: 20 },
-  step: { flexDirection: "row", alignItems: "center", height: 28 },
+  step: { flexDirection: "row", alignItems: "center", minHeight: 28 },
   rail: { width: 22, alignItems: "center", alignSelf: "stretch" },
   line: { flex: 1, width: StyleSheet.hairlineWidth * 2, backgroundColor: colors.faint },
   node: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.text },
@@ -222,14 +226,15 @@ const styles = StyleSheet.create({
     fontSize: type.body,
     color: colors.text,
   },
-  save: { height: 50, minWidth: 84, borderRadius: radius.pill, paddingHorizontal: 20, alignItems: "center", justifyContent: "center", backgroundColor: colors.text },
+  save: { minHeight: 50, minWidth: 84, borderRadius: radius.pill, paddingHorizontal: 20, alignItems: "center", justifyContent: "center", backgroundColor: colors.text },
   saveText: { fontFamily: fonts.ui, fontWeight: "600", fontSize: type.label, color: colors.bg },
-  skip: { height: 50, minWidth: 84, alignItems: "center", justifyContent: "center" },
+  skip: { minHeight: 50, minWidth: 84, alignItems: "center", justifyContent: "center" },
   skipText: { fontFamily: fonts.ui, fontWeight: "500", fontSize: type.label, color: colors.dim },
-  textFirst: { alignSelf: "flex-start", marginTop: 8, paddingBottom: 2, borderBottomWidth: 1, borderColor: colors.dim },
+  textFirst: { alignSelf: "flex-start", minHeight: 44, justifyContent: "center", marginTop: 4 },
+  textFirstUnderline: { paddingBottom: 2, borderBottomWidth: 1, borderColor: colors.dim },
   textFirstLabel: { fontFamily: fonts.ui, fontWeight: "600", fontSize: type.label, color: colors.text },
-  share: { height: 56, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: colors.text, marginTop: 20 },
+  share: { minHeight: 56, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: colors.text, marginTop: 20 },
   shareText: { fontFamily: fonts.ui, fontWeight: "600", fontSize: type.body, color: colors.bg },
-  done: { height: 44, alignItems: "center", justifyContent: "center", marginTop: 2 },
+  done: { minHeight: 44, alignItems: "center", justifyContent: "center", marginTop: 2 },
   doneText: { fontFamily: fonts.ui, fontWeight: "500", fontSize: type.control, color: colors.dim },
 });

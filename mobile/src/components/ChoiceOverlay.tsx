@@ -3,6 +3,7 @@ import { useEffect, useRef } from "react";
 import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
 import type { ChoiceOption } from "../data";
 import { colors, ease, fonts, glow, motion, radius, type } from "../theme";
+import { useReduceMotion } from "../a11y";
 import { Ring } from "./Ring";
 
 export type Rect = { x: number; y: number; w: number; h: number };
@@ -11,7 +12,7 @@ const CHIP_HEIGHT = 56;
 const SIDE_MARGIN = 12;
 const MIN_TARGET = 64;
 const LABEL_ROOM = 30;
-const CHIP_GAP = 10;
+const CHIP_GAP = 12;
 
 export function chipsHeight(options: ChoiceOption[]) {
   const chips = options.filter((o) => o.box === null).length;
@@ -23,8 +24,16 @@ function useTarget(index: number, picked: string | null, id: string) {
   const pulse = useRef(new Animated.Value(0)).current;
   const flash = useRef(new Animated.Value(0)).current;
   const fade = useRef(new Animated.Value(1)).current;
+  const reduce = useReduceMotion();
+  const still = useRef(new Animated.Value(1)).current;
+  const rest = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    if (reduce) {
+      pulse.setValue(0.6);
+      Animated.timing(appear, { toValue: 1, duration: motion.gentle, easing: ease.out, useNativeDriver: true }).start();
+      return;
+    }
     Animated.timing(appear, { toValue: 1, duration: motion.gentle, delay: 120 + index * 110, easing: ease.out, useNativeDriver: true }).start();
     const loop = Animated.loop(
       Animated.sequence([
@@ -34,7 +43,7 @@ function useTarget(index: number, picked: string | null, id: string) {
     );
     loop.start();
     return () => loop.stop();
-  }, [appear, pulse, index]);
+  }, [appear, pulse, index, reduce]);
 
   useEffect(() => {
     if (picked === null) {
@@ -51,7 +60,7 @@ function useTarget(index: number, picked: string | null, id: string) {
     ]).start();
   }, [picked, id, fade, flash]);
 
-  return { appear, pulse, flash, opacity: Animated.multiply(appear, fade) };
+  return { appear: reduce ? still : appear, pulse, flash, pop: reduce ? rest : flash, opacity: Animated.multiply(appear, fade) };
 }
 
 type TargetProps = {
@@ -72,7 +81,7 @@ function Outline({
   labelAbove,
   screenWidth,
 }: TargetProps & { frame: Rect; labelAbove: boolean; screenWidth: number }) {
-  const { appear, pulse, flash, opacity } = useTarget(index, picked, option.id);
+  const { appear, pulse, flash, pop, opacity } = useTarget(index, picked, option.id);
   const radius = Math.min(glow.maxRadius, Math.min(frame.w, frame.h) / 4);
   const waiting = picked === option.id;
 
@@ -86,7 +95,7 @@ function Outline({
         height: frame.h,
         opacity,
         transform: [
-          { scale: Animated.add(appear.interpolate({ inputRange: [0, 1], outputRange: [0.94, 1] }), flash.interpolate({ inputRange: [0, 1], outputRange: [0, 0.035] })) },
+          { scale: Animated.add(appear.interpolate({ inputRange: [0, 1], outputRange: [0.94, 1] }), pop.interpolate({ inputRange: [0, 1], outputRange: [0, 0.035] })) },
         ],
       }}
     >
@@ -126,7 +135,7 @@ function Outline({
           labelAbove ? { bottom: frame.h + 10 } : { top: frame.h + 10 },
         ]}
       >
-        <Text numberOfLines={1} style={styles.outlineLabel}>
+        <Text numberOfLines={1} maxFontSizeMultiplier={1.3} style={styles.outlineLabel}>
           {option.label}
         </Text>
       </View>
@@ -143,7 +152,7 @@ function Outline({
 }
 
 function Chip({ option, index, picked, onPick }: TargetProps) {
-  const { appear, pulse, flash, opacity } = useTarget(index, picked, option.id);
+  const { appear, pulse, flash, pop, opacity } = useTarget(index, picked, option.id);
   const waiting = picked === option.id;
 
   return (
@@ -152,7 +161,7 @@ function Chip({ option, index, picked, onPick }: TargetProps) {
         opacity,
         transform: [
           { translateY: appear.interpolate({ inputRange: [0, 1], outputRange: [14, 0] }) },
-          { scale: flash.interpolate({ inputRange: [0, 1], outputRange: [1, 1.025] }) },
+          { scale: pop.interpolate({ inputRange: [0, 1], outputRange: [1, 1.025] }) },
         ],
       }}
     >
@@ -183,7 +192,7 @@ function Chip({ option, index, picked, onPick }: TargetProps) {
             />
           )}
         </View>
-        <Text numberOfLines={1} style={styles.chipLabel}>
+        <Text numberOfLines={2} maxFontSizeMultiplier={1.4} style={styles.chipLabel}>
           {option.label}
         </Text>
       </Pressable>
@@ -280,7 +289,8 @@ const styles = StyleSheet.create({
   },
   chips: { position: "absolute", left: 18, right: 18, gap: CHIP_GAP },
   chip: {
-    height: CHIP_HEIGHT,
+    minHeight: CHIP_HEIGHT,
+    paddingVertical: 8,
     borderRadius: radius.pill,
     overflow: "hidden",
     flexDirection: "row",

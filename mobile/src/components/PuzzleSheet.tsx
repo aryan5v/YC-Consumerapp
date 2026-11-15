@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Animated, Keyboard, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import type { PuzzleStop } from "../data";
 import { colors, ease, fonts, motion, radius, type } from "../theme";
+import { useReduceMotion } from "../a11y";
 import { Ring } from "./Ring";
 
 export type PuzzleState = "idle" | "submitting" | "correct" | "wrong";
@@ -30,6 +31,7 @@ export function PuzzleSheet({
   const keyboard = useRef(new Animated.Value(0)).current;
   const [keyboardUp, setKeyboardUp] = useState(false);
   const idle = state === "idle";
+  const reduce = useReduceMotion();
   const answered = state === "correct" || state === "wrong";
 
   useEffect(() => {
@@ -71,7 +73,7 @@ export function PuzzleSheet({
         {
           paddingBottom: (keyboardUp ? 0 : bottomInset) + 20,
           opacity: appear,
-          transform: [{ translateY: Animated.add(appear.interpolate({ inputRange: [0, 1], outputRange: [48, 0] }), keyboard) }],
+          transform: [{ translateY: Animated.add(appear.interpolate({ inputRange: [0, 1], outputRange: [reduce ? 0 : 48, 0] }), keyboard) }],
         },
       ]}
     >
@@ -80,7 +82,7 @@ export function PuzzleSheet({
       <View style={styles.head}>
         <View style={{ flex: 1 }}>
           {line !== null && line !== puzzle.question && <Text style={styles.line}>{line}</Text>}
-          <Text style={styles.question}>{puzzle.question}</Text>
+          <Text accessibilityRole="header" style={styles.question}>{puzzle.question}</Text>
         </View>
         {!answered && accessory}
       </View>
@@ -112,7 +114,7 @@ export function PuzzleSheet({
           {puzzle.answerType === "number" && (
             <>
               <View style={styles.display}>
-                <Text style={[styles.digits, value === "" && { color: colors.faint }]}>{value === "" ? "\u2013 \u2013 \u2013" : value}</Text>
+                <Text maxFontSizeMultiplier={1.4} style={[styles.digits, value === "" && { color: colors.faint }]}>{value === "" ? "\u2013 \u2013 \u2013" : value}</Text>
               </View>
               <View style={styles.pad}>
                 {KEYS.map((key) => (
@@ -124,7 +126,7 @@ export function PuzzleSheet({
                     onPress={() => press(key)}
                     style={({ pressed }) => [styles.key, key === "go" && value !== "" && styles.keyGo, pressed && styles.keyPressed]}
                   >
-                    <Text style={[styles.keyText, key.length > 1 && styles.keyWord, key === "go" && value !== "" && { color: colors.bg }, key === "go" && value === "" && { color: colors.faint }]}>
+                    <Text maxFontSizeMultiplier={1.4} style={[styles.keyText, key.length > 1 && styles.keyWord, key === "go" && value !== "" && { color: colors.bg }, key === "go" && value === "" && { color: colors.faint }]}>
                       {key === "del" ? "Delete" : key === "go" ? "Enter" : key}
                     </Text>
                   </Pressable>
@@ -158,7 +160,7 @@ export function PuzzleSheet({
                 onPress={() => submit(value)}
                 style={({ pressed }) => [styles.send, value.trim() === "" && { opacity: 0.35 }, pressed && { opacity: 0.7 }]}
               >
-                <Text style={styles.sendText}>Answer</Text>
+                <Text maxFontSizeMultiplier={1.4} style={styles.sendText}>Answer</Text>
               </Pressable>
             </View>
           )}
@@ -188,7 +190,7 @@ const styles = StyleSheet.create({
   result: { height: 76, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   resultText: { fontFamily: fonts.ui, fontWeight: "500", fontSize: type.lead, color: colors.text },
   pick: {
-    height: 56,
+    minHeight: 56,
     borderRadius: radius.field,
     justifyContent: "center",
     paddingHorizontal: 20,
@@ -202,7 +204,7 @@ const styles = StyleSheet.create({
   display: { height: 62, alignItems: "center", justifyContent: "center", marginBottom: 12 },
   digits: { fontFamily: fonts.display, fontSize: type.digits, letterSpacing: 10, color: colors.text },
   pad: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", rowGap: 8 },
-  key: { width: "31.5%", height: 52, borderRadius: radius.key, alignItems: "center", justifyContent: "center", backgroundColor: colors.wash },
+  key: { width: "31.5%", minHeight: 52, borderRadius: radius.key, alignItems: "center", justifyContent: "center", backgroundColor: colors.wash },
   keyGo: { backgroundColor: colors.text },
   keyPressed: { backgroundColor: colors.washActive },
   keyText: { fontFamily: fonts.ui, fontWeight: "500", fontSize: type.key, color: colors.text },
@@ -210,7 +212,7 @@ const styles = StyleSheet.create({
   textRow: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 6 },
   input: {
     flex: 1,
-    height: 54,
+    minHeight: 54,
     borderRadius: radius.field,
     paddingHorizontal: 18,
     backgroundColor: colors.wash,

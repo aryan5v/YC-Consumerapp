@@ -1,3 +1,4 @@
+import { createAudioPlayer, type AudioPlayer } from "expo-audio";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { useVideoPlayer, VideoView, type VideoPlayer } from "expo-video";
@@ -8,14 +9,21 @@ import { BeatDots } from "../components/BeatDots";
 import { Captions } from "../components/Captions";
 import { ChoiceOverlay, chipsHeight } from "../components/ChoiceOverlay";
 import { EndingCard } from "../components/EndingCard";
+import { MicButton } from "../components/MicButton";
 import { Presence } from "../components/Presence";
 import { PuzzleSheet, type PuzzleState } from "../components/PuzzleSheet";
-import { story, videoSource, type Ending, type Stop } from "../data";
+import { SettingsGlyph, SettingsSheet } from "../components/SettingsSheet";
+import { audioSource, story, videoSource, type Ending, type Stop } from "../data";
+import { useSettings } from "../settings";
 import { colors, ease, fonts } from "../theme";
 
 const SLOTS = [0, 1, 2, 3];
 const PORTRAIT = 9 / 16;
 const PUZZLE_FEEDBACK_MS = 900;
+const HEARD_MS = 550;
+const MIC_SPACE = 58;
+
+let speakUnavailable = false;
 
 type Slot = { url: string | null; ready: boolean; aspect: number | null; retries: number };
 type Snap = { beatId: string; clipUrl: string; narration: string; stop: Stop | null; ending: Ending | null; beatIndex: number; beatsTotal: number };
@@ -68,6 +76,15 @@ export function Player({
   const [captionsOn, setCaptionsOn] = useState(true);
   const [chrome, setChrome] = useState(false);
   const holdScale = useRef(new Animated.Value(1)).current;
+  const settings = useSettings();
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [listening, setListening] = useState(false);
+  const [voiceBusy, setVoiceBusy] = useState(false);
+  const [heard, setHeard] = useState<string | null>(null);
+  const [reply, setReply] = useState<string | null>(null);
+  const [micDenied, setMicDenied] = useState(false);
+  const line = useRef<{ url: string; player: AudioPlayer } | null>(null);
+  const replyAudio = useRef<AudioPlayer | null>(null);
 
   const displayedUrl = active >= 0 ? slots[active].url : null;
   const stale = !!view && !!commit && view.current.beatId === commit.fromBeatId;
@@ -141,6 +158,8 @@ export function Player({
       setPhase("playing");
       setPicked(null);
       setPuzzleState("idle");
+      setHeard(null);
+      setReply(null);
       if (prev < 0) return onStarted();
       players[prev].muted = true;
       previousRef.current = prev;
@@ -220,9 +239,105 @@ export function Player({
   const puzzle = held && current.stop?.kind === "puzzle" ? current.stop : null;
   const ending = held && current.stop === null ? current.ending : null;
 
+  const lineUrl = view?.stop?.spokenAudioUrl ?? null;
+  useEffect(() => {
+    if (line.current?.url === lineUrl) return;
+    line.current?.player.remove();
+    line.current = lineUrl ? { url: lineUrl, player: createAudioPlayer(audioSource(lineUrl)) } : null;
+  }, [lineUrl]);
+
+  useEffect(
+    () => () => {
+      line.current?.player.remove();
+      replyAudio.current?.remove();
+    },
+    [],
+  );
+
+  const heldLineUrl = held && settings.voice ? (current.stop?.spokenAudioUrl ?? null) : null;
+  useEffect(() => {
+    const audio = line.current;
+    if (!heldLineUrl || audio?.url !== heldLineUrl) return;
+    const timer = setTimeout(() => {
+      audio.player.seekTo(0).catch(() => {});
+      audio.player.play();
+    }, 350);
+    return () => {
+      clearTimeout(timer);
+      if (line.current === audio) audio.player.pause();
+    };
+  }, [heldLineUrl]);
+
+  const settlePuzzle = (beatId: string, correct: boolean) => {
+    Haptics.notificationAsync(correct ? Haptics.NotificationFeedbackType.Success : Haptics.NotificationFeedbackType.Warning);
+    setPuzzleState(correct ? "correct" : "wrong");
+    notBefore.current = Date.now() + PUZZLE_FEEDBACK_MS;
+    const live = viewRef.current;
+    if (live?.current.beatId === beatId && live.stop?.kind === "puzzle") {
+      const outcome = correct ? live.stop.outcomes.success : live.stop.outcomes.failure;
+      if (outcome.status === "ready" && outcome.clipUrl) setCommit({ fromBeatId: beatId, url: outcome.clipUrl });
+    }
+    bump();
+  };
+
+  const say = async (recordingUri: string) => {
+    if (!current?.stop || !story.speak || picked || puzzleState !== "idle") return;
+    const stop = current.stop;
+    setVoiceBusy(true);
+    setReply(null);
+    setCommit({ fromBeatId: current.beatId, url: null });
+    notBefore.current = Infinity;
+    try {
+      const result = await story.speak(runId, recordingUri);
+      setHeard(result.transcript);
+      if (stop.kind === "choice" && result.matchedOptionId) {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        setPicked(result.matchedOptionId);
+        notBefore.current = Date.now() + HEARD_MS;
+        bump();
+      } else if (stop.kind === "puzzle" && result.correct !== null) {
+        settlePuzzle(current.beatId, result.correct);
+      } else {
+        notBefore.current = 0;
+        setCommit(null);
+        setReply(result.reply ?? "Say that again?");
+        setTimeout(() => setHeard(null), 1100);
+        if (result.replyAudioUrl && settings.voice) {
+          replyAudio.current?.remove();
+          replyAudio.current = createAudioPlayer(audioSource(result.replyAudioUrl));
+          replyAudio.current.play();
+        }
+      }
+    } catch {
+      speakUnavailable = true;
+      notBefore.current = 0;
+      setCommit(null);
+    } finally {
+      setVoiceBusy(false);
+    }
+  };
+
+  const micOn = settings.microphone && !!story.speak && !speakUnavailable && !micDenied;
+  const mic = (
+    <MicButton
+      busy={voiceBusy}
+      disabled={picked !== null || puzzleState !== "idle"}
+      onListening={(on) => {
+        setListening(on);
+        if (!on) return;
+        line.current?.player.pause();
+        replyAudio.current?.pause();
+        setHeard(null);
+        setReply(null);
+      }}
+      onRecording={say}
+      onDenied={() => setMicDenied(true)}
+    />
+  );
+
   const pick = (optionId: string) => {
     const live = viewRef.current;
-    if (!current || picked || live?.stop?.kind !== "choice") return;
+    if (!current || picked || voiceBusy || live?.stop?.kind !== "choice") return;
     const option = live.stop.options.find((o) => o.id === optionId);
     if (!option) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -235,21 +350,13 @@ export function Player({
   };
 
   const submit = async (answer: string) => {
-    if (!current || puzzleState !== "idle") return;
+    if (!current || puzzleState !== "idle" || voiceBusy) return;
     setPuzzleState("submitting");
     setCommit({ fromBeatId: current.beatId, url: null });
     notBefore.current = Infinity;
     try {
       const { correct } = await story.answer(runId, answer);
-      Haptics.notificationAsync(correct ? Haptics.NotificationFeedbackType.Success : Haptics.NotificationFeedbackType.Warning);
-      setPuzzleState(correct ? "correct" : "wrong");
-      notBefore.current = Date.now() + PUZZLE_FEEDBACK_MS;
-      const live = viewRef.current;
-      if (live?.current.beatId === current.beatId && live.stop?.kind === "puzzle") {
-        const outcome = correct ? live.stop.outcomes.success : live.stop.outcomes.failure;
-        if (outcome.status === "ready" && outcome.clipUrl) setCommit({ fromBeatId: current.beatId, url: outcome.clipUrl });
-      }
-      bump();
+      settlePuzzle(current.beatId, correct);
     } catch {
       notBefore.current = 0;
       setPuzzleState("idle");
@@ -267,7 +374,16 @@ export function Player({
   const aspect = (active >= 0 && slots[active].aspect) || PORTRAIT;
   const scale = aspect < 1 ? Math.max(width / aspect, height) : Math.min(width / aspect, height);
   const video = { x: (width - aspect * scale) / 2, y: (height - scale) / 2, w: aspect * scale, h: scale };
-  const captionLift = choice ? chipsHeight(choice.options) : 0;
+  const micSpace = micOn ? MIC_SPACE : 0;
+  const captionLift = choice ? chipsHeight(choice.options) + micSpace : 0;
+  const stopLine =
+    held && current.stop
+      ? listening
+        ? "Listening\u2026"
+        : heard !== null
+          ? `\u201C${heard}\u201D`
+          : (reply ?? current.stop.spokenLine)
+      : null;
 
   return (
     <View style={[StyleSheet.absoluteFill, active >= 0 && { backgroundColor: "#000" }]}>
@@ -314,9 +430,11 @@ export function Player({
           <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(0,0,0,0.16)" }]} />
         </Presence>
 
-        <Presence show={captionsOn && current !== null && !puzzle && !ending}>
+        <Presence show={(captionsOn || listening || heard !== null || reply !== null) && current !== null && !puzzle && !ending}>
           <View pointerEvents="none" style={[styles.captions, { bottom: insets.bottom + 34 }]}>
-            {current && <Captions key={current.beatId} text={current.narration} lift={captionLift} />}
+            {current && (
+              <Captions key={`${current.beatId}:${stopLine === null ? "clip" : "stop"}`} text={stopLine ?? current.narration} lift={captionLift} />
+            )}
           </View>
         </Presence>
 
@@ -329,14 +447,29 @@ export function Player({
               holdScale={holdScale}
               picked={picked}
               onPick={pick}
-              bottomInset={insets.bottom}
+              bottomInset={insets.bottom + micSpace}
+              screenWidth={width}
             />
           )}
         </Presence>
 
+        <Presence show={choice !== null && micOn && (picked === null || voiceBusy)} duration={200}>
+          <View pointerEvents="box-none" style={[styles.mic, { bottom: insets.bottom + 12 }]}>
+            {mic}
+          </View>
+        </Presence>
+
         <Presence show={puzzle !== null} duration={260}>
           {puzzle && current && (
-            <PuzzleSheet key={current.beatId} puzzle={puzzle} state={puzzleState} onSubmit={submit} bottomInset={insets.bottom} />
+            <PuzzleSheet
+              key={current.beatId}
+              puzzle={puzzle}
+              line={stopLine}
+              accessory={micOn ? mic : null}
+              state={puzzleState}
+              onSubmit={submit}
+              bottomInset={insets.bottom}
+            />
           )}
         </Presence>
 
@@ -356,6 +489,10 @@ export function Player({
               <View style={[styles.cross, { transform: [{ rotate: "45deg" }] }]} />
               <View style={[styles.cross, { transform: [{ rotate: "-45deg" }] }]} />
             </Pressable>
+            <View style={{ flex: 1 }} />
+            <Pressable accessibilityRole="button" accessibilityLabel="Settings" hitSlop={10} onPress={() => setSettingsOpen(true)} style={styles.control}>
+              <SettingsGlyph />
+            </Pressable>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={captionsOn ? "Turn captions off" : "Turn captions on"}
@@ -371,6 +508,7 @@ export function Player({
           </View>
         </Presence>
       </View>
+      {settingsOpen && <SettingsSheet showMicrophone={!!story.speak && !speakUnavailable} onClose={() => setSettingsOpen(false)} bottomInset={insets.bottom} />}
     </View>
   );
 }
@@ -379,7 +517,8 @@ const styles = StyleSheet.create({
   shade: { position: "absolute", left: 0, right: 0 },
   captions: { position: "absolute", left: 30, right: 30 },
   dots: { position: "absolute", left: 0, right: 0 },
-  chrome: { position: "absolute", left: 14, right: 14, flexDirection: "row", justifyContent: "space-between" },
+  chrome: { position: "absolute", left: 14, right: 14, flexDirection: "row" },
+  mic: { position: "absolute", left: 0, right: 0, alignItems: "center" },
   control: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
   cross: { position: "absolute", width: 20, height: 1.5, borderRadius: 1, backgroundColor: colors.text },
   cc: {

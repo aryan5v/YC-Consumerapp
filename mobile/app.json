@@ -27,7 +27,13 @@
     },
     "plugins": [
       "expo-video",
-      "expo-image"
+      "expo-image",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Fork listens only while you hold the microphone, so you can answer a character out loud."
+        }
+      ]
     ]
   }
 }

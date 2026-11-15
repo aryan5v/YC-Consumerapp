@@ -18,7 +18,7 @@ export type MockNode = {
         success: MockBranch;
         failure: MockBranch;
       };
-  ending?: { title: string; summary: string };
+  ending?: { title: string; summary: string; text: { character: string; number: string | null; prompt: string } };
 };
 
 export const episode = {
@@ -40,6 +40,21 @@ const riddle = {
   failure: { to: "tower", delay: 7000, label: "Lost for words" },
 };
 
+export const spoken: Record<string, { line: string; audioUrl: string }> = {
+  street: { line: "Three ways through the dark. Which one?", audioUrl: "mock://voice/street" },
+  car: { line: "Somebody left the lights on for you. Where to?", audioUrl: "mock://voice/car" },
+  oldstreet: { line: "Hey. You lost? Where are you headed?", audioUrl: "mock://voice/oldstreet" },
+  overpass: { line: "Do you hear that? Which way?", audioUrl: "mock://voice/overpass" },
+  plant: { line: "Count the red words. That is the code.", audioUrl: "mock://voice/plant" },
+  stranger: { line: "I vanish the moment you say my name. What am I?", audioUrl: "mock://voice/stranger" },
+  church: { line: "You made it. Now choose.", audioUrl: "mock://voice/church" },
+  redroom: { line: "Wrong answer. Pick a way out.", audioUrl: "mock://voice/redroom" },
+  towers: { line: "The more of me there is, the less you see. Say my name.", audioUrl: "mock://voice/riddle" },
+  lights: { line: "The more of me there is, the less you see. Say my name.", audioUrl: "mock://voice/riddle" },
+};
+
+export const unheard = { reply: "Say that again? I did not catch it.", replyAudioUrl: "mock://voice/reply" };
+
 export const nodes: Record<string, MockNode> = {
   street: {
     clip: "mock://street",
@@ -59,8 +74,8 @@ export const nodes: Record<string, MockNode> = {
     stop: {
       kind: "choice",
       options: [
-        { id: "a", label: "The offices", box: { x: 0.2, y: 0.07, w: 0.62, h: 0.3 }, to: "plant", delay: 1500 },
-        { id: "b", label: "The lobby", box: { x: 0.08, y: 0.5, w: 0.36, h: 0.2 }, to: "stranger", delay: 2400 },
+        { id: "a", label: "The offices", box: { x: 0.22, y: 0.08, w: 0.56, h: 0.26 }, to: "plant", delay: 1500 },
+        { id: "b", label: "The lobby", box: { x: 0.13, y: 0.5, w: 0.31, h: 0.2 }, to: "stranger", delay: 2400 },
         { id: "c", label: "The gate", box: { x: 0.5, y: 0.49, w: 0.34, h: 0.25 }, to: "plant", delay: 3000 },
       ],
     },
@@ -71,7 +86,7 @@ export const nodes: Record<string, MockNode> = {
     stop: {
       kind: "choice",
       options: [
-        { id: "a", label: "The driver", box: { x: 0.14, y: 0.6, w: 0.8, h: 0.37 }, to: "stranger", delay: 1500 },
+        { id: "a", label: "The driver", box: { x: 0.2, y: 0.58, w: 0.62, h: 0.2 }, to: "stranger", delay: 1500 },
         { id: "b", label: "The orange sign", box: { x: 0.13, y: 0.4, w: 0.24, h: 0.2 }, to: "plant", delay: 2400 },
         { id: "c", label: "Keep walking", box: null, to: "plant", delay: 3000 },
       ],
@@ -153,12 +168,20 @@ export const nodes: Record<string, MockNode> = {
     clip: "mock://dawn",
     narration: "The sun comes up over a city that is still humming.",
     stop: null,
-    ending: { title: "First Light", summary: "You kept the power on until morning." },
+    ending: {
+      title: "First Light",
+      summary: "You kept the power on until morning.",
+      text: { character: "The woman in the neon window", number: "+14155550137", prompt: "The lights stayed on. Who are you?" },
+    },
   },
   tower: {
     clip: "mock://tower",
     narration: "The tower stays dark. But now you know its name.",
     stop: null,
-    ending: { title: "The Long Night", summary: "The city slept in the dark. It will remember you." },
+    ending: {
+      title: "The Long Night",
+      summary: "The city slept in the dark. It will remember you.",
+      text: { character: "The woman in the neon window", number: null, prompt: "What was the password?" },
+    },
   },
 };

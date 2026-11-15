@@ -6,4 +6,4 @@ const url = process.env.EXPO_PUBLIC_CONVEX_URL;
 
 export const story: StoryProvider = url ? createConvexProvider(url) : mockProvider;
 export * from "./types";
-export { imageSource, videoSource } from "./assets";
+export { audioSource, imageSource, videoSource } from "./assets";

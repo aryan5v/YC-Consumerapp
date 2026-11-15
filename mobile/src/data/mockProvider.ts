@@ -1,5 +1,5 @@
 import { Fragment, useSyncExternalStore } from "react";
-import { episode, nodes } from "./mockEpisode";
+import { episode, nodes, spoken, unheard } from "./mockEpisode";
 import type { ClipStatus, HomeView, RunView, StoryProvider } from "./types";
 
 type Run = {
@@ -9,6 +9,7 @@ type Run = {
   path: string[];
   ended: boolean;
   readyAt: Record<string, number>;
+  heard: number;
 };
 
 const MUTATION_LATENCY = 40;
@@ -55,6 +56,8 @@ function buildRun(r: Run): RunView {
         : node.stop.kind === "choice"
           ? {
               kind: "choice",
+              spokenLine: spoken[r.node].line,
+              spokenAudioUrl: spoken[r.node].audioUrl,
               options: node.stop.options.map((o) => {
                 const c = child(o.to);
                 return { id: o.id, label: o.label, box: o.box, childStatus: c.status, childClipUrl: c.clipUrl };
@@ -62,6 +65,8 @@ function buildRun(r: Run): RunView {
             }
           : {
               kind: "puzzle",
+              spokenLine: spoken[r.node].line,
+              spokenAudioUrl: spoken[r.node].audioUrl,
               question: node.stop.question,
               answerType: node.stop.answerType,
               choices: node.stop.choices,
@@ -138,7 +143,7 @@ export const mockProvider: StoryProvider = {
   async startToday() {
     await latency();
     runs += 1;
-    const r: Run = { id: `mock-run-${runs}`, node: episode.start, beatIndex: 0, path: [], ended: false, readyAt: {} };
+    const r: Run = { id: `mock-run-${runs}`, node: episode.start, beatIndex: 0, path: [], ended: false, readyAt: {}, heard: 0 };
     run = r;
     generate(r, episode.start, Date.now() + FIRST_CLIP_DELAY);
     enter(r, episode.start);
@@ -164,5 +169,23 @@ export const mockProvider: StoryProvider = {
     const branch = correct ? stop.success : stop.failure;
     advance(r, branch.to, branch.label);
     return { correct };
+  },
+  async setPhone() {
+    await latency();
+  },
+  async speak(runId) {
+    await new Promise((resolve) => setTimeout(resolve, 700));
+    const r = activeRun(runId);
+    const stop = nodes[r.node].stop;
+    if (!stop) throw new Error("No stop at this beat");
+    r.heard += 1;
+    if (r.heard === 1) return { transcript: "Um, hang on", matchedOptionId: null, correct: null, ...unheard };
+    if (stop.kind === "choice") {
+      const option = stop.options.find((o) => statusOf(r, o.to) === "ready") ?? stop.options[0];
+      advance(r, option.to, option.label);
+      return { transcript: option.label, matchedOptionId: option.id, correct: null, reply: null, replyAudioUrl: null };
+    }
+    advance(r, stop.success.to, stop.success.label);
+    return { transcript: stop.accept[0], matchedOptionId: null, correct: true, reply: null, replyAudioUrl: null };
   },
 };

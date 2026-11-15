@@ -5,6 +5,7 @@ import { useEffect, useRef } from "react";
 import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ring } from "../components/Ring";
+import { SettingsGlyph } from "../components/SettingsSheet";
 import { imageSource, story } from "../data";
 import { colors, ease, fonts } from "../theme";
 
@@ -17,7 +18,7 @@ function dateLabel(iso: string) {
   return `${DAYS[date.getDay()]}, ${MONTHS[date.getMonth()]} ${date.getDate()}`;
 }
 
-export function Home({ starting, onPlay }: { starting: boolean; onPlay: () => void }) {
+export function Home({ starting, onPlay, onSettings }: { starting: boolean; onPlay: () => void; onSettings: () => void }) {
   const home = story.useHome();
   const insets = useSafeAreaInsets();
   const drift = useRef(new Animated.Value(0)).current;
@@ -59,6 +60,9 @@ export function Home({ starting, onPlay }: { starting: boolean; onPlay: () => vo
       <View style={[styles.top, { paddingTop: insets.top + 18 }]}>
         <Text style={styles.wordmark}>Fork</Text>
         {home && <Text style={styles.date}>{dateLabel(home.episode.date)}</Text>}
+        <Pressable accessibilityRole="button" accessibilityLabel="Settings" hitSlop={14} onPress={onSettings} style={styles.settings}>
+          <SettingsGlyph />
+        </Pressable>
       </View>
 
       {home && (
@@ -113,8 +117,9 @@ export function Home({ starting, onPlay }: { starting: boolean; onPlay: () => vo
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg, overflow: "hidden" },
-  top: { position: "absolute", top: 0, left: 26, right: 26, flexDirection: "row", alignItems: "baseline", justifyContent: "space-between" },
-  wordmark: { fontFamily: fonts.display, fontSize: 26, letterSpacing: 0.5, color: colors.text },
+  top: { position: "absolute", top: 0, left: 26, right: 26, flexDirection: "row", alignItems: "center" },
+  wordmark: { flex: 1, fontFamily: fonts.display, fontSize: 26, letterSpacing: 0.5, color: colors.text },
+  settings: { marginLeft: 16, opacity: 0.8 },
   date: { fontFamily: fonts.ui, fontWeight: "600", fontSize: 12, letterSpacing: 2, textTransform: "uppercase", color: colors.dim },
   bottom: { position: "absolute", left: 26, right: 26, bottom: 0 },
   kicker: { fontFamily: fonts.ui, fontWeight: "600", fontSize: 12, letterSpacing: 2.6, textTransform: "uppercase", color: colors.dim, marginBottom: 12 },

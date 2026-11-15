@@ -14,9 +14,23 @@ const bundled: Record<string, number> = {
   "mock://dawn": require("../../assets/mock/dawn.mp4"),
   "mock://tower": require("../../assets/mock/tower.mp4"),
   "mock://poster": require("../../assets/mock/poster.jpg"),
+  "mock://voice/street": require("../../assets/mock/voice/street.m4a"),
+  "mock://voice/car": require("../../assets/mock/voice/car.m4a"),
+  "mock://voice/oldstreet": require("../../assets/mock/voice/oldstreet.m4a"),
+  "mock://voice/overpass": require("../../assets/mock/voice/overpass.m4a"),
+  "mock://voice/plant": require("../../assets/mock/voice/plant.m4a"),
+  "mock://voice/stranger": require("../../assets/mock/voice/stranger.m4a"),
+  "mock://voice/church": require("../../assets/mock/voice/church.m4a"),
+  "mock://voice/redroom": require("../../assets/mock/voice/redroom.m4a"),
+  "mock://voice/riddle": require("../../assets/mock/voice/riddle.m4a"),
+  "mock://voice/reply": require("../../assets/mock/voice/reply.m4a"),
 };
 
 export function videoSource(url: string): VideoSource {
+  return bundled[url] ?? { uri: url };
+}
+
+export function audioSource(url: string): number | { uri: string } {
   return bundled[url] ?? { uri: url };
 }
 

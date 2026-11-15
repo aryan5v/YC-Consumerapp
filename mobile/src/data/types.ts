@@ -13,9 +13,11 @@ export type ChoiceOption = {
 
 export type Outcome = { status: ClipStatus; clipUrl: string | null };
 
-export type ChoiceStop = { kind: "choice"; options: ChoiceOption[] };
+export type ChoiceStop = { kind: "choice"; spokenLine: string; spokenAudioUrl: string | null; options: ChoiceOption[] };
 export type PuzzleStop = {
   kind: "puzzle";
+  spokenLine: string;
+  spokenAudioUrl: string | null;
   question: string;
   answerType: "pick" | "number" | "text";
   choices: string[] | null;
@@ -23,7 +25,8 @@ export type PuzzleStop = {
 };
 export type Stop = ChoiceStop | PuzzleStop;
 
-export type Ending = { title: string; summary: string; path: string[] };
+export type EndingText = { character: string; number: string | null; prompt: string };
+export type Ending = { title: string; summary: string; path: string[]; text?: EndingText | null };
 
 export type RunView = {
   status: "active" | "ended";
@@ -32,6 +35,14 @@ export type RunView = {
   current: { beatId: string; clipUrl: string | null; narration: string; status: ClipStatus };
   stop: Stop | null;
   ending: Ending | null;
+};
+
+export type SpeakResult = {
+  transcript: string;
+  matchedOptionId: string | null;
+  correct: boolean | null;
+  reply: string | null;
+  replyAudioUrl: string | null;
 };
 
 export type HomeView = {
@@ -49,4 +60,6 @@ export interface StoryProvider {
   startToday(): Promise<string>;
   choose(runId: string, optionId: string): Promise<void>;
   answer(runId: string, answer: string): Promise<{ correct: boolean }>;
+  setPhone(phone: string): Promise<void>;
+  speak?(runId: string, recordingUri: string): Promise<SpeakResult>;
 }

@@ -58,7 +58,17 @@ type TargetProps = {
   onPick: (id: string) => void;
 };
 
-function Outline({ option, index, picked, onPick, frame, labelAbove }: TargetProps & { frame: Rect; labelAbove: boolean }) {
+const LABEL_WIDTH = 220;
+
+function Outline({
+  option,
+  index,
+  picked,
+  onPick,
+  frame,
+  labelAbove,
+  screenWidth,
+}: TargetProps & { frame: Rect; labelAbove: boolean; screenWidth: number }) {
   const { appear, pulse, flash, opacity } = useTarget(index, picked, option.id);
   const radius = Math.min(22, Math.min(frame.w, frame.h) / 4);
   const waiting = picked === option.id;
@@ -77,6 +87,12 @@ function Outline({ option, index, picked, onPick, frame, labelAbove }: TargetPro
         ],
       }}
     >
+      <Animated.View
+        style={[
+          styles.bloom,
+          { borderRadius: radius + 7, opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.06, 0.24] }) },
+        ]}
+      />
       <Animated.View
         style={[
           StyleSheet.absoluteFill,
@@ -100,7 +116,13 @@ function Outline({ option, index, picked, onPick, frame, labelAbove }: TargetPro
           <Ring size={30} color={colors.glow} delay={320} />
         </View>
       )}
-      <View style={[styles.labelWrap, labelAbove ? { bottom: frame.h + 8 } : { top: frame.h + 8 }]}>
+      <View
+        style={[
+          styles.labelWrap,
+          { left: Math.min(Math.max(frame.x + frame.w / 2 - LABEL_WIDTH / 2, 10), screenWidth - LABEL_WIDTH - 10) - frame.x },
+          labelAbove ? { bottom: frame.h + 10 } : { top: frame.h + 10 },
+        ]}
+      >
         <Text numberOfLines={1} style={styles.outlineLabel}>
           {option.label}
         </Text>
@@ -173,6 +195,7 @@ export function ChoiceOverlay({
   picked,
   onPick,
   bottomInset,
+  screenWidth,
 }: {
   options: ChoiceOption[];
   video: Rect;
@@ -180,6 +203,7 @@ export function ChoiceOverlay({
   picked: string | null;
   onPick: (id: string) => void;
   bottomInset: number;
+  screenWidth: number;
 }) {
   return (
     <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
@@ -195,7 +219,8 @@ export function ChoiceOverlay({
               picked={picked}
               onPick={onPick}
               frame={frame}
-              labelAbove={frame.y + frame.h > video.y + video.h * 0.8}
+              screenWidth={screenWidth}
+              labelAbove={frame.y + frame.h > video.y + video.h * 0.72}
             />
           );
         })}
@@ -218,7 +243,8 @@ const styles = StyleSheet.create({
   },
   edge: { borderWidth: 1.5, borderColor: colors.glow, opacity: 0.9 },
   center: { alignItems: "center", justifyContent: "center" },
-  labelWrap: { position: "absolute", left: -60, right: -60, alignItems: "center" },
+  bloom: { position: "absolute", left: -7, right: -7, top: -7, bottom: -7, borderWidth: 7, borderColor: colors.glow },
+  labelWrap: { position: "absolute", width: LABEL_WIDTH, alignItems: "center" },
   outlineLabel: {
     fontFamily: fonts.ui,
     fontWeight: "600",

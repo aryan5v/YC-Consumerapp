@@ -1,6 +1,6 @@
 import { BlurView } from "expo-blur";
 import * as Haptics from "expo-haptics";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Animated, Keyboard, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import type { PuzzleStop } from "../data";
 import { colors, ease, fonts } from "../theme";
@@ -12,11 +12,15 @@ const KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "del", "0", "go"];
 
 export function PuzzleSheet({
   puzzle,
+  line,
+  accessory,
   state,
   onSubmit,
   bottomInset,
 }: {
   puzzle: PuzzleStop;
+  line: string | null;
+  accessory: ReactNode;
   state: PuzzleState;
   onSubmit: (answer: string) => void;
   bottomInset: number;
@@ -73,7 +77,13 @@ export function PuzzleSheet({
     >
       <BlurView intensity={48} tint="dark" style={StyleSheet.absoluteFill} />
       <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.glass }]} />
-      <Text style={styles.question}>{puzzle.question}</Text>
+      <View style={styles.head}>
+        <View style={{ flex: 1 }}>
+          {line !== null && line !== puzzle.question && <Text style={styles.line}>{line}</Text>}
+          <Text style={styles.question}>{puzzle.question}</Text>
+        </View>
+        {!answered && accessory}
+      </View>
 
       {answered ? (
         <View style={styles.result}>
@@ -172,7 +182,9 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderColor: colors.hairline,
   },
-  question: { fontFamily: fonts.display, fontSize: 25, lineHeight: 33, color: colors.text, marginBottom: 22 },
+  head: { flexDirection: "row", alignItems: "flex-start", gap: 14, marginBottom: 22 },
+  line: { fontFamily: fonts.ui, fontWeight: "500", fontSize: 15, lineHeight: 21, color: colors.dim, marginBottom: 8 },
+  question: { fontFamily: fonts.display, fontSize: 25, lineHeight: 33, color: colors.text },
   result: { height: 76, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   resultText: { fontFamily: fonts.ui, fontWeight: "500", fontSize: 18, color: colors.text },
   pick: {

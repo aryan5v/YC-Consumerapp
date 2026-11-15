@@ -1,17 +1,23 @@
+import { setAudioModeAsync } from "expo-audio";
 import { StatusBar } from "expo-status-bar";
 import { useCallback, useRef, useState } from "react";
 import { Animated, StyleSheet, View } from "react-native";
-import { SafeAreaProvider } from "react-native-safe-area-context";
+import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
+import { SettingsSheet } from "./src/components/SettingsSheet";
 import { story } from "./src/data";
 import { Home } from "./src/screens/Home";
 import { Player } from "./src/screens/Player";
 import { colors, ease } from "./src/theme";
+
+setAudioModeAsync({ playsInSilentMode: true, allowsRecording: false }).catch(() => {});
 
 function Shell() {
   const home = story.useHome();
   const [runId, setRunId] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
   const [playing, setPlaying] = useState(false);
+  const [settings, setSettings] = useState(false);
+  const insets = useSafeAreaInsets();
   const cover = useRef(new Animated.Value(0)).current;
 
   const play = async () => {
@@ -41,12 +47,13 @@ function Shell() {
   return (
     <View style={styles.root}>
       <StatusBar style="light" hidden={playing} animated />
-      <Home starting={starting} onPlay={play} />
+      <Home starting={starting} onPlay={play} onSettings={() => setSettings(true)} />
       {runId && home && (
         <Animated.View pointerEvents={playing ? "auto" : "none"} style={[StyleSheet.absoluteFill, { opacity: cover }]}>
           <Player runId={runId} streak={home.streak} episodeTitle={home.episode.title} onStarted={started} onExit={exit} />
         </Animated.View>
       )}
+      {settings && <SettingsSheet showMicrophone={!!story.speak} onClose={() => setSettings(false)} bottomInset={insets.bottom} />}
     </View>
   );
 }

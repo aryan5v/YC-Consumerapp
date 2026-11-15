@@ -9,6 +9,8 @@ import { convexStory, mockStory, StoryContext, useStory } from "./src/data";
 import { setSetting, useSettings } from "./src/settings";
 import { Home } from "./src/screens/Home";
 import { Player } from "./src/screens/Player";
+import { World } from "./src/screens/World";
+import { useReduceMotion } from "./src/a11y";
 import { colors, ease, fontFiles, fonts, motion, radius, type } from "./src/theme";
 
 setAudioModeAsync({ playsInSilentMode: true, allowsRecording: false }).catch(() => {});
@@ -20,8 +22,20 @@ function Shell() {
   const [starting, setStarting] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [settings, setSettings] = useState(false);
+  const [world, setWorld] = useState(false);
+  const reduceMotion = useReduceMotion();
+  const worldIn = useRef(new Animated.Value(0)).current;
   const insets = useSafeAreaInsets();
   const cover = useRef(new Animated.Value(0)).current;
+
+  const openWorld = () => {
+    setWorld(true);
+    Animated.timing(worldIn, { toValue: 1, duration: reduceMotion ? motion.instant : motion.slow, easing: ease.out, useNativeDriver: true }).start();
+  };
+
+  const closeWorld = () => {
+    Animated.timing(worldIn, { toValue: 0, duration: reduceMotion ? motion.instant : motion.base, easing: ease.out, useNativeDriver: true }).start(() => setWorld(false));
+  };
 
   const play = async () => {
     if (!home || starting) return;
@@ -49,8 +63,13 @@ function Shell() {
 
   return (
     <View style={styles.root}>
-      <StatusBar style="light" hidden={playing} animated />
-      <Home starting={starting} onPlay={play} onSettings={() => setSettings(true)} />
+      <StatusBar style="light" hidden={playing || world} animated />
+      <Home starting={starting} onPlay={openWorld} onSettings={() => setSettings(true)} />
+      {world && (
+        <Animated.View style={[StyleSheet.absoluteFill, { opacity: worldIn }]}>
+          <World active={!playing && !runId} onClose={closeWorld} onStory={play} />
+        </Animated.View>
+      )}
       {runId && home && (
         <Animated.View pointerEvents={playing ? "auto" : "none"} style={[StyleSheet.absoluteFill, { opacity: cover }]}>
           <Player runId={runId} streak={home.streak} episodeTitle={home.episode.title} onStarted={started} onExit={exit} />

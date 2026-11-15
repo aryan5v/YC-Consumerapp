@@ -51,6 +51,17 @@ export type HomeView = {
   run: { id: string; status: "active" | "ended" } | null;
 };
 
+export type WorldInteraction = {
+  thingId: string;
+  name: string;
+  description: string;
+  screenshot: string;
+  timeOfDay: number;
+  day: number;
+  seed: number | string;
+};
+export type WorldInteractionResult = { clipUrl: string; change?: Record<string, unknown> };
+
 export interface StoryProvider {
   name: "mock" | "convex";
   canReplay: boolean;
@@ -63,4 +74,5 @@ export interface StoryProvider {
   setPhone(phone: string): Promise<void>;
   speak?(runId: string, recordingUri: string, expectedBeatId: string): Promise<SpeakResult>;
   voiceReady?(runId: string, expectedBeatId: string): Promise<boolean>;
+  interact?(input: WorldInteraction): Promise<WorldInteractionResult>;
 }

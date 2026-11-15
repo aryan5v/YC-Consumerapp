@@ -1,7 +1,7 @@
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { useEffect, useRef } from "react";
-import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
+import { Animated, Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useReduceMotion } from "../a11y";
 import { Glass } from "../components/Glass";
@@ -49,7 +49,10 @@ export function Home({ starting, onPlay, onSettings }: { starting: boolean; onPl
       />
 
       <View style={[styles.top, { paddingTop: insets.top + 18 }]}>
-        <Text style={styles.wordmark}>Synqui</Text>
+        <View style={styles.brand}>
+          <Image source={require("../../assets/brand/synqui-mark.png")} style={styles.mark} accessibilityIgnoresInvertColors />
+          <Text style={styles.wordmark}>Synqui</Text>
+        </View>
         {home && <Text style={styles.date}>{dateLabel(home.episode.date)}</Text>}
         <Glass interactive style={styles.settings}>
           <Pressable accessibilityRole="button" accessibilityLabel="Settings" onPress={onSettings} style={styles.settingsHit}>
@@ -124,7 +127,9 @@ export function Home({ starting, onPlay, onSettings }: { starting: boolean; onPl
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg, overflow: "hidden" },
   top: { position: "absolute", top: 0, left: 26, right: 26, flexDirection: "row", alignItems: "center" },
-  wordmark: { flex: 1, fontFamily: fonts.title, fontSize: type.wordmark, letterSpacing: 3, color: colors.text },
+  brand: { flex: 1, flexDirection: "row", alignItems: "center", gap: 10 },
+  mark: { width: 24, height: 24 },
+  wordmark: { fontFamily: fonts.title, fontSize: type.wordmark, letterSpacing: 3, color: colors.text },
   settings: { width: 44, height: 44, marginLeft: 16, borderRadius: radius.round },
   settingsHit: { flex: 1, alignItems: "center", justifyContent: "center" },
   date: { fontFamily: fonts.mono, fontSize: type.micro, letterSpacing: ascii.monoTracking, textTransform: "uppercase", color: colors.dim },

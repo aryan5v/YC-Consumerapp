@@ -1,6 +1,6 @@
 import { Fragment, useSyncExternalStore } from "react";
 import { episode, nodes, spoken, unheard } from "./mockEpisode";
-import type { ClipStatus, HomeView, RunView, StoryProvider } from "./types";
+import type { ClipStatus, HomeView, RunView, StoryProvider, WorldInteraction, WorldInteractionResult } from "./types";
 
 type Run = {
   id: string;
@@ -141,7 +141,24 @@ function activeRun(runId: string, expectedBeatId: string) {
   return run;
 }
 
+const WORLD_INTERACT_DELAY = 4000;
+const worldScenes: Record<string, WorldInteractionResult> = {
+  lantern: { clipUrl: "mock://lights", change: { lit: true } },
+  boat: { clipUrl: "mock://dawn", change: { gone: true } },
+  cabin: { clipUrl: "mock://redroom", change: { doorOpen: true } },
+  lighthouse: { clipUrl: "mock://tower", change: { lit: true, doorOpen: true } },
+  stranger: { clipUrl: "mock://stranger" },
+  well: { clipUrl: "mock://plant" },
+  arch: { clipUrl: "mock://overpass" },
+};
+
+async function interact(input: WorldInteraction): Promise<WorldInteractionResult> {
+  await new Promise((resolve) => setTimeout(resolve, WORLD_INTERACT_DELAY));
+  return worldScenes[input.thingId.split(":").pop() ?? ""] ?? { clipUrl: "mock://lights" };
+}
+
 export const mockProvider: StoryProvider = {
+  interact,
   name: "mock",
   canReplay: true,
   Root: Fragment,

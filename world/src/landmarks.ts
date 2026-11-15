@@ -1,11 +1,9 @@
 import * as THREE from 'three';
-import { createThing, type Thing, type ThingKind } from './things';
-import { heightAt, pathX, shore, WATER } from './terrain';
+import { createThing, type Thing } from './things';
+import { heightAt, WATER } from './terrain';
+import { kinds, spot, SECTOR } from './layout';
 import { addRim } from './shading';
 
-const kinds:ThingKind[]=['lantern','stranger','well','arch','cabin','boat','lighthouse'];
-const offsets=[5,-6,-13,-25,-40,-48,-65];
-const side=[3,-3,6,0,-10,0,0];
 
 export class Landmarks {
   group=new THREE.Group();
@@ -14,13 +12,12 @@ export class Landmarks {
   constructor(public seed:number){}
 
   update(player:THREE.Vector3,elapsed:number){
-    const sector=Math.round(-player.z/192);
+    const sector=Math.round(-player.z/SECTOR);
     for(let s=sector-1;s<=sector+1;s++){
       for(let i=0;i<kinds.length;i++){
         const kind=kinds[i],id=`${this.seed}:${s}:${kind}`;
         if(this.things.has(id))continue;
-        const z=-s*192+offsets[i];
-        const x=kind==='boat'?shore(z,this.seed)-1:kind==='lighthouse'?shore(z,this.seed)-9:pathX(z,this.seed)+side[i];
+        const {x,z}=spot(i,s,this.seed);
         const thing=createThing(kind,id);
         const styled=new Set<THREE.Material>();
         thing.root.traverse(o=>{if(o instanceof THREE.Mesh&&!o.userData.effect&&o.material instanceof THREE.MeshStandardMaterial&&!styled.has(o.material)){styled.add(o.material);o.material.color.lerp(new THREE.Color('#e8eef1'),.16);o.material.metalness*=.5;addRim(o.material,.4);}});

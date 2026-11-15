@@ -2,7 +2,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import { useEffect, useRef, useState } from "react";
 import { Animated, Keyboard, Linking, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import { story, type Ending } from "../data";
+import { useStory, type Ending } from "../data";
 import { colors, ease, fonts, gradients, motion, radius, type } from "../theme";
 import { Ring } from "./Ring";
 
@@ -27,6 +27,7 @@ export function EndingCard({
   onDone: () => void;
   bottomInset: number;
 }) {
+  const story = useStory();
   const steps = useRef([0, 1, 2, 3, 4].map(() => new Animated.Value(0))).current;
   const keyboard = useRef(new Animated.Value(0)).current;
   const [phone, setPhone] = useState("");

@@ -2,6 +2,7 @@ import { BlurView } from "expo-blur";
 import * as Haptics from "expo-haptics";
 import { useEffect, useRef } from "react";
 import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
+import { convexStory } from "../data";
 import { setSetting, useSettings } from "../settings";
 import { colors, ease, fonts, motion, radius, type } from "../theme";
 
@@ -56,7 +57,7 @@ function Switch({ label, detail, value, onChange }: { label: string; detail: str
   );
 }
 
-export function SettingsSheet({ showMicrophone, onClose, bottomInset }: { showMicrophone: boolean; onClose: () => void; bottomInset: number }) {
+export function SettingsSheet({ onClose, bottomInset }: { onClose: () => void; bottomInset: number }) {
   const settings = useSettings();
   const appear = useRef(new Animated.Value(0)).current;
 
@@ -89,12 +90,18 @@ export function SettingsSheet({ showMicrophone, onClose, bottomInset }: { showMi
           value={settings.voice}
           onChange={(value) => setSetting("voice", value)}
         />
-        {showMicrophone && (
+        <Switch
+          label="Microphone"
+          detail="Hold the mic at a stop to answer out loud. Tapping always works."
+          value={settings.microphone}
+          onChange={(value) => setSetting("microphone", value)}
+        />
+        {convexStory && (
           <Switch
-            label="Microphone"
-            detail="Hold the mic at a stop to answer out loud. Tapping always works."
-            value={settings.microphone}
-            onChange={(value) => setSetting("microphone", value)}
+            label="Demo story"
+            detail="Play the built-in offline episode instead of today\u2019s live one."
+            value={settings.demo}
+            onChange={(value) => setSetting("demo", value)}
           />
         )}
       </Animated.View>

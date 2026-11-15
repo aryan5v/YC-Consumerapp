@@ -13,7 +13,7 @@ import { MicButton } from "../components/MicButton";
 import { Presence } from "../components/Presence";
 import { PuzzleSheet, type PuzzleState } from "../components/PuzzleSheet";
 import { SettingsGlyph, SettingsSheet } from "../components/SettingsSheet";
-import { audioSource, story, videoSource, type Ending, type Stop } from "../data";
+import { audioSource, useStory, videoSource, type Ending, type Stop } from "../data";
 import { useSettings } from "../settings";
 import { colors, ease, fonts, gradients, motion, radius, type } from "../theme";
 
@@ -50,6 +50,7 @@ export function Player({
   onStarted: () => void;
   onExit: () => void;
 }) {
+  const story = useStory();
   const view = story.useRun(runId);
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -331,7 +332,7 @@ export function Player({
     }
   };
 
-  const micOn = settings.microphone && !!story.speak && !speakUnavailable && !micDenied;
+  const micOn = settings.microphone && !!story.speak && !!current?.stop?.spokenAudioUrl && !speakUnavailable && !micDenied;
   const mic = (
     <MicButton
       busy={voiceBusy}
@@ -523,7 +524,7 @@ export function Player({
           </View>
         </Presence>
       </View>
-      {settingsOpen && <SettingsSheet showMicrophone={!!story.speak && !speakUnavailable} onClose={() => setSettingsOpen(false)} bottomInset={insets.bottom} />}
+      {settingsOpen && <SettingsSheet onClose={() => setSettingsOpen(false)} bottomInset={insets.bottom} />}
     </View>
   );
 }

@@ -6,7 +6,7 @@ import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ring } from "../components/Ring";
 import { SettingsGlyph } from "../components/SettingsSheet";
-import { imageSource, story } from "../data";
+import { imageSource, useStory } from "../data";
 import { colors, ease, fonts, gradients, motion, radius, type } from "../theme";
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -19,6 +19,7 @@ function dateLabel(iso: string) {
 }
 
 export function Home({ starting, onPlay, onSettings }: { starting: boolean; onPlay: () => void; onSettings: () => void }) {
+  const story = useStory();
   const home = story.useHome();
   const insets = useSafeAreaInsets();
   const drift = useRef(new Animated.Value(0)).current;

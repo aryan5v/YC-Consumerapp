@@ -4,7 +4,8 @@ import { useCallback, useRef, useState } from "react";
 import { Animated, StyleSheet, View } from "react-native";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 import { SettingsSheet } from "./src/components/SettingsSheet";
-import { story } from "./src/data";
+import { convexStory, mockStory, StoryContext, useStory } from "./src/data";
+import { useSettings } from "./src/settings";
 import { Home } from "./src/screens/Home";
 import { Player } from "./src/screens/Player";
 import { colors, ease, motion } from "./src/theme";
@@ -12,6 +13,7 @@ import { colors, ease, motion } from "./src/theme";
 setAudioModeAsync({ playsInSilentMode: true, allowsRecording: false }).catch(() => {});
 
 function Shell() {
+  const story = useStory();
   const home = story.useHome();
   const [runId, setRunId] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
@@ -53,17 +55,27 @@ function Shell() {
           <Player runId={runId} streak={home.streak} episodeTitle={home.episode.title} onStarted={started} onExit={exit} />
         </Animated.View>
       )}
-      {settings && <SettingsSheet showMicrophone={!!story.speak} onClose={() => setSettings(false)} bottomInset={insets.bottom} />}
+      {settings && <SettingsSheet onClose={() => setSettings(false)} bottomInset={insets.bottom} />}
     </View>
+  );
+}
+
+function Story() {
+  const { demo } = useSettings();
+  const story = demo || !convexStory ? mockStory : convexStory;
+  return (
+    <story.Root key={story.name}>
+      <StoryContext.Provider value={story}>
+        <Shell />
+      </StoryContext.Provider>
+    </story.Root>
   );
 }
 
 export default function App() {
   return (
     <SafeAreaProvider>
-      <story.Root>
-        <Shell />
-      </story.Root>
+      <Story />
     </SafeAreaProvider>
   );
 }

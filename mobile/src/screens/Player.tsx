@@ -316,7 +316,7 @@ export function Player({
     setCommit({ fromBeatId: current.beatId, url: null });
     notBefore.current = Infinity;
     try {
-      const result = await story.speak(runId, recordingUri);
+      const result = await story.speak(runId, recordingUri, current.beatId);
       setHeard(result.transcript);
       if (stop.kind === "choice" && result.matchedOptionId) {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -371,7 +371,7 @@ export function Player({
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setPicked(optionId);
     setCommit({ fromBeatId: current.beatId, optionId, url: option.childStatus === "ready" ? option.childClipUrl : null });
-    story.choose(runId, optionId).catch(() => {
+    story.choose(runId, optionId, current.beatId).catch(() => {
       setPicked(null);
       setCommit(null);
     });
@@ -383,7 +383,7 @@ export function Player({
     setCommit({ fromBeatId: current.beatId, url: null });
     notBefore.current = Infinity;
     try {
-      const { correct } = await story.answer(runId, answer);
+      const { correct } = await story.answer(runId, answer, current.beatId);
       settlePuzzle(current.beatId, correct);
     } catch {
       notBefore.current = 0;

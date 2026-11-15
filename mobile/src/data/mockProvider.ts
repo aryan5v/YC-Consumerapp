@@ -45,7 +45,7 @@ function buildRun(r: Run): RunView {
     beatIndex: r.beatIndex,
     beatsTotal: episode.beatsTotal,
     current: {
-      beatId: `${r.id}:${r.beatIndex}:${r.node}`,
+      beatId: beatIdOf(r),
       clipUrl: ready ? node.clip : null,
       narration: node.narration,
       status: ready ? "ready" : "generating",
@@ -126,8 +126,13 @@ function subscribe(l: () => void) {
 
 const latency = () => new Promise<void>((resolve) => setTimeout(resolve, MUTATION_LATENCY));
 
-function activeRun(runId: string) {
+function beatIdOf(r: Run) {
+  return `${r.id}:${r.beatIndex}:${r.node}`;
+}
+
+function activeRun(runId: string, expectedBeatId: string) {
   if (!run || run.id !== runId) throw new Error("Unknown run");
+  if (beatIdOf(run) !== expectedBeatId) throw new Error("This stop has already been answered");
   return run;
 }
 
@@ -150,17 +155,17 @@ export const mockProvider: StoryProvider = {
     emit();
     return r.id;
   },
-  async choose(runId, optionId) {
+  async choose(runId, optionId, expectedBeatId) {
     await latency();
-    const r = activeRun(runId);
+    const r = activeRun(runId, expectedBeatId);
     const stop = nodes[r.node].stop;
     const option = stop?.kind === "choice" ? stop.options.find((o) => o.id === optionId) : undefined;
     if (!option) throw new Error("Unknown option");
     advance(r, option.to, option.label);
   },
-  async answer(runId, answer) {
+  async answer(runId, answer, expectedBeatId) {
     await latency();
-    const r = activeRun(runId);
+    const r = activeRun(runId, expectedBeatId);
     const stop = nodes[r.node].stop;
     if (stop?.kind !== "puzzle") throw new Error("No puzzle at this beat");
     const given = answer.trim().toLowerCase();
@@ -173,9 +178,9 @@ export const mockProvider: StoryProvider = {
   async setPhone() {
     await latency();
   },
-  async speak(runId) {
+  async speak(runId, _recordingUri, expectedBeatId) {
     await new Promise((resolve) => setTimeout(resolve, 700));
-    const r = activeRun(runId);
+    const r = activeRun(runId, expectedBeatId);
     const stop = nodes[r.node].stop;
     if (!stop) throw new Error("No stop at this beat");
     r.heard += 1;

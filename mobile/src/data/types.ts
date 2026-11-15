@@ -58,8 +58,8 @@ export interface StoryProvider {
   useHome(): HomeView | undefined;
   useRun(runId: string | null): RunView | undefined;
   startToday(): Promise<string>;
-  choose(runId: string, optionId: string): Promise<void>;
-  answer(runId: string, answer: string): Promise<{ correct: boolean }>;
+  choose(runId: string, optionId: string, expectedBeatId: string): Promise<void>;
+  answer(runId: string, answer: string, expectedBeatId: string): Promise<{ correct: boolean }>;
   setPhone(phone: string): Promise<void>;
-  speak?(runId: string, recordingUri: string): Promise<SpeakResult>;
+  speak?(runId: string, recordingUri: string, expectedBeatId: string): Promise<SpeakResult>;
 }

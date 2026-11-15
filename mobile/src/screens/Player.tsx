@@ -30,8 +30,6 @@ const PUZZLE_LIFT = 150;
 const CAPTION_CLEARANCE = 96;
 const MIC_SPACE = 72;
 
-let speakUnavailable = false;
-
 type Slot = { url: string | null; ready: boolean; aspect: number | null; retries: number; backdrop: VideoThumbnail | null };
 type Snap = { beatId: string; clipUrl: string; narration: string; stop: Stop | null; ending: Ending | null; beatIndex: number; beatsTotal: number };
 type Commit = { fromBeatId: string; optionId?: string; actionId?: string; url: string | null };
@@ -86,14 +84,15 @@ export function Player({
   const holdScale = useRef(new Animated.Value(1)).current;
   const reduceMotion = useReduceMotion();
   const sceneLift = useRef(new Animated.Value(0)).current;
-  const [voiceOk, setVoiceOk] = useState(!speakUnavailable && !story.voiceReady);
+  const [voiceOk, setVoiceOk] = useState(!story.voiceReady);
+  const probeBeat = view?.current.beatId;
   useEffect(() => {
-    if (speakUnavailable || !story.voiceReady) return;
-    story.voiceReady().then((ok) => {
-      if (!ok) speakUnavailable = true;
-      setVoiceOk(ok);
-    });
-  }, [story]);
+    if (!story.voiceReady || !probeBeat) return;
+    let active = true;
+    setVoiceOk(false);
+    story.voiceReady(runId, probeBeat).then((ok) => { if (active) setVoiceOk(ok); });
+    return () => { active = false; };
+  }, [story, runId, probeBeat]);
   const settings = useSettings();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [listening, setListening] = useState(false);
@@ -362,7 +361,7 @@ export function Player({
         }
       }
     } catch {
-      speakUnavailable = true;
+      setVoiceOk(false);
       notBefore.current = 0;
       setCommit(null);
     } finally {
@@ -370,7 +369,7 @@ export function Player({
     }
   };
 
-  const micOn = settings.microphone && voiceOk && !!story.speak && !!current?.stop?.spokenAudioUrl && !speakUnavailable && !micDenied;
+  const micOn = settings.microphone && voiceOk && !!story.speak && !!current?.stop?.spokenAudioUrl && !micDenied;
   const mic = (bare: boolean) => (
     <MicButton
       bare={bare}

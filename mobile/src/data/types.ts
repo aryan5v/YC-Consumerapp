@@ -62,5 +62,5 @@ export interface StoryProvider {
   answer(runId: string, answer: string, expectedBeatId: string): Promise<{ correct: boolean }>;
   setPhone(phone: string): Promise<void>;
   speak?(runId: string, recordingUri: string, expectedBeatId: string): Promise<SpeakResult>;
-  voiceReady?(): Promise<boolean>;
+  voiceReady?(runId: string, expectedBeatId: string): Promise<boolean>;
 }

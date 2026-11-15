@@ -89,7 +89,7 @@ export function createThing(kind: ThingKind, id: string): Thing {
   }
 
   function halo(parent: THREE.Object3D, size: number): THREE.Mesh {
-    const surface = new THREE.MeshBasicMaterial({ color: 0xffa3b0, transparent: true, opacity: 0.055, depthWrite: false });
+    const surface = new THREE.MeshBasicMaterial({ color: 0xffa3b0, transparent: true, opacity: 0.16, depthWrite: false, fog: false, blending: THREE.AdditiveBlending });
     materials.add(surface);
     const object = mesh(new THREE.SphereGeometry(size, 10, 6), surface, 0, 0, 0, parent);
     object.castShadow = false;
@@ -190,7 +190,7 @@ export function createThing(kind: ThingKind, id: string): Thing {
     root.add(beacon);
     cylinder(0.3, 0.3, 0.75, glow(3), 0, 0, 0, 8, beacon);
     halo(beacon, 1.55);
-    const beamMaterial = new THREE.MeshBasicMaterial({ color: 0xe8eef1, transparent: true, opacity: 0.035, depthWrite: false, side: THREE.DoubleSide });
+    const beamMaterial = new THREE.MeshBasicMaterial({ color: 0xe8eef1, transparent: true, opacity: 0.07, depthWrite: false, fog: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
     materials.add(beamMaterial);
     const shaft = mesh(new THREE.ConeGeometry(1.1, 9, 12, 1, true), beamMaterial, 0, 0, 5.1, beacon);
     shaft.rotation.x = -Math.PI / 2;

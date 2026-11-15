@@ -3,7 +3,10 @@ import * as THREE from 'three';
 export const shared = {
   rim: { value: new THREE.Color('#E8EEF1') },
   time: { value: 0 },
+  night: { value: 0 },
 };
+
+export const NIGHT_GRADE = 'diffuseColor.rgb = mix(diffuseColor.rgb, vec3(dot(diffuseColor.rgb, vec3(.3, .59, .11))) * vec3(.55, .8, .95), nightGrade * .7);';
 
 const ramp = (() => {
   const data = new Uint8Array([120, 120, 120, 255, 190, 190, 190, 255, 235, 235, 235, 255, 255, 255, 255, 255]);

@@ -40,7 +40,8 @@ export function heightAt(x: number, z: number, seed: number) {
   return -3 + coast * (4 + hills * (1 - path * .65)) + THREE.MathUtils.smoothstep(inland,45,150)*hills*3;
 }
 
-import { addRim, shared, toon } from './shading';
+import { addRim, NIGHT_GRADE, shared, toon } from './shading';
+import { clearance } from './layout';
 
 const dummy = new THREE.Object3D();
 const color = new THREE.Color();
@@ -68,6 +69,8 @@ function tuftGeometry() {
 function windy(material: THREE.Material) {
   addRim(material, 0, shader => {
     shader.uniforms.time = shared.time;
+    shader.uniforms.nightGrade = shared.night;
+    shader.fragmentShader = 'uniform float nightGrade;\n' + shader.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>\n' + NIGHT_GRADE);
     shader.fragmentShader = shader.fragmentShader.replace('#include <normal_fragment_begin>', '#include <normal_fragment_begin>\nnormal = normalize((viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz);');
     shader.vertexShader = 'uniform float time;\n' + shader.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
       vec3 root = instanceMatrix[3].xyz;
@@ -80,15 +83,17 @@ function windy(material: THREE.Material) {
 
 function painted(material: THREE.Material, rim: number) {
   addRim(material, rim, shader => {
+    shader.uniforms.nightGrade = shared.night;
     shader.vertexShader = 'varying vec3 paintPosition;\n' + shader.vertexShader.replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvec4 paintWorld=vec4(transformed,1.);\n#ifdef USE_INSTANCING\npaintWorld=instanceMatrix*paintWorld;\n#endif\npaintPosition=(modelMatrix*paintWorld).xyz;');
-    shader.fragmentShader = 'varying vec3 paintPosition;\nfloat phash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}\nfloat pnoise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(phash(i),phash(i+vec2(1.,0.)),f.x),mix(phash(i+vec2(0.,1.)),phash(i+vec2(1.,1.)),f.x),f.y);}\n' + shader.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+    shader.fragmentShader = 'uniform float nightGrade;\nvarying vec3 paintPosition;\nfloat phash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}\nfloat pnoise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(phash(i),phash(i+vec2(1.,0.)),f.x),mix(phash(i+vec2(0.,1.)),phash(i+vec2(1.,1.)),f.x),f.y);}\n' + shader.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
       vec3 pp = paintPosition;
       float ang = sin(pp.x * .11 + pp.z * .07) * 1.3;
       vec2 q = mat2(cos(ang), -sin(ang), sin(ang), cos(ang)) * pp.xz;
       float stroke = pnoise(vec2(q.x * .9, q.y * 4. + pp.y * 2.)) * .6 + pnoise(vec2(q.x * 2.2, q.y * 9.)) * .4;
       float broad = pnoise(pp.xz * .05);
       diffuseColor.rgb *= .9 + stroke * .16;
-      diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(1.06, 1.08, .92), broad * .6);`);
+      diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(1.06, 1.08, .92), broad * .6);
+      ${NIGHT_GRADE}`);
   });
 }
 
@@ -158,11 +163,14 @@ export class Terrain {
     geometry.computeVertexNormals();
     group.add(new THREE.Mesh(geometry, this.ground));
     const trees: number[][] = [], rocks: number[][] = [], tufts: number[][] = [], flowers: number[][] = [];
-    for (let i = 0; i < 3200; i++) {
+    for (let i = 0; i < 2400; i++) {
       const x = (cx + hash(cx * 103 + i, cz, this.seed)) * CHUNK, z = (cz + hash(cx, cz * 107 + i, this.seed + 1)) * CHUNK;
       const y = heightAt(x, z, this.seed), trail = Math.abs(x - pathX(z, this.seed));
       const r = hash(cx * 89 + i, cz * 97, this.seed + 7);
       if (y < -.6) continue;
+      const room = i >= 30 && i < 190 ? 99 : clearance(x, z, this.seed);
+      if (i < 30 && room < 8) continue;
+      if (i >= 190 && room < 2.2) continue;
       if (i < 22) { if (trail > 8 && x < shore(z, this.seed) - 14) trees.push([x, y, z, 4 + r * 6, r]); continue; }
       if (i < 30) { if (trail > 3) rocks.push([x, y, z, .4 + r * 1.6, r]); continue; }
       if (trail < 1.5) continue;
@@ -171,7 +179,7 @@ export class Terrain {
     }
     const near: THREE.Object3D[] = [];
     const add = (geo: THREE.BufferGeometry, mat: THREE.Material, items: number[][], type: string) => {
-      const per = type === 'crown' ? 5 : 1;
+      const per = type === 'crown' ? 3 : 1;
       const mesh = new THREE.InstancedMesh(geo, mat, Math.max(1, items.length * per));
       mesh.count = items.length * per;
       let index = 0;

@@ -170,7 +170,7 @@ export class Sky {
     this.sunLight.color.copy(c.light);
     this.sunLight.intensity = power;
     this.ambient.color.copy(c.sky); this.ambient.groundColor.copy(c.ground);
-    this.ambient.intensity = 1.25 + this.night * .5;
+    this.ambient.intensity = 1.25 - this.night * .45;
     this.rim.value.copy(c.horizon).lerp(new THREE.Color(theme.moonstone), .4 + this.night * .4);
     this.group.position.copy(player);
     this.mountains.position.set(player.x, 35, player.z);

@@ -61,7 +61,7 @@ function clearInteraction(){
 function tap(x:number,y:number){
   if(paused||interaction)return;
   raycaster.setFromCamera(new THREE.Vector2(x/innerWidth*2-1,1-y/innerHeight*2),camera);
-  const hits=raycaster.intersectObjects([...landmarks.group.children,...terrain.group.children],true);
+  const hits=raycaster.intersectObjects(landmarks.group.children,true);
   const hit=hits.find(h=>!h.object.userData.effect);
   if(!hit)return;
   let root:THREE.Object3D|null=hit.object;
@@ -120,7 +120,7 @@ function render(now:number){
   viewPitch+=(controls.pitch-viewPitch)*(1-Math.exp(-dt*14));
   camera.position.copy(player);camera.position.y+=Math.abs(Math.sin(stepPhase))*.05*Math.min(pace,1.4)-.02*Math.min(pace,1);
   camera.rotation.set(viewPitch+Math.sin(stepPhase*2)*.004*pace,viewYaw,Math.sin(stepPhase)*.006*pace);
-  shared.time.value=sky.elapsed;shared.rim.value.copy(sky.rim.value);
+  shared.time.value=sky.elapsed;shared.night.value=THREE.MathUtils.smoothstep(-sky.sunDir.y,.0,.22);shared.rim.value.copy(sky.rim.value);
   if(asciiDuration>=0){const t=asciiDuration===0?1:Math.min(1,(now-asciiStart)/asciiDuration);const e=t*t*(3-2*t);ascii.uniforms.amount.value=asciiFrom+(asciiTo-asciiFrom)*e;ascii.enabled=ascii.uniforms.amount.value>.001;}
   audio.update(dt,{moving:Math.min(pace,1.6),surface:surfaceAt(player.x,player.z,seed),shore:Math.max(0,shore(player.z,seed)-player.x),hours:sky.hours,elapsed:sky.elapsed});
   terrain.update(player.x,player.z);sky.update(Math.min(raw,.5),player,scene);landmarks.update(player,sky.elapsed);

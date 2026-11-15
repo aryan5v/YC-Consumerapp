@@ -111,6 +111,7 @@ export default defineSchema({
   }).index("by_date", ["date"]),
 
   runs: defineTable({
+    prewarm: v.optional(v.boolean()),
     userId: v.id("users"),
     episodeId: v.id("episodes"),
     status: v.union(v.literal("active"), v.literal("ended")),
@@ -123,6 +124,7 @@ export default defineSchema({
     ending: v.optional(endingValidator),
     error: v.optional(v.string()),
     startedAt: v.number(),
+    lastActivityAt: v.optional(v.number()),
     endedAt: v.optional(v.number()),
   })
     .index("by_user_episode", ["userId", "episodeId"])
@@ -177,7 +179,38 @@ export default defineSchema({
   })
     .index("by_beat", ["beatId"])
     .index("by_job", ["jobId"])
-    .index("by_run", ["runId"]),
+    .index("by_run", ["runId"])
+    .index("by_status_created", ["status", "createdAt"]),
+
+  openings: defineTable({
+    episodeId: v.id("episodes"),
+    key: v.string(),
+    seed: v.number(),
+    aspect: v.string(),
+    seconds: v.number(),
+    beat: v.any(),
+    clipStorageId: v.optional(v.id("_storage")),
+    clipUrl: v.string(),
+    audioStorageId: v.optional(v.id("_storage")),
+    audioUrl: v.optional(v.string()),
+    children: v.array(
+      v.object({
+        optionId: v.string(),
+        actionId: v.optional(v.string()),
+        clipPrompt: v.string(),
+        stop: v.optional(v.any()),
+        state: v.optional(v.any()),
+        narration: v.optional(v.string()),
+        spokenLine: v.optional(v.string()),
+        storageId: v.optional(v.id("_storage")),
+        url: v.string(),
+        seed: v.number(),
+        audioStorageId: v.optional(v.id("_storage")),
+        audioUrl: v.optional(v.string()),
+      }),
+    ),
+    createdAt: v.number(),
+  }).index("by_episode_key", ["episodeId", "key"]),
 
   streaks: defineTable({
     userId: v.id("users"),

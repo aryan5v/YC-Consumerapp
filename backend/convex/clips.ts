@@ -5,6 +5,7 @@ import { internal } from "./_generated/api";
 import { childSpecs } from "./lib/story";
 import { MAX_GENERATE_ATTEMPTS, maybeFinish, maybePrefetch } from "./lib/orchestration";
 import { heldClipUrl } from "./lib/config";
+import { captureOpening } from "./lib/openings";
 
 async function clipForBeat(ctx: { db: QueryCtx["db"] }, beatId: Id<"beats">) {
   return await ctx.db
@@ -145,6 +146,9 @@ export const markReady = internalMutation({
     const run = await ctx.db.get(beat.runId);
     if (run !== null && run.currentBeatId === beatId && beat.stop !== undefined && lastFrameUrl !== undefined) {
       await ctx.scheduler.runAfter(0, internal.tray.runSegment, { beatId });
+    }
+    if (run !== null && run.prewarm === true) {
+      await captureOpening(ctx, run.episodeId, run._id);
     }
     return null;
   },

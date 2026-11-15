@@ -3,6 +3,7 @@ import { action, internalMutation, internalQuery, mutation, query } from "./_gen
 import { internal } from "./_generated/api";
 import { Doc, Id } from "./_generated/dataModel";
 import { ensureDeviceUser, requireDeviceUser, runOwnedBy } from "./lib/session";
+import { PREWARM_MAX_AGE_MS, openingFor, applyOpening, STORY_OPENING_KEY } from "./lib/openings";
 import { ensureEpisode } from "./lib/episodes";
 import { pacificDate } from "./lib/pacific";
 import { runViewValidator } from "./lib/validators";
@@ -14,10 +15,11 @@ import { openaiConfigured, synthesize, transcribe } from "./lib/openai";
 import { deepseekJSON, directorMode, parseJSONObject } from "./lib/deepseek";
 import { graderMessages, speechMapperMessages } from "./lib/director";
 import { checkAnswer } from "./lib/story";
-import { childrenOfBeat, clipForBeat, kickRun } from "./lib/orchestration";
+import { childrenOfBeat, clipForBeat, kickRun, rescueStuckClips } from "./lib/orchestration";
 import {
   activeRunTtlMs,
   customRunsPerHour,
+  idleRunTtlMs,
   episodeBeats,
   maxActiveRuns,
   maxUploadBytes,
@@ -33,20 +35,48 @@ const NO_SPEECH = {
   replyAudioUrl: null as string | null,
 };
 
-async function refuseWhenAtCapacity(ctx: Parameters<typeof kickRun>[0]): Promise<void> {
-  const cutoff = Date.now() - activeRunTtlMs();
+// End every run that has had no activity for a while, so abandoned test runs and closed phones
+// cannot eat the capacity a demo needs. Pre-generation runs are ours, not players', so they are
+// swept on their own shorter clock and never counted against the cap.
+export async function sweepStaleRuns(ctx: Parameters<typeof kickRun>[0]): Promise<{ ended: number; live: number }> {
+  const now = Date.now();
+  const idleCutoff = now - idleRunTtlMs();
+  const hardCutoff = now - activeRunTtlMs();
   const active = await ctx.db
     .query("runs")
     .withIndex("by_status", (q) => q.eq("status", "active"))
     .collect();
+  let ended = 0;
   let live = 0;
   for (const run of active) {
-    if (run.startedAt < cutoff) {
-      await ctx.db.patch(run._id, { status: "ended", endedAt: Date.now() });
+    const last = run.lastActivityAt ?? run.startedAt;
+    if (run.prewarm === true) {
+      if (now - run.startedAt > PREWARM_MAX_AGE_MS) {
+        await ctx.db.patch(run._id, {
+          status: "ended",
+          endedAt: now,
+          error: "abandoned: this pre-generation attempt did not finish",
+        });
+        ended += 1;
+      }
+      continue;
+    }
+    if (last < idleCutoff || run.startedAt < hardCutoff) {
+      await ctx.db.patch(run._id, {
+        status: "ended",
+        endedAt: now,
+        error: "abandoned: no activity for ten minutes, a fresh run will start where this one stopped",
+      });
+      ended += 1;
       continue;
     }
     live += 1;
   }
+  return { ended, live };
+}
+
+async function refuseWhenAtCapacity(ctx: Parameters<typeof kickRun>[0]): Promise<void> {
+  const { live } = await sweepStaleRuns(ctx);
   if (live >= maxActiveRuns()) {
     throw new Error(
       "the demo is at capacity: too many episodes are being generated at once. Try again in a minute.",
@@ -77,6 +107,7 @@ export const startToday = mutation({
       });
     }
     await refuseWhenAtCapacity(ctx);
+    const opening = await openingFor(ctx, episode._id, STORY_OPENING_KEY);
     const runId = await ctx.db.insert("runs", {
       userId: user._id,
       episodeId: episode._id,
@@ -86,7 +117,12 @@ export const startToday = mutation({
       beatsSeen: 0,
       state: { items: [], trust: 0, clues: [], beats_left: episode.beatsTotal },
       startedAt: Date.now(),
+      lastActivityAt: Date.now(),
     });
+    if (opening !== null) {
+      await applyOpening(ctx, runId, opening);
+      return runId;
+    }
     const beatId = await ctx.db.insert("beats", {
       runId,
       depth: 0,
@@ -98,6 +134,19 @@ export const startToday = mutation({
     await ctx.db.patch(runId, { currentBeatId: beatId });
     await ctx.scheduler.runAfter(0, internal.director.generateBeat, { beatId });
     return runId;
+  },
+});
+
+// The sweeper: end abandoned runs, and restart the poll chain of any clip whose own chain died.
+// A clip stuck mid-generation is what makes a phone show a clip with no options after it, so this
+// has to heal itself without a deploy.
+export const sweep = internalMutation({
+  args: {},
+  returns: v.object({ ended: v.number(), live: v.number(), resumed: v.number(), recipled: v.number() }),
+  handler: async (ctx) => {
+    const swept = await sweepStaleRuns(ctx);
+    const rescued = await rescueStuckClips(ctx);
+    return { ended: swept.ended, live: swept.live, resumed: rescued.resumed, recipled: rescued.restarted };
   },
 });
 
@@ -129,6 +178,7 @@ export const startCustom = mutation({
       beatsSeen: 0,
       state: { items: [], trust: 0, clues: [], beats_left: episodeBeats() },
       startedAt: Date.now(),
+      lastActivityAt: Date.now(),
     });
     const beatId = await ctx.db.insert("beats", {
       runId,

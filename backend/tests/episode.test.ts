@@ -73,9 +73,12 @@ async function playEpisode(t: Backend, options: { wrongAnswers?: number } = {}) 
     if (stop.kind === "choice") {
       expect(stop.options).toHaveLength(3);
       for (const option of stop.options) {
-        expect(option.childStatus).toBe("ready");
-        expect(option.childClipUrl).toMatch(/^https:\/\//);
-        expect(option.box).toBeNull();
+        expect(option.region).toBeNull();
+        expect(option.actions.length).toBeGreaterThan(0);
+        for (const action of option.actions) {
+          expect(action.childStatus).toBe("ready");
+          expect(action.childClipUrl).toMatch(/^https:\/\//);
+        }
       }
       transcript.push(`  choice: ${stop.options.map((option) => option.label).join(" | ")}`);
       await t.mutation(api.runs.choose, {
@@ -412,9 +415,11 @@ describe("clip failures", () => {
     if (view.stop?.kind === "choice") {
       expect(view.stop.options).toHaveLength(3);
       for (const option of view.stop.options) {
-        expect(option.childStatus).toBe("ready");
-        expect(option.childClipUrl).toMatch(/^https:\/\//);
-        expect(option.box).toBeNull();
+        expect(option.region).toBeNull();
+        for (const action of option.actions) {
+          expect(action.childStatus).toBe("ready");
+          expect(action.childClipUrl).toMatch(/^https:\/\//);
+        }
       }
     }
     expect(view.current.beatId).toBe(built.beatId);

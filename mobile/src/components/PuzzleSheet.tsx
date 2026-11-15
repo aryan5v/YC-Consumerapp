@@ -3,7 +3,7 @@ import * as Haptics from "expo-haptics";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Animated, Keyboard, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import type { PuzzleStop } from "../data";
-import { colors, ease, fonts } from "../theme";
+import { colors, ease, fonts, motion, radius, type } from "../theme";
 import { Ring } from "./Ring";
 
 export type PuzzleState = "idle" | "submitting" | "correct" | "wrong";
@@ -33,7 +33,7 @@ export function PuzzleSheet({
   const answered = state === "correct" || state === "wrong";
 
   useEffect(() => {
-    Animated.timing(appear, { toValue: 1, duration: 620, delay: 200, easing: ease.out, useNativeDriver: true }).start();
+    Animated.timing(appear, { toValue: 1, duration: motion.gentle, delay: 200, easing: ease.out, useNativeDriver: true }).start();
   }, [appear]);
 
   useEffect(() => {
@@ -176,20 +176,20 @@ const styles = StyleSheet.create({
     bottom: 0,
     paddingTop: 28,
     paddingHorizontal: 24,
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
+    borderTopLeftRadius: radius.sheet,
+    borderTopRightRadius: radius.sheet,
     overflow: "hidden",
     borderTopWidth: StyleSheet.hairlineWidth,
     borderColor: colors.hairline,
   },
   head: { flexDirection: "row", alignItems: "flex-start", gap: 14, marginBottom: 22 },
-  line: { fontFamily: fonts.ui, fontWeight: "500", fontSize: 15, lineHeight: 21, color: colors.dim, marginBottom: 8 },
-  question: { fontFamily: fonts.display, fontSize: 25, lineHeight: 33, color: colors.text },
+  line: { fontFamily: fonts.ui, fontWeight: "500", fontSize: type.label, lineHeight: 21, color: colors.dim, marginBottom: 8 },
+  question: { fontFamily: fonts.display, fontSize: type.question, lineHeight: 33, color: colors.text },
   result: { height: 76, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  resultText: { fontFamily: fonts.ui, fontWeight: "500", fontSize: 18, color: colors.text },
+  resultText: { fontFamily: fonts.ui, fontWeight: "500", fontSize: type.lead, color: colors.text },
   pick: {
     height: 56,
-    borderRadius: 18,
+    borderRadius: radius.field,
     justifyContent: "center",
     paddingHorizontal: 20,
     marginBottom: 10,
@@ -197,30 +197,30 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.hairline,
   },
-  pickActive: { backgroundColor: "rgba(244,241,234,0.2)", borderColor: colors.dim },
-  pickText: { fontFamily: fonts.ui, fontWeight: "500", fontSize: 17, color: colors.text },
+  pickActive: { backgroundColor: colors.washActive, borderColor: colors.dim },
+  pickText: { fontFamily: fonts.ui, fontWeight: "500", fontSize: type.body, color: colors.text },
   display: { height: 62, alignItems: "center", justifyContent: "center", marginBottom: 12 },
-  digits: { fontFamily: fonts.display, fontSize: 42, letterSpacing: 10, color: colors.text },
+  digits: { fontFamily: fonts.display, fontSize: type.digits, letterSpacing: 10, color: colors.text },
   pad: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", rowGap: 8 },
-  key: { width: "31.5%", height: 52, borderRadius: 16, alignItems: "center", justifyContent: "center", backgroundColor: colors.wash },
+  key: { width: "31.5%", height: 52, borderRadius: radius.key, alignItems: "center", justifyContent: "center", backgroundColor: colors.wash },
   keyGo: { backgroundColor: colors.text },
-  keyPressed: { backgroundColor: "rgba(244,241,234,0.24)" },
-  keyText: { fontFamily: fonts.ui, fontWeight: "500", fontSize: 23, color: colors.text },
-  keyWord: { fontSize: 14, fontWeight: "600", letterSpacing: 1.2, textTransform: "uppercase", color: colors.dim },
+  keyPressed: { backgroundColor: colors.washActive },
+  keyText: { fontFamily: fonts.ui, fontWeight: "500", fontSize: type.key, color: colors.text },
+  keyWord: { fontSize: type.small, fontWeight: "600", letterSpacing: 1.2, textTransform: "uppercase", color: colors.dim },
   textRow: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 6 },
   input: {
     flex: 1,
     height: 54,
-    borderRadius: 18,
+    borderRadius: radius.field,
     paddingHorizontal: 18,
     backgroundColor: colors.wash,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.hairline,
     fontFamily: fonts.ui,
     fontWeight: "500",
-    fontSize: 18,
+    fontSize: type.lead,
     color: colors.text,
   },
-  send: { height: 54, borderRadius: 27, paddingHorizontal: 22, alignItems: "center", justifyContent: "center", backgroundColor: colors.text },
-  sendText: { fontFamily: fonts.ui, fontWeight: "600", fontSize: 16, color: colors.bg },
+  send: { height: 54, borderRadius: radius.pill, paddingHorizontal: 22, alignItems: "center", justifyContent: "center", backgroundColor: colors.text },
+  sendText: { fontFamily: fonts.ui, fontWeight: "600", fontSize: type.control, color: colors.bg },
 });

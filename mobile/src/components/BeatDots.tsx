@@ -16,7 +16,7 @@ export function BeatDots({ index, total }: { index: number; total: number }) {
 
 const styles = StyleSheet.create({
   row: { flexDirection: "row", gap: 6, alignItems: "center", justifyContent: "center" },
-  dot: { width: 5, height: 5, borderRadius: 2.5, backgroundColor: "rgba(244,241,234,0.28)" },
-  past: { backgroundColor: "rgba(244,241,234,0.7)" },
+  dot: { width: 5, height: 5, borderRadius: 2.5, backgroundColor: colors.inactive },
+  past: { backgroundColor: colors.passed },
   current: { width: 18, backgroundColor: colors.text },
 });

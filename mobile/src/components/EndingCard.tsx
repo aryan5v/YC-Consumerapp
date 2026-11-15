@@ -3,7 +3,7 @@ import * as Haptics from "expo-haptics";
 import { useEffect, useRef, useState } from "react";
 import { Animated, Keyboard, Linking, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { story, type Ending } from "../data";
-import { colors, ease, fonts } from "../theme";
+import { colors, ease, fonts, gradients, motion, radius, type } from "../theme";
 import { Ring } from "./Ring";
 
 let phoneAnswered: "saved" | "skipped" | null = null;
@@ -37,7 +37,7 @@ export function EndingCard({
   useEffect(() => {
     Animated.stagger(
       140,
-      steps.map((v) => Animated.timing(v, { toValue: 1, duration: 760, easing: ease.out, useNativeDriver: true })),
+      steps.map((v) => Animated.timing(v, { toValue: 1, duration: motion.slow, easing: ease.out, useNativeDriver: true })),
     ).start();
   }, [steps]);
 
@@ -85,8 +85,8 @@ export function EndingCard({
   return (
     <View style={StyleSheet.absoluteFill}>
       <LinearGradient
-        colors={["rgba(7,7,10,0.15)", "rgba(7,7,10,0.8)", "rgba(7,7,10,0.97)"]}
-        locations={[0, 0.34, 0.72]}
+        colors={gradients.ending.colors}
+        locations={gradients.ending.locations}
         style={StyleSheet.absoluteFill}
       />
       <Pressable accessible={false} style={StyleSheet.absoluteFill} onPress={Keyboard.dismiss} />
@@ -184,15 +184,15 @@ export function EndingCard({
 
 const styles = StyleSheet.create({
   body: { flex: 1, justifyContent: "flex-end", paddingHorizontal: 26 },
-  kicker: { fontFamily: fonts.ui, fontWeight: "600", fontSize: 12, letterSpacing: 2.6, textTransform: "uppercase", color: colors.dim, marginBottom: 10 },
-  title: { fontFamily: fonts.display, fontSize: 44, lineHeight: 50, color: colors.text },
-  summary: { fontFamily: fonts.ui, fontWeight: "400", fontSize: 17, lineHeight: 24, color: colors.dim, marginTop: 8 },
+  kicker: { fontFamily: fonts.ui, fontWeight: "600", fontSize: type.micro, letterSpacing: 2.6, textTransform: "uppercase", color: colors.dim, marginBottom: 10 },
+  title: { fontFamily: fonts.display, fontSize: type.endTitle, lineHeight: 50, color: colors.text },
+  summary: { fontFamily: fonts.ui, fontWeight: "400", fontSize: type.body, lineHeight: 24, color: colors.dim, marginTop: 8 },
   path: { marginTop: 20 },
   step: { flexDirection: "row", alignItems: "center", height: 28 },
   rail: { width: 22, alignItems: "center", alignSelf: "stretch" },
   line: { flex: 1, width: StyleSheet.hairlineWidth * 2, backgroundColor: colors.faint },
   node: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.text },
-  stepText: { flex: 1, marginLeft: 10, fontFamily: fonts.ui, fontWeight: "500", fontSize: 15, color: colors.text },
+  stepText: { flex: 1, marginLeft: 10, fontFamily: fonts.ui, fontWeight: "500", fontSize: type.label, color: colors.text },
   streak: {
     flexDirection: "row",
     alignItems: "center",
@@ -202,33 +202,33 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderColor: colors.hairline,
   },
-  streakNumber: { fontFamily: fonts.display, fontSize: 42, lineHeight: 48, color: colors.text },
-  streakLabel: { fontFamily: fonts.ui, fontWeight: "500", fontSize: 14, lineHeight: 20, color: colors.dim },
+  streakNumber: { fontFamily: fonts.display, fontSize: type.digits, lineHeight: 48, color: colors.text },
+  streakLabel: { fontFamily: fonts.ui, fontWeight: "500", fontSize: type.small, lineHeight: 20, color: colors.dim },
   text: { marginTop: 16, paddingTop: 16, borderTopWidth: StyleSheet.hairlineWidth, borderColor: colors.hairline },
-  teaser: { fontFamily: fonts.display, fontSize: 21, lineHeight: 27, color: colors.text },
-  hint: { fontFamily: fonts.ui, fontWeight: "400", fontSize: 14, lineHeight: 20, color: colors.dim, marginTop: 4 },
+  teaser: { fontFamily: fonts.display, fontSize: type.teaser, lineHeight: 27, color: colors.text },
+  hint: { fontFamily: fonts.ui, fontWeight: "400", fontSize: type.small, lineHeight: 20, color: colors.dim, marginTop: 4 },
   phoneRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 12 },
   phone: {
     flex: 1,
     height: 50,
-    borderRadius: 16,
+    borderRadius: radius.key,
     paddingHorizontal: 16,
     backgroundColor: colors.wash,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.hairline,
     fontFamily: fonts.ui,
     fontWeight: "500",
-    fontSize: 17,
+    fontSize: type.body,
     color: colors.text,
   },
-  save: { height: 50, minWidth: 84, borderRadius: 25, paddingHorizontal: 20, alignItems: "center", justifyContent: "center", backgroundColor: colors.text },
-  saveText: { fontFamily: fonts.ui, fontWeight: "600", fontSize: 15, color: colors.bg },
+  save: { height: 50, minWidth: 84, borderRadius: radius.pill, paddingHorizontal: 20, alignItems: "center", justifyContent: "center", backgroundColor: colors.text },
+  saveText: { fontFamily: fonts.ui, fontWeight: "600", fontSize: type.label, color: colors.bg },
   skip: { height: 50, minWidth: 84, alignItems: "center", justifyContent: "center" },
-  skipText: { fontFamily: fonts.ui, fontWeight: "500", fontSize: 15, color: colors.dim },
+  skipText: { fontFamily: fonts.ui, fontWeight: "500", fontSize: type.label, color: colors.dim },
   textFirst: { alignSelf: "flex-start", marginTop: 8, paddingBottom: 2, borderBottomWidth: 1, borderColor: colors.dim },
-  textFirstLabel: { fontFamily: fonts.ui, fontWeight: "600", fontSize: 15, color: colors.text },
-  share: { height: 56, borderRadius: 28, alignItems: "center", justifyContent: "center", backgroundColor: colors.text, marginTop: 20 },
-  shareText: { fontFamily: fonts.ui, fontWeight: "600", fontSize: 17, color: colors.bg },
+  textFirstLabel: { fontFamily: fonts.ui, fontWeight: "600", fontSize: type.label, color: colors.text },
+  share: { height: 56, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: colors.text, marginTop: 20 },
+  shareText: { fontFamily: fonts.ui, fontWeight: "600", fontSize: type.body, color: colors.bg },
   done: { height: 44, alignItems: "center", justifyContent: "center", marginTop: 2 },
-  doneText: { fontFamily: fonts.ui, fontWeight: "500", fontSize: 16, color: colors.dim },
+  doneText: { fontFamily: fonts.ui, fontWeight: "500", fontSize: type.control, color: colors.dim },
 });

@@ -2,7 +2,7 @@ import { BlurView } from "expo-blur";
 import { useEffect, useRef } from "react";
 import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
 import type { ChoiceOption } from "../data";
-import { colors, ease, fonts } from "../theme";
+import { colors, ease, fonts, glow, motion, radius, type } from "../theme";
 import { Ring } from "./Ring";
 
 export type Rect = { x: number; y: number; w: number; h: number };
@@ -22,11 +22,11 @@ function useTarget(index: number, picked: string | null, id: string) {
   const fade = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
-    Animated.timing(appear, { toValue: 1, duration: 640, delay: 120 + index * 110, easing: ease.out, useNativeDriver: true }).start();
+    Animated.timing(appear, { toValue: 1, duration: motion.gentle, delay: 120 + index * 110, easing: ease.out, useNativeDriver: true }).start();
     const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(pulse, { toValue: 1, duration: 1500, delay: index * 260, easing: ease.inOut, useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 0, duration: 1500, easing: ease.inOut, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 1, duration: motion.pulse, delay: index * 260, easing: ease.inOut, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 0, duration: motion.pulse, easing: ease.inOut, useNativeDriver: true }),
       ]),
     );
     loop.start();
@@ -39,12 +39,12 @@ function useTarget(index: number, picked: string | null, id: string) {
       return;
     }
     if (picked !== id) {
-      Animated.timing(fade, { toValue: 0, duration: 260, easing: ease.out, useNativeDriver: true }).start();
+      Animated.timing(fade, { toValue: 0, duration: motion.quick, easing: ease.out, useNativeDriver: true }).start();
       return;
     }
     Animated.sequence([
-      Animated.timing(flash, { toValue: 1, duration: 70, easing: ease.out, useNativeDriver: true }),
-      Animated.timing(flash, { toValue: 0, duration: 520, easing: ease.out, useNativeDriver: true }),
+      Animated.timing(flash, { toValue: 1, duration: motion.instant, easing: ease.out, useNativeDriver: true }),
+      Animated.timing(flash, { toValue: 0, duration: motion.base, easing: ease.out, useNativeDriver: true }),
     ]).start();
   }, [picked, id, fade, flash]);
 
@@ -70,7 +70,7 @@ function Outline({
   screenWidth,
 }: TargetProps & { frame: Rect; labelAbove: boolean; screenWidth: number }) {
   const { appear, pulse, flash, opacity } = useTarget(index, picked, option.id);
-  const radius = Math.min(22, Math.min(frame.w, frame.h) / 4);
+  const radius = Math.min(glow.maxRadius, Math.min(frame.w, frame.h) / 4);
   const waiting = picked === option.id;
 
   return (
@@ -90,7 +90,7 @@ function Outline({
       <Animated.View
         style={[
           styles.bloom,
-          { borderRadius: radius + 7, opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.06, 0.24] }) },
+          { borderRadius: radius + glow.bloomWidth, opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: glow.bloomOpacity }) },
         ]}
       />
       <Animated.View
@@ -99,8 +99,8 @@ function Outline({
           styles.halo,
           {
             borderRadius: radius,
-            opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.3, 0.95] }),
-            transform: [{ scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.03] }) }],
+            opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: glow.haloOpacity }),
+            transform: [{ scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [1, glow.haloScale] }) }],
           },
         ]}
       />
@@ -108,12 +108,12 @@ function Outline({
       <Animated.View
         style={[
           StyleSheet.absoluteFill,
-          { borderRadius: radius, backgroundColor: colors.glow, opacity: flash.interpolate({ inputRange: [0, 1], outputRange: [0, 0.42] }) },
+          { borderRadius: radius, backgroundColor: glow.color, opacity: flash.interpolate({ inputRange: [0, 1], outputRange: [0, glow.flashOpacity] }) },
         ]}
       />
       {waiting && (
         <View style={[StyleSheet.absoluteFill, styles.center]}>
-          <Ring size={30} color={colors.glow} delay={320} />
+          <Ring size={30} color={glow.color} delay={320} />
         </View>
       )}
       <View
@@ -163,11 +163,11 @@ function Chip({ option, index, picked, onPick }: TargetProps) {
         <BlurView intensity={36} tint="dark" style={StyleSheet.absoluteFill} />
         <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.glass }]} />
         <Animated.View
-          style={[StyleSheet.absoluteFill, { backgroundColor: colors.glow, opacity: flash.interpolate({ inputRange: [0, 1], outputRange: [0, 0.5] }) }]}
+          style={[StyleSheet.absoluteFill, { backgroundColor: glow.color, opacity: flash.interpolate({ inputRange: [0, 1], outputRange: [0, 0.5] }) }]}
         />
         <View style={styles.chipLead}>
           {waiting ? (
-            <Ring size={18} color={colors.glow} delay={320} />
+            <Ring size={18} color={glow.color} delay={320} />
           ) : (
             <Animated.View
               style={[
@@ -234,32 +234,40 @@ export function ChoiceOverlay({
 
 const styles = StyleSheet.create({
   halo: {
-    borderWidth: 2.5,
-    borderColor: colors.glow,
-    shadowColor: colors.glow,
+    borderWidth: glow.haloWidth,
+    borderColor: glow.color,
+    shadowColor: glow.color,
     shadowOpacity: 1,
-    shadowRadius: 16,
+    shadowRadius: glow.blur,
     shadowOffset: { width: 0, height: 0 },
   },
-  edge: { borderWidth: 1.5, borderColor: colors.glow, opacity: 0.9 },
+  edge: { borderWidth: glow.edgeWidth, borderColor: glow.color, opacity: 0.9 },
   center: { alignItems: "center", justifyContent: "center" },
-  bloom: { position: "absolute", left: -7, right: -7, top: -7, bottom: -7, borderWidth: 7, borderColor: colors.glow },
+  bloom: {
+    position: "absolute",
+    left: -glow.bloomWidth,
+    right: -glow.bloomWidth,
+    top: -glow.bloomWidth,
+    bottom: -glow.bloomWidth,
+    borderWidth: glow.bloomWidth,
+    borderColor: glow.color,
+  },
   labelWrap: { position: "absolute", width: LABEL_WIDTH, alignItems: "center" },
   outlineLabel: {
     fontFamily: fonts.ui,
     fontWeight: "600",
-    fontSize: 13,
+    fontSize: type.tag,
     letterSpacing: 1.4,
     textTransform: "uppercase",
     color: colors.text,
-    textShadowColor: "rgba(0,0,0,0.9)",
+    textShadowColor: colors.textShadow,
     textShadowRadius: 8,
     textShadowOffset: { width: 0, height: 1 },
   },
   chips: { position: "absolute", left: 18, right: 18, gap: CHIP_GAP },
   chip: {
     height: CHIP_HEIGHT,
-    borderRadius: CHIP_HEIGHT / 2,
+    borderRadius: radius.pill,
     overflow: "hidden",
     flexDirection: "row",
     alignItems: "center",
@@ -272,11 +280,11 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: colors.glow,
-    shadowColor: colors.glow,
+    backgroundColor: glow.color,
+    shadowColor: glow.color,
     shadowOpacity: 1,
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 0 },
   },
-  chipLabel: { flex: 1, fontFamily: fonts.ui, fontWeight: "500", fontSize: 17, letterSpacing: 0.1, color: colors.text },
+  chipLabel: { flex: 1, fontFamily: fonts.ui, fontWeight: "500", fontSize: type.body, letterSpacing: 0.1, color: colors.text },
 });

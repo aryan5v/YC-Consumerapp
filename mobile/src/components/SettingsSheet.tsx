@@ -3,7 +3,7 @@ import * as Haptics from "expo-haptics";
 import { useEffect, useRef } from "react";
 import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
 import { setSetting, useSettings } from "../settings";
-import { colors, ease, fonts } from "../theme";
+import { colors, ease, fonts, motion, radius, type } from "../theme";
 
 export function SettingsGlyph() {
   return (
@@ -22,7 +22,7 @@ function Switch({ label, detail, value, onChange }: { label: string; detail: str
   const knob = useRef(new Animated.Value(value ? 1 : 0)).current;
 
   useEffect(() => {
-    Animated.timing(knob, { toValue: value ? 1 : 0, duration: 240, easing: ease.out, useNativeDriver: true }).start();
+    Animated.timing(knob, { toValue: value ? 1 : 0, duration: motion.quick, easing: ease.out, useNativeDriver: true }).start();
   }, [value, knob]);
 
   return (
@@ -61,14 +61,14 @@ export function SettingsSheet({ showMicrophone, onClose, bottomInset }: { showMi
   const appear = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.timing(appear, { toValue: 1, duration: 460, easing: ease.out, useNativeDriver: true }).start();
+    Animated.timing(appear, { toValue: 1, duration: motion.settle, easing: ease.out, useNativeDriver: true }).start();
   }, [appear]);
 
-  const close = () => Animated.timing(appear, { toValue: 0, duration: 260, easing: ease.out, useNativeDriver: true }).start(onClose);
+  const close = () => Animated.timing(appear, { toValue: 0, duration: motion.quick, easing: ease.out, useNativeDriver: true }).start(onClose);
 
   return (
     <View style={[StyleSheet.absoluteFill, { zIndex: 20 }]}>
-      <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(0,0,0,0.4)", opacity: appear }]} />
+      <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: colors.scrim, opacity: appear }]} />
       <Pressable accessibilityLabel="Close settings" style={StyleSheet.absoluteFill} onPress={close} />
       <Animated.View
         style={[
@@ -113,20 +113,20 @@ const styles = StyleSheet.create({
     bottom: 0,
     paddingTop: 26,
     paddingHorizontal: 24,
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
+    borderTopLeftRadius: radius.sheet,
+    borderTopRightRadius: radius.sheet,
     overflow: "hidden",
     borderTopWidth: StyleSheet.hairlineWidth,
     borderColor: colors.hairline,
   },
-  kicker: { fontFamily: fonts.ui, fontWeight: "600", fontSize: 12, letterSpacing: 2.6, textTransform: "uppercase", color: colors.dim, marginBottom: 6 },
+  kicker: { fontFamily: fonts.ui, fontWeight: "600", fontSize: type.micro, letterSpacing: 2.6, textTransform: "uppercase", color: colors.dim, marginBottom: 6 },
   row: { flexDirection: "row", alignItems: "center", gap: 18, paddingVertical: 14 },
-  label: { fontFamily: fonts.ui, fontWeight: "500", fontSize: 18, color: colors.text },
-  detail: { fontFamily: fonts.ui, fontWeight: "400", fontSize: 14, lineHeight: 19, color: colors.dim, marginTop: 3 },
+  label: { fontFamily: fonts.ui, fontWeight: "500", fontSize: type.lead, color: colors.text },
+  detail: { fontFamily: fonts.ui, fontWeight: "400", fontSize: type.small, lineHeight: 19, color: colors.dim, marginTop: 3 },
   track: {
     width: 52,
     height: 32,
-    borderRadius: 16,
+    borderRadius: radius.key,
     padding: 4,
     backgroundColor: colors.wash,
     borderWidth: StyleSheet.hairlineWidth,

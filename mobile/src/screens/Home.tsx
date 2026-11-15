@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ring } from "../components/Ring";
 import { SettingsGlyph } from "../components/SettingsSheet";
 import { imageSource, story } from "../data";
-import { colors, ease, fonts } from "../theme";
+import { colors, ease, fonts, gradients, motion, radius, type } from "../theme";
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -28,8 +28,8 @@ export function Home({ starting, onPlay, onSettings }: { starting: boolean; onPl
   useEffect(() => {
     const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(drift, { toValue: 1, duration: 16000, easing: ease.inOut, useNativeDriver: true }),
-        Animated.timing(drift, { toValue: 0, duration: 16000, easing: ease.inOut, useNativeDriver: true }),
+        Animated.timing(drift, { toValue: 1, duration: motion.drift, easing: ease.inOut, useNativeDriver: true }),
+        Animated.timing(drift, { toValue: 0, duration: motion.drift, easing: ease.inOut, useNativeDriver: true }),
       ]),
     );
     loop.start();
@@ -37,7 +37,7 @@ export function Home({ starting, onPlay, onSettings }: { starting: boolean; onPl
   }, [drift]);
 
   useEffect(() => {
-    if (loaded) Animated.timing(appear, { toValue: 1, duration: 900, delay: 150, easing: ease.out, useNativeDriver: true }).start();
+    if (loaded) Animated.timing(appear, { toValue: 1, duration: motion.slower, delay: 150, easing: ease.out, useNativeDriver: true }).start();
   }, [loaded, appear]);
 
   const action = !home?.run ? "Play" : home.run.status === "active" ? "Continue" : story.canReplay ? "Play again" : "See your ending";
@@ -52,8 +52,8 @@ export function Home({ starting, onPlay, onSettings }: { starting: boolean; onPl
         </Animated.View>
       )}
       <LinearGradient
-        colors={["rgba(7,7,10,0.62)", "rgba(7,7,10,0)", "rgba(7,7,10,0.55)", "rgba(7,7,10,0.96)"]}
-        locations={[0, 0.24, 0.56, 0.92]}
+        colors={gradients.home.colors}
+        locations={gradients.home.locations}
         style={StyleSheet.absoluteFill}
       />
 
@@ -118,13 +118,13 @@ export function Home({ starting, onPlay, onSettings }: { starting: boolean; onPl
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg, overflow: "hidden" },
   top: { position: "absolute", top: 0, left: 26, right: 26, flexDirection: "row", alignItems: "center" },
-  wordmark: { flex: 1, fontFamily: fonts.display, fontSize: 26, letterSpacing: 0.5, color: colors.text },
+  wordmark: { flex: 1, fontFamily: fonts.display, fontSize: type.wordmark, letterSpacing: 0.5, color: colors.text },
   settings: { marginLeft: 16, opacity: 0.8 },
-  date: { fontFamily: fonts.ui, fontWeight: "600", fontSize: 12, letterSpacing: 2, textTransform: "uppercase", color: colors.dim },
+  date: { fontFamily: fonts.ui, fontWeight: "600", fontSize: type.micro, letterSpacing: 2, textTransform: "uppercase", color: colors.dim },
   bottom: { position: "absolute", left: 26, right: 26, bottom: 0 },
-  kicker: { fontFamily: fonts.ui, fontWeight: "600", fontSize: 12, letterSpacing: 2.6, textTransform: "uppercase", color: colors.dim, marginBottom: 12 },
-  title: { fontFamily: fonts.display, fontSize: 52, lineHeight: 56, color: colors.text },
-  tagline: { fontFamily: fonts.ui, fontWeight: "400", fontSize: 18, lineHeight: 26, color: colors.dim, marginTop: 14 },
+  kicker: { fontFamily: fonts.ui, fontWeight: "600", fontSize: type.micro, letterSpacing: 2.6, textTransform: "uppercase", color: colors.dim, marginBottom: 12 },
+  title: { fontFamily: fonts.display, fontSize: type.hero, lineHeight: 56, color: colors.text },
+  tagline: { fontFamily: fonts.ui, fontWeight: "400", fontSize: type.lead, lineHeight: 26, color: colors.dim, marginTop: 14 },
   streak: {
     flexDirection: "row",
     alignItems: "center",
@@ -133,14 +133,14 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderColor: colors.hairline,
   },
-  streakNumber: { fontFamily: fonts.display, fontSize: 30, lineHeight: 36, color: colors.text },
-  streakLabel: { fontFamily: fonts.ui, fontWeight: "500", fontSize: 15, color: colors.dim, marginLeft: 10, flex: 1 },
+  streakNumber: { fontFamily: fonts.display, fontSize: type.stat, lineHeight: 36, color: colors.text },
+  streakLabel: { fontFamily: fonts.ui, fontWeight: "500", fontSize: type.label, color: colors.dim, marginLeft: 10, flex: 1 },
   pips: { flexDirection: "row", gap: 6 },
-  pip: { width: 6, height: 6, borderRadius: 3, backgroundColor: "rgba(244,241,234,0.22)" },
+  pip: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.inactive },
   pipOn: { backgroundColor: colors.text },
   play: {
     height: 62,
-    borderRadius: 31,
+    borderRadius: radius.pill,
     marginTop: 24,
     flexDirection: "row",
     alignItems: "center",
@@ -158,5 +158,5 @@ const styles = StyleSheet.create({
     borderBottomColor: "transparent",
     borderLeftColor: colors.bg,
   },
-  playText: { fontFamily: fonts.ui, fontWeight: "600", fontSize: 18, letterSpacing: 0.2, color: colors.bg },
+  playText: { fontFamily: fonts.ui, fontWeight: "600", fontSize: type.lead, letterSpacing: 0.2, color: colors.bg },
 });

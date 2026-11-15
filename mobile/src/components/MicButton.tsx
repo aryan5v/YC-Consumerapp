@@ -3,7 +3,7 @@ import { getRecordingPermissionsAsync, RecordingPresets, requestRecordingPermiss
 import * as Haptics from "expo-haptics";
 import { useEffect, useRef, useState } from "react";
 import { Animated, Pressable, StyleSheet, View } from "react-native";
-import { colors, ease } from "../theme";
+import { colors, ease, motion, radius } from "../theme";
 import { Ring } from "./Ring";
 
 const MIN_MS = 350;
@@ -29,7 +29,7 @@ export function MicButton({
   const pulse = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.timing(appear, { toValue: 1, duration: 600, delay: 700, easing: ease.out, useNativeDriver: true }).start();
+    Animated.timing(appear, { toValue: 1, duration: motion.gentle, delay: 700, easing: ease.out, useNativeDriver: true }).start();
   }, [appear]);
 
   useEffect(() => {
@@ -37,7 +37,7 @@ export function MicButton({
       pulse.setValue(0);
       return;
     }
-    const loop = Animated.loop(Animated.timing(pulse, { toValue: 1, duration: 1300, easing: ease.out, useNativeDriver: true }));
+    const loop = Animated.loop(Animated.timing(pulse, { toValue: 1, duration: motion.pulse, easing: ease.out, useNativeDriver: true }));
     loop.start();
     return () => loop.stop();
   }, [listening, pulse]);
@@ -117,11 +117,11 @@ export function MicButton({
 }
 
 const styles = StyleSheet.create({
-  wave: { borderRadius: 23, borderWidth: 1.5, borderColor: colors.text },
+  wave: { borderRadius: radius.pill, borderWidth: 1.5, borderColor: colors.text },
   button: {
     width: 46,
     height: 46,
-    borderRadius: 23,
+    borderRadius: radius.pill,
     overflow: "hidden",
     alignItems: "center",
     justifyContent: "center",

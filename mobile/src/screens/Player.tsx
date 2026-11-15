@@ -15,12 +15,13 @@ import { PuzzleSheet, type PuzzleState } from "../components/PuzzleSheet";
 import { SettingsGlyph, SettingsSheet } from "../components/SettingsSheet";
 import { audioSource, story, videoSource, type Ending, type Stop } from "../data";
 import { useSettings } from "../settings";
-import { colors, ease, fonts } from "../theme";
+import { colors, ease, fonts, gradients, motion, radius, type } from "../theme";
 
 const SLOTS = [0, 1, 2, 3];
 const PORTRAIT = 9 / 16;
 const PUZZLE_FEEDBACK_MS = 900;
 const HEARD_MS = 550;
+const DUCKED_VOLUME = 0.25;
 const MIC_SPACE = 58;
 
 let speakUnavailable = false;
@@ -150,6 +151,7 @@ export function Player({
   const activate = useCallback(
     (i: number) => {
       const prev = activeRef.current;
+      players[i].volume = 1;
       players[i].muted = false;
       players[i].play();
       activeRef.current = i;
@@ -219,8 +221,8 @@ export function Player({
     holdScale.setValue(1);
     const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(holdScale, { toValue: 1.055, duration: 11000, easing: ease.inOut, useNativeDriver: true }),
-        Animated.timing(holdScale, { toValue: 1, duration: 11000, easing: ease.inOut, useNativeDriver: true }),
+        Animated.timing(holdScale, { toValue: motion.holdScale, duration: motion.hold, easing: ease.inOut, useNativeDriver: true }),
+        Animated.timing(holdScale, { toValue: 1, duration: motion.hold, easing: ease.inOut, useNativeDriver: true }),
       ]),
     );
     loop.start();
@@ -258,15 +260,25 @@ export function Player({
   useEffect(() => {
     const audio = line.current;
     if (!heldLineUrl || audio?.url !== heldLineUrl) return;
+    const clip = players[activeRef.current];
+    const restore = () => {
+      if (clip) clip.volume = 1;
+    };
+    const finished = audio.player.addListener("playbackStatusUpdate", (status) => {
+      if (status.didJustFinish) restore();
+    });
     const timer = setTimeout(() => {
+      if (clip) clip.volume = DUCKED_VOLUME;
       audio.player.seekTo(0).catch(() => {});
       audio.player.play();
     }, 350);
     return () => {
       clearTimeout(timer);
+      finished.remove();
+      restore();
       if (line.current === audio) audio.player.pause();
     };
-  }, [heldLineUrl]);
+  }, [heldLineUrl, players]);
 
   const settlePuzzle = (beatId: string, correct: boolean) => {
     Haptics.notificationAsync(correct ? Haptics.NotificationFeedbackType.Success : Haptics.NotificationFeedbackType.Warning);
@@ -386,7 +398,7 @@ export function Player({
       : null;
 
   return (
-    <View style={[StyleSheet.absoluteFill, active >= 0 && { backgroundColor: "#000" }]}>
+    <View style={[StyleSheet.absoluteFill, active >= 0 && { backgroundColor: colors.black }]}>
       {SLOTS.map((i) => {
         const visible = i === active || i === previous;
         const letterboxed = (slots[i].aspect ?? PORTRAIT) >= 1;
@@ -399,7 +411,7 @@ export function Player({
               {
                 opacity: visible ? 1 : 0,
                 zIndex: i === active ? 2 : i === previous ? 1 : 0,
-                backgroundColor: letterboxed && visible ? "#000" : "transparent",
+                backgroundColor: letterboxed && visible ? colors.black : "transparent",
                 transform: [{ scale: (i === active && phase === "held") || i === previous ? holdScale : 1 }],
               },
             ]}
@@ -418,8 +430,8 @@ export function Player({
 
       {active >= 0 && (
         <View pointerEvents="none" style={[StyleSheet.absoluteFill, { zIndex: 3 }]}>
-          <LinearGradient colors={["rgba(0,0,0,0.5)", "rgba(0,0,0,0)"]} style={[styles.shade, { top: 0, height: insets.top + 90 }]} />
-          <LinearGradient colors={["rgba(0,0,0,0)", "rgba(0,0,0,0.66)"]} style={[styles.shade, { bottom: 0, height: height * 0.4 }]} />
+          <LinearGradient colors={gradients.playerTop.colors} locations={gradients.playerTop.locations} style={[styles.shade, { top: 0, height: insets.top + 90 }]} />
+          <LinearGradient colors={gradients.playerBottom.colors} locations={gradients.playerBottom.locations} style={[styles.shade, { bottom: 0, height: height * 0.4 }]} />
         </View>
       )}
 
@@ -427,7 +439,7 @@ export function Player({
         <Pressable accessibilityLabel="Show controls" style={StyleSheet.absoluteFill} onPress={() => active >= 0 && setChrome((c) => !c)} />
 
         <Presence show={held && phase === "held"} duration={900}>
-          <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(0,0,0,0.16)" }]} />
+          <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: colors.holdDim }]} />
         </Presence>
 
         <Presence show={(captionsOn || listening || heard !== null || reply !== null) && current !== null && !puzzle && !ending}>
@@ -524,12 +536,12 @@ const styles = StyleSheet.create({
   cc: {
     fontFamily: fonts.ui,
     fontWeight: "600",
-    fontSize: 12,
+    fontSize: type.micro,
     letterSpacing: 1,
     color: colors.text,
     borderWidth: 1.5,
     borderColor: colors.text,
-    borderRadius: 5,
+    borderRadius: radius.control,
     paddingHorizontal: 5,
     paddingVertical: 2,
     overflow: "hidden",

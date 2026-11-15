@@ -7,7 +7,7 @@ import { SettingsSheet } from "./src/components/SettingsSheet";
 import { story } from "./src/data";
 import { Home } from "./src/screens/Home";
 import { Player } from "./src/screens/Player";
-import { colors, ease } from "./src/theme";
+import { colors, ease, motion } from "./src/theme";
 
 setAudioModeAsync({ playsInSilentMode: true, allowsRecording: false }).catch(() => {});
 
@@ -33,12 +33,12 @@ function Shell() {
 
   const started = useCallback(() => {
     setPlaying(true);
-    Animated.timing(cover, { toValue: 1, duration: 700, easing: ease.out, useNativeDriver: true }).start();
+    Animated.timing(cover, { toValue: 1, duration: motion.slow, easing: ease.out, useNativeDriver: true }).start();
   }, [cover]);
 
   const exit = useCallback(() => {
     setPlaying(false);
-    Animated.timing(cover, { toValue: 0, duration: 520, easing: ease.out, useNativeDriver: true }).start(() => {
+    Animated.timing(cover, { toValue: 0, duration: motion.base, easing: ease.out, useNativeDriver: true }).start(() => {
       setRunId(null);
       setStarting(false);
     });

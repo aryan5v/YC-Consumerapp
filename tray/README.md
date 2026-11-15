@@ -170,3 +170,8 @@ against an independently decoded last frame, and the token appearing neither ups
 frames-only mode: the banner values, `.gateway.env` at mode 600, a health request, a proxied `POST`,
 a last-frame render, the frames-only `503` on a proxied path, and `run.sh` cleaning up the gateway
 when it is signalled (17 checks).
+
+`run.sh` was also run against a real Cloudflare quick tunnel: once the fresh hostname started
+resolving (about 60 seconds, as the note above says), a proxied `POST` through the public URL
+returned `201`, an unauthenticated request returned `401`, `POST /gateway/last-frame` returned a real
+PNG, and repeating those requests on the reused connection returned `200` and `201` again.

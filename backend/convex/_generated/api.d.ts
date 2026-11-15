@@ -41,11 +41,13 @@ import type * as lib_tray from "../lib/tray.js";
 import type * as lib_trayUniserve from "../lib/trayUniserve.js";
 import type * as lib_validators from "../lib/validators.js";
 import type * as lib_view from "../lib/view.js";
+import type * as lib_world from "../lib/world.js";
 import type * as runs from "../runs.js";
 import type * as session from "../session.js";
 import type * as speech from "../speech.js";
 import type * as tray from "../tray.js";
 import type * as users from "../users.js";
+import type * as world from "../world.js";
 
 import type {
   ApiFromModules,
@@ -87,11 +89,13 @@ declare const fullApi: ApiFromModules<{
   "lib/trayUniserve": typeof lib_trayUniserve;
   "lib/validators": typeof lib_validators;
   "lib/view": typeof lib_view;
+  "lib/world": typeof lib_world;
   runs: typeof runs;
   session: typeof session;
   speech: typeof speech;
   tray: typeof tray;
   users: typeof users;
+  world: typeof world;
 }>;
 
 /**

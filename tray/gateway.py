@@ -50,6 +50,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 CHUNK = 65536
 JSON_INSPECT_MAX = 65536
 DRAIN_LIMIT = 1048576
+IDEMPOTENT_METHODS = ("GET", "HEAD", "OPTIONS", "DELETE", "PUT", "TRACE")
+BODYLESS_STATUS = (204, 304)
 PIN_LIMIT = 2000
 LAST_FRAME_MAGIC = b"\x89PNG\r\n\x1a\n"
 
@@ -66,6 +68,19 @@ HOP_BY_HOP = {
     "upgrade",
 }
 STRIP_REQUEST = HOP_BY_HOP | {"host", "content-length", "authorization", "expect"}
+
+
+def connection_named_headers(pairs):
+    """Field names listed in a Connection header are hop-by-hop too (RFC 7230 6.1)."""
+    names = set()
+    for name, value in pairs:
+        if name.lower() != "connection":
+            continue
+        for token in str(value).split(","):
+            token = token.strip().lower()
+            if token and token not in ("close", "keep-alive"):
+                names.add(token)
+    return names
 
 
 def env_str(name, default=None):
@@ -99,6 +114,7 @@ UPSTREAM_TIMEOUT = env_int("UPSTREAM_TIMEOUT", 900)
 PROBE_INTERVAL = max(1, env_int("GATEWAY_PROBE_INTERVAL", 5))
 PROBE_TIMEOUT = max(1, env_int("GATEWAY_PROBE_TIMEOUT", 3))
 STICKY = env_bool("GATEWAY_STICKY", True)
+BUFFER_MAX = max(0, env_int("GATEWAY_BUFFER_MAX", 65536))
 PROBE_PATH = env_str("GATEWAY_PROBE_PATH", "/")
 PENALTY = max(1, env_int("GATEWAY_PENALTY_S", 15))
 FFMPEG = env_str("FFMPEG") or shutil.which("ffmpeg")
@@ -283,8 +299,12 @@ class Pool(object):
             return [up.state() for up in self.upstreams]
 
 
-class RetryableUpstream(Exception):
-    """The upstream never answered; the request can be moved to another one."""
+class UpstreamFailed(Exception):
+    """The upstream did not answer. `transmitted` says whether it may have seen the request."""
+
+    def __init__(self, message, transmitted):
+        Exception.__init__(self, message)
+        self.transmitted = transmitted
 
 
 class ClientGone(Exception):
@@ -332,6 +352,12 @@ def extract_job_ids(raw):
 
     consider(data, 0)
     return [job_id for job_id in dict.fromkeys(found)][:8]
+
+
+def chain_once(first, rest):
+    yield first
+    for piece in rest:
+        yield piece
 
 
 def parse_multipart(body, boundary):
@@ -398,6 +424,9 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 self.handle_proxy(path, parsed.query)
         except (BrokenPipeError, ConnectionResetError):
+            self.close_connection = True
+        except ClientGone as exc:
+            log("%s %s: %s" % (self.command, path, exc))
             self.close_connection = True
         except Exception as exc:  # never let one request kill the worker thread silently
             log("ERROR %s %s: %s: %s" % (self.command, path, type(exc).__name__, exc))
@@ -493,36 +522,59 @@ class Handler(BaseHTTPRequestHandler):
         }
         self.send_json(200 if payload["ok"] else 503, payload)
 
-    def request_body(self):
-        if self.command in ("GET", "HEAD", "DELETE", "OPTIONS"):
-            encoding = (self.headers.get("Transfer-Encoding") or "").lower()
-            length = self.headers.get("Content-Length")
-            if "chunked" not in encoding and (not length or length == "0"):
-                return None
-        encoding = (self.headers.get("Transfer-Encoding") or "").lower()
-        if "chunked" in encoding:
-            return self.chunked_body()
+    def materialize_body(self):
+        """(body, replayable) where body is bytes or a byte iterator, or None.
+
+        A body that fits in GATEWAY_BUFFER_MAX is held in memory so a retried request can
+        send it again. A bigger one is streamed, and then this request is never retried:
+        the client's bytes have already been consumed and cannot be replayed.
+        """
+        if not self.has_request_body():
+            self.body_consumed = True
+            return None, True
+        if "chunked" in (self.headers.get("Transfer-Encoding") or "").lower():
+            return self.buffer_chunked_body()
         length = self.headers.get("Content-Length")
-        if not length:
-            return None
+        if not length or not length.isdigit():
+            return None, True
+        total = int(length)
+        if total <= BUFFER_MAX:
+            pieces = []
+            remaining = total
+            while remaining > 0:
+                piece = self.read_client(min(CHUNK, remaining))
+                pieces.append(piece)
+                remaining -= len(piece)
+            self.body_consumed = True
+            return b"".join(pieces), True
+        return self.sized_body(total), False
+
+    def buffer_chunked_body(self):
+        pieces = []
+        total = 0
+        stream = self.chunked_body()
+        for piece in stream:
+            pieces.append(piece)
+            total += len(piece)
+            if total > BUFFER_MAX:
+                return chain_once(b"".join(pieces), stream), False
+        self.body_consumed = True
+        return b"".join(pieces), True
+
+    def read_client(self, size):
         try:
-            remaining = int(length)
-        except ValueError:
-            return None
-        if remaining <= 0:
-            return None
-        return self.sized_body(remaining)
+            piece = self.rfile.read(size)
+        except (socket.timeout, TimeoutError):
+            raise ClientGone("timeout reading request body from client")
+        except OSError as exc:
+            raise ClientGone("client disconnected while sending its body: %s" % exc)
+        if not piece:
+            raise ClientGone("client closed before sending its whole body")
+        return piece
 
     def sized_body(self, remaining):
         while remaining > 0:
-            try:
-                piece = self.rfile.read(min(CHUNK, remaining))
-            except (socket.timeout, TimeoutError):
-                raise ClientGone("timeout reading request body from client")
-            except OSError as exc:
-                raise ClientGone("client disconnected while sending its body: %s" % exc)
-            if not piece:
-                raise ClientGone("client closed before sending its whole body")
+            piece = self.read_client(min(CHUNK, remaining))
             remaining -= len(piece)
             yield piece
         self.body_consumed = True
@@ -556,14 +608,19 @@ class Handler(BaseHTTPRequestHandler):
                 yield piece
             self.rfile.read(2)
 
-    def upstream_headers(self):
+    def upstream_headers(self, body):
+        skip = STRIP_REQUEST | connection_named_headers(self.headers.items())
         headers = {}
         for name, value in self.headers.items():
-            if name.lower() in STRIP_REQUEST:
+            if name.lower() in skip:
                 continue
             headers[name] = value
-        if "Content-Length" in self.headers and self.command not in ("GET", "HEAD"):
-            headers["Content-Length"] = self.headers["Content-Length"]
+        if isinstance(body, bytes):
+            headers["Content-Length"] = str(len(body))
+        elif body is not None:
+            length = self.headers.get("Content-Length")
+            if length and length.isdigit():
+                headers["Content-Length"] = length
         if UPSTREAM_AUTH:
             headers["Authorization"] = UPSTREAM_AUTH
         elif UPSTREAM_TOKEN:
@@ -572,6 +629,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def handle_proxy(self, path, query):
         key = POOL.pin_for_path(path)
+        body, replayable = self.materialize_body()
         upstream = POOL.acquire(key)
         if upstream is None:
             self.drain_request_body()
@@ -591,11 +649,26 @@ class Handler(BaseHTTPRequestHandler):
                 tried.append(upstream.url)
                 POOL.started(upstream)
                 try:
-                    self.forward(upstream, path, query)
+                    self.forward(upstream, path, query, body)
                     return
-                except RetryableUpstream as exc:
+                except ClientGone as exc:
+                    # the client went away, not the upstream: nothing to retry, nothing to say
+                    log("%s %s: %s" % (self.command, path, exc))
+                    self.close_connection = True
+                    return
+                except UpstreamFailed as exc:
                     error = exc
                     POOL.mark_failure(upstream, exc)
+                    # Retry when the upstream never saw the request, and otherwise only an
+                    # idempotent method with a body we can send again: replaying a POST that
+                    # may already have started a generation on that instance would run it twice.
+                    may_retry = (not exc.transmitted) or (
+                        replayable and self.command in IDEMPOTENT_METHODS
+                    )
+                    if not may_retry:
+                        log("upstream %s failed (%s), not retrying a %s that may have been seen"
+                            % (upstream.url, redact(exc), self.command))
+                        break
                     log("upstream %s failed (%s), %s" % (upstream.url, redact(exc),
                                                         "failing over" if attempt == 1 else "giving up"))
                     if self.headers_sent or attempt == 2:
@@ -619,24 +692,35 @@ class Handler(BaseHTTPRequestHandler):
         finally:
             POOL.release(upstream)
 
-    def forward(self, upstream, path, query):
+    def forward(self, upstream, path, query, body):
         target = upstream.target(path, query)
-        headers = self.upstream_headers()
-        body = self.request_body()
+        headers = self.upstream_headers(body)
         self.proxied_via = upstream.url
         conn = upstream.connect(UPSTREAM_TIMEOUT)
         try:
+            try:
+                # Connecting first separates "this instance is unreachable", where a retry
+                # cannot have any effect anywhere, from a failure after the bytes went out.
+                conn.connect()
+            except (OSError, http.client.HTTPException) as exc:
+                raise UpstreamFailed("%s: %s" % (type(exc).__name__, exc), transmitted=False)
             try:
                 conn.request(self.command, target, body=body, headers=headers)
                 response = conn.getresponse()
             except ClientGone:
                 raise
             except (OSError, http.client.HTTPException) as exc:
-                POOL.mark_failure(upstream, "%s: %s" % (type(exc).__name__, exc))
-                raise RetryableUpstream("%s: %s" % (type(exc).__name__, exc))
+                raise UpstreamFailed("%s: %s" % (type(exc).__name__, exc), transmitted=True)
             self.relay(response, upstream)
         finally:
             conn.close()
+
+    def read_response(self, response, size):
+        """Incremental reads: read() waits for the whole buffer, read1 returns what arrived."""
+        reader = getattr(response, "read1", None)
+        if reader is None:
+            return response.read(size)
+        return reader(size)
 
     def relay(self, response, upstream):
         status = response.status
@@ -650,16 +734,23 @@ class Handler(BaseHTTPRequestHandler):
         encoded = response.getheader("Content-Encoding") is not None
         self.proxied_status = status
 
+        # 204, 304 and 1xx are defined to have no body: no framing, no chunk terminator, or
+        # the next response on this connection starts at the wrong offset.
+        bodyless = self.command == "HEAD" or status in BODYLESS_STATUS or 100 <= status < 200
+
         self.send_response(status, reason)
+        hop_by_hop = HOP_BY_HOP | connection_named_headers(response.getheaders())
         for name, value in response.getheaders():
             low = name.lower()
-            if low in HOP_BY_HOP or low == "content-length":
+            if low in hop_by_hop or low == "content-length":
                 continue
             self.send_header(name, value)
         chunked_out = False
         if self.command == "HEAD":
             if length is not None:
                 self.send_header("Content-Length", str(length))
+        elif bodyless:
+            pass
         elif length is not None:
             self.send_header("Content-Length", str(length))
         elif self.request_version == "HTTP/1.1":
@@ -671,7 +762,7 @@ class Handler(BaseHTTPRequestHandler):
         self.headers_sent = True
         POOL.mark_success(upstream)
 
-        if self.command == "HEAD":
+        if bodyless:
             return
 
         inspect = STICKY and "json" in content_type and not encoded and self.command == "POST"
@@ -679,23 +770,32 @@ class Handler(BaseHTTPRequestHandler):
         complete = False
         if inspect:
             while len(buffered) < JSON_INSPECT_MAX:
-                piece = response.read(min(CHUNK, JSON_INSPECT_MAX - len(buffered)))
+                piece = self.read_response(response, min(CHUNK, JSON_INSPECT_MAX - len(buffered)))
                 if not piece:
                     complete = True
                     break
                 buffered += piece
             if complete and status < 400:
                 POOL.note_ids(extract_job_ids(buffered), upstream)
+        relayed = 0
         try:
             if buffered:
                 self.write_chunk(buffered, chunked_out)
+                relayed += len(buffered)
             while True:
-                piece = response.read(CHUNK)
+                piece = self.read_response(response, CHUNK)
                 if not piece:
                     break
                 self.write_chunk(piece, chunked_out)
+                relayed += len(piece)
             if chunked_out:
                 self.wfile.write(b"0\r\n\r\n")
+            if length is not None and relayed < length:
+                # The upstream declared more than it sent: the client already has a
+                # Content-Length it will never satisfy, so close rather than reuse.
+                POOL.mark_failure(upstream, "short response: %d of %d bytes" % (relayed, length))
+                self.close_connection = True
+                self.proxied_status = "%s (truncated after %d of %d bytes)" % (status, relayed, length)
         except (BrokenPipeError, ConnectionResetError):
             self.close_connection = True
         except (OSError, http.client.HTTPException) as exc:
@@ -725,9 +825,19 @@ class Handler(BaseHTTPRequestHandler):
             return
         body = b""
         if self.has_request_body():
-            length_header = self.headers.get("Content-Length")
-            if length_header and length_header.isdigit():
-                size = int(length_header)
+            if "chunked" in (self.headers.get("Transfer-Encoding") or "").lower():
+                pieces = []
+                total = 0
+                for piece in self.chunked_body():
+                    total += len(piece)
+                    if total > MAX_UPLOAD:
+                        self.send_json(413, {"error": "too_large",
+                                             "message": "body over GATEWAY_MAX_UPLOAD_MB"})
+                        return
+                    pieces.append(piece)
+                body = b"".join(pieces)
+            else:
+                size = int(self.headers["Content-Length"])
                 if size > MAX_UPLOAD:
                     self.send_json(413, {"error": "too_large",
                                          "message": "body over GATEWAY_MAX_UPLOAD_MB"})
@@ -783,6 +893,20 @@ class Handler(BaseHTTPRequestHandler):
                 raw_video = chosen
             else:
                 raw_video = body
+
+        if source_url is not None:
+            # Only fetch something remote: without this a file: URL makes the gateway read a
+            # file off its own host and hand back a picture of it.
+            url_parts = urllib.parse.urlsplit(source_url)
+            if url_parts.scheme.lower() not in ("http", "https") or not url_parts.netloc:
+                self.send_json(
+                    400,
+                    {
+                        "error": "bad_url",
+                        "message": "url must be an http:// or https:// address",
+                    },
+                )
+                return
 
         if source_url is None and not raw_video:
             self.send_json(

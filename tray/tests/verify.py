@@ -261,16 +261,18 @@ def main():
                 request(conn)
                 first = conn.getresponse()
                 first.read()
+                first_socket = conn.sock
                 conn.request("GET", "/gateway/health", headers={"Authorization": "Bearer " + TOKEN})
                 second = conn.getresponse()
                 second.read()
-                keep_alive.append((label, first.status == 401 and second.status in (200, 503),
-                                   first.status, second.status, conn.sock is not None))
+                reused = first_socket is not None and first_socket is conn.sock
+                keep_alive.append((label, first.status == 401 and second.status in (200, 503) and reused,
+                                   "%s then %s, socket reused=%s" % (first.status, second.status, reused)))
             finally:
                 conn.close()
-        check("a 401 leaves the connection reusable",
-              all(ok for _, ok, _, _, _ in keep_alive),
-              "; ".join("%s: %s then %s" % (label, a, b) for label, _, a, b, _ in keep_alive))
+        check("a 401 leaves the same connection usable",
+              all(ok for _, ok, _ in keep_alive),
+              "; ".join("%s: %s" % (label, detail) for label, _, detail in keep_alive))
 
         # ---- wait for the dead address to be probed out -----------------------
         deadline = time.time() + 15
@@ -293,7 +295,9 @@ def main():
                             body=b'{"model":"fasth3","prompt":"a door"}',
                             headers={"Content-Type": "application/json"}, token=TOKEN)
             codes.append(response["status"])
-        counts = {name: control(cports[name])["requests"] for name in ("A", "B", "C")}
+        counts = {name: sum(1 for entry in control(cports[name])["log"]
+                            if entry["path"] == "/v1/videos")
+                  for name in ("A", "B", "C")}
         check("12 requests spread evenly over the live ones",
               all(code == 201 for code in codes) and set(counts.values()) == {4},
               json.dumps(counts))
@@ -442,6 +446,95 @@ def main():
         check("the wedged upstream is then skipped",
               second["status"] == 200 and fast_seconds < 1.0 and wedged["selectable"] is False,
               "%.2fs, selectable=%s" % (fast_seconds, wedged["selectable"]))
+
+        # ---- hop-by-hop headers named by Connection --------------------------
+        named = call("GET", base + "/hop", headers={"Connection": "X-Hop", "X-Hop": "private"},
+                     token=TOKEN)
+        check("a header named by Connection is not forwarded",
+              "x-hop" not in (named["json"] or {}).get("header_names", []))
+
+        # ---- a bodyless status must not be framed as chunked ------------------
+        nobody = call("GET", base + "/nobody", token=TOKEN)
+        conn = http.client.HTTPConnection("127.0.0.1", g1_port, timeout=10)
+        try:
+            conn.request("GET", "/nobody", headers={"Authorization": "Bearer " + TOKEN})
+            first = conn.getresponse()
+            first.read()
+            socket_after_204 = conn.sock
+            conn.request("GET", "/gateway/health", headers={"Authorization": "Bearer " + TOKEN})
+            second = conn.getresponse()
+            second.read()
+            clean_204 = socket_after_204 is not None and socket_after_204 is conn.sock
+        finally:
+            conn.close()
+        check("a 204 passes through and keeps the connection in step",
+              nobody["status"] == 204 and "content-length" not in nobody["headers"] and clean_204,
+              "status %s, reusable=%s" % (nobody["status"], clean_204))
+
+        # ---- a truncated upstream response is not reported as whole -----------
+        truncated = {}
+        conn = http.client.HTTPConnection("127.0.0.1", g1_port, timeout=15)
+        try:
+            conn.request("GET", "/truncated", headers={"Authorization": "Bearer " + TOKEN})
+            response = conn.getresponse()
+            truncated["declared"] = response.getheader("Content-Length")
+            try:
+                truncated["received"] = len(response.read())
+            except http.client.IncompleteRead as exc:
+                truncated["received"] = len(exc.partial)
+        except Exception as exc:  # a closed connection is also an acceptable signal
+            truncated["error"] = type(exc).__name__
+        finally:
+            conn.close()
+        short = [state for state in health(g1_port)["json"]["upstreams"]
+                 if "short response" in (state["last_error"] or "")]
+        check("a short response is reported as truncated, not complete",
+              truncated.get("declared") == "5000" and truncated.get("received") == 100 and short,
+              json.dumps(truncated))
+
+        # ---- a chunked upload reaches the frame handler -----------------------
+        chunked_frame = call_chunked("POST", base + "/gateway/last-frame", clip,
+                                     headers={"Content-Type": "video/mp4"}, token=TOKEN)
+        check("last-frame accepts a chunked upload",
+              chunked_frame["status"] == 200 and frame_hash(chunked_frame["body"]) == ref_hash,
+              "status %s" % chunked_frame["status"])
+
+        # ---- a local file url is refused -------------------------------------
+        file_url = call("POST", base + "/gateway/last-frame",
+                        body=json.dumps({"url": "file:///etc/passwd"}).encode(),
+                        headers={"Content-Type": "application/json"}, token=TOKEN)
+        check("a file: url is refused",
+              file_url["status"] == 400 and (file_url["json"] or {}).get("error") == "bad_url",
+              "%s %s" % (file_url["status"], file_url["json"]))
+
+        # ---- a POST is never replayed, an idempotent body is ------------------
+        # Both need a fresh gateway: a wedged upstream is only considered usable until its
+        # first probe comes back, which is what makes the first request land on it.
+        for method in ("POST", "PUT"):
+            port = free_port()
+            spawn("gateway-" + method, [GATEWAY],
+                  {"UPSTREAMS": "http://127.0.0.1:%d,http://127.0.0.1:%d" % (ports["BH"], ports["A"]),
+                   "GATEWAY_TOKEN": TOKEN, "GATEWAY_PORT": str(port), "UPSTREAM_TIMEOUT": "2",
+                   "GATEWAY_PROBE_INTERVAL": "30", "GATEWAY_PROBE_TIMEOUT": "20",
+                   "GATEWAY_PENALTY_S": "30"})
+            wait_port(port)
+            before = sum(1 for entry in control(cports["A"])["log"] if entry["path"] == "/replay")
+            started = time.time()
+            outcome = call(method, "http://127.0.0.1:%d/replay" % port, body=b'{"prompt":"once"}',
+                           headers={"Content-Type": "application/json"}, token=TOKEN, timeout=30)
+            elapsed = time.time() - started
+            after = sum(1 for entry in control(cports["A"])["log"] if entry["path"] == "/replay")
+            if method == "POST":
+                check("a POST that may have been seen is not replayed",
+                      outcome["status"] == 502 and after == before and elapsed < 8,
+                      "%s in %.1fs, second upstream saw %d requests" % (outcome["status"], elapsed,
+                                                                        after - before))
+            else:
+                body = outcome["json"] or {}
+                check("an idempotent request with a small body fails over intact",
+                      outcome["status"] == 200 and body.get("body_len") == len(b'{"prompt":"once"}')
+                      and body.get("body_sha256") == hashlib.sha256(b'{"prompt":"once"}').hexdigest(),
+                      "%s after %.1fs" % (outcome["status"], elapsed))
 
         # ---- health shape and secret hygiene ---------------------------------
         final = health(g1_port)["json"]

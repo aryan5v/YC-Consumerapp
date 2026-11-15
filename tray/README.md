@@ -77,7 +77,9 @@ curl -sS -X POST http://127.0.0.1:8788/gateway/last-frame \
   -H "Authorization: Bearer $TOKEN" -F file=@clip.mp4 -o last-frame.png
 ```
 
-`/gateway/last-frame` is `ffmpeg -sseof -0.3 -i <clip> -vf reverse -frames:v 1`, which is the true
+A `url` must be an `http://` or `https://` address; anything else is a `400`, so a `file:` URL
+cannot be used to read a file off the tray node. `/gateway/last-frame` is
+`ffmpeg -sseof -0.3 -i <clip> -vf reverse -frames:v 1`, which is the true
 final frame rather than an approximation, and it falls back to a full reverse or a near-end seek on
 clips that will not seek. The PNG is returned as `image/png` bytes, at the source resolution. It is
 `video_reference`-friendly: fetch it, store it, pass it as the continuity frame of the next clip.
@@ -129,6 +131,7 @@ the seconds left before it is tried again.
 | `GATEWAY_PROBE_TIMEOUT` | `3` | probe timeout |
 | `GATEWAY_PROBE_PATH` | `/` | path probed; any HTTP status counts as alive, `-` for a bare TCP connect |
 | `GATEWAY_PENALTY_S` | `15` | seconds an upstream is kept out of rotation after a failed request |
+| `GATEWAY_BUFFER_MAX` | `65536` | a request body up to this size is held so a failed request can be replayed elsewhere; a bigger one streams and is never retried |
 | `GATEWAY_STICKY` | `1` | keep an upstream's job ids on that upstream |
 | `FFMPEG` | `ffmpeg` on `PATH` | binary used by `/gateway/last-frame` |
 | `GATEWAY_MAX_UPLOAD_MB` | `256` | upload and download cap for `/gateway/last-frame` |
@@ -141,8 +144,14 @@ minutes, so nothing is cut off early. `llm`-style clients that keep a connection
 - **Probe.** Every `GATEWAY_PROBE_INTERVAL`, each upstream gets `GET /` (any HTTP status counts as
   alive, so a 404 is a healthy server). A connection failure or a timeout marks it down.
 - **Cooldown.** A request that fails to connect or times out marks that upstream down for
-  `GATEWAY_PENALTY_S` and the request is retried once on another upstream. This catches the case a
-  TCP probe cannot see: a server that accepts the connection but never answers.
+  `GATEWAY_PENALTY_S` and is retried once on another upstream. This catches the case a probe cannot
+  see: a server that accepts the connection but never answers.
+- **Retries are only ever safe ones.** A retry happens when the connection itself failed, because
+  then the upstream cannot have seen the request, or when the method is idempotent *and* the request
+  body was small enough to keep in memory. A `POST` that reached an instance and then timed out is
+  never sent again: it may already have started a generation there, and running it twice is worse
+  than one clear `502`. That instance is still taken out of rotation, so the next request goes
+  somewhere healthy.
 - **Selection.** Fewest requests in flight wins, ties go to the upstream with the fewest requests so
   far, which spreads sequential work evenly. If every upstream looks down, the least busy one is
   tried anyway rather than failing the request outright.
@@ -161,15 +170,19 @@ Starts three fake UniServe-shaped instances plus a dead address and a wedged add
 gateway against real HTTP: `401` handling, even spread over the live upstreams, three concurrent
 requests landing on three instances, a dead upstream never being used, failover off a wedged one,
 byte-identical 48 MB streaming without buffering it, 8 MB uploads with and without chunked encoding,
-transparent methods/paths/query strings/headers, `DELETE` with no body, a `401` that leaves the
-connection reusable for the next request, job-id stickiness, `ffmpeg` last-frame extraction compared
-against an independently decoded last frame, and the token appearing neither upstream nor in the log.
-30 checks, all passing as of the last run.
+transparent methods/paths/query strings/headers, a header named by `Connection` being dropped,
+`DELETE` with no body, a `401` and a `204` that both leave the same connection usable, a 48 MB
+response whose short read is reported as truncated rather than complete, a `POST` that may have been
+seen never being replayed while an idempotent request with a small body does fail over, job-id
+stickiness, `ffmpeg` last-frame extraction from a URL, a multipart upload, a raw body and a chunked
+body compared against an independently decoded last frame, a `file:` URL being refused, and the token
+appearing neither upstream nor in the log. 37 checks, all passing as of the last run.
 
 `run.sh` itself was checked end to end against two fake upstreams with `GATEWAY_NO_TUNNEL=1`, and in
 frames-only mode: the banner values, `.gateway.env` at mode 600, a health request, a proxied `POST`,
 a last-frame render, the frames-only `503` on a proxied path, and `run.sh` cleaning up the gateway
-when it is signalled (17 checks).
+when it is signalled, and a run bound to a specific `GATEWAY_HOST` being probed on that address
+(19 checks).
 
 `run.sh` was also run against a real Cloudflare quick tunnel: once the fresh hostname started
 resolving (about 60 seconds, as the note above says), a proxied `POST` through the public URL

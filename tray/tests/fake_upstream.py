@@ -145,6 +145,19 @@ class FakeHandler(BaseHTTPRequestHandler):
             return self._json(201, {"id": job_id, "status": "queued", "instance": STATE.name})
         if self.command == "GET" and path.startswith("/v1/videos/") and path.endswith("/content"):
             return self._blob()
+        if path == "/nobody":
+            self.send_response(204)
+            self.end_headers()
+            return
+        if path == "/truncated":
+            # declares more than it sends: the gateway must not pass that off as complete
+            self.send_response(200)
+            self.send_header("Content-Type", "application/octet-stream")
+            self.send_header("Content-Length", "5000")
+            self.end_headers()
+            self.wfile.write(b"x" * 100)
+            self.close_connection = True
+            return
         if path == "/big/content":
             return self._send(STATE.big, "video/mp4")
         if self.command == "GET" and path.startswith("/v1/videos/"):

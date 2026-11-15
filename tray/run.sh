@@ -33,6 +33,11 @@ fi
 GATEWAY_PORT="${GATEWAY_PORT:-8788}"
 GATEWAY_HOST="${GATEWAY_HOST:-127.0.0.1}"
 GATEWAY_NO_TUNNEL="${GATEWAY_NO_TUNNEL:-0}"
+# the gateway listens on GATEWAY_HOST, so probe and tunnel that address, not loopback
+case "$GATEWAY_HOST" in
+  0.0.0.0|::|"*"|"") PROBE_HOST="127.0.0.1" ;;
+  *) PROBE_HOST="$GATEWAY_HOST" ;;
+esac
 ENVFILE="$HERE/.gateway.env"
 TUNNEL_LOG="$HERE/cloudflared.log"
 BINDIR="$HERE/bin"
@@ -92,6 +97,7 @@ cleanup() {
   wait 2>/dev/null || true
   say ""
   say "stopped."
+  exit 0
 }
 trap cleanup EXIT INT TERM
 
@@ -102,13 +108,13 @@ for _ in $(seq 1 100); do
     sed 's/^/  /' "$LOG" >&2
     die "gateway did not start (is port $GATEWAY_PORT already in use?)"
   fi
-  if "$PY" - "$GATEWAY_PORT" <<'PYEOF'
+  if "$PY" - "$PROBE_HOST" "$GATEWAY_PORT" <<'PYEOF'
 import http.client, os, sys, time
-port = int(sys.argv[1])
+host, port = sys.argv[1], int(sys.argv[2])
 deadline = time.time() + 3
 while time.time() < deadline:
     try:
-        conn = http.client.HTTPConnection("127.0.0.1", port, timeout=1)
+        conn = http.client.HTTPConnection(host, port, timeout=1)
         conn.request("GET", "/gateway/health",
                      headers={"Authorization": "Bearer " + os.environ["GATEWAY_TOKEN"]})
         response = conn.getresponse()
@@ -125,8 +131,8 @@ PYEOF
   fi
   sleep 0.2
 done
-[ "$ok" = "1" ] || die "the gateway did not answer on http://127.0.0.1:$GATEWAY_PORT (see $LOG)"
-say "gateway listening on http://127.0.0.1:$GATEWAY_PORT"
+[ "$ok" = "1" ] || die "the gateway did not answer on http://$PROBE_HOST:$GATEWAY_PORT (see $LOG)"
+say "gateway listening on http://$PROBE_HOST:$GATEWAY_PORT"
 
 # --- cloudflared quick tunnel ---------------------------------------------------------------
 PUBLIC_URL=""
@@ -169,7 +175,7 @@ else
   fi
   say "tunnel: $("$CF" --version 2>/dev/null | head -1)"
   rm -f "$TUNNEL_LOG"
-  "$CF" tunnel --no-autoupdate --url "http://127.0.0.1:$GATEWAY_PORT" >"$TUNNEL_LOG" 2>&1 &
+  "$CF" tunnel --no-autoupdate --url "http://$PROBE_HOST:$GATEWAY_PORT" >"$TUNNEL_LOG" 2>&1 &
   TUNNEL_PID=$!
   for _ in $(seq 1 300); do
     PUBLIC_URL="$(grep -oE 'https://[a-z0-9][a-z0-9-]*\.trycloudflare\.com' "$TUNNEL_LOG" 2>/dev/null | head -1 || true)"
@@ -184,7 +190,7 @@ else
   if [ -n "$PUBLIC_URL" ]; then
     say "tunnel: $PUBLIC_URL"
   else
-    say "WARNING: no tunnel URL yet. The gateway is still up on http://127.0.0.1:$GATEWAY_PORT."
+    say "WARNING: no tunnel URL yet. The gateway is still up on http://$PROBE_HOST:$GATEWAY_PORT."
     say "         Check $TUNNEL_LOG, or use your own tunnel and set FASTH3_URLS to it."
   fi
 fi
@@ -210,13 +216,13 @@ if [ -n "$PUBLIC_URL" ]; then
 else
   say " Fork tray gateway is up (no public URL; local only)."
   say ""
-  say " Local URL    http://127.0.0.1:$GATEWAY_PORT"
+  say " Local URL    http://$PROBE_HOST:$GATEWAY_PORT"
 fi
-say " Local health http://127.0.0.1:$GATEWAY_PORT/gateway/health"
+say " Local health http://$PROBE_HOST:$GATEWAY_PORT/gateway/health"
 say ""
 say " Give the Convex backend these two values:"
 say ""
-say "   FASTH3_URLS=${PUBLIC_URL:-http://127.0.0.1:$GATEWAY_PORT}"
+say "   FASTH3_URLS=${PUBLIC_URL:-http://$PROBE_HOST:$GATEWAY_PORT}"
 say "   FASTH3_API_KEY=$GATEWAY_TOKEN"
 say ""
 if [ -n "$PUBLIC_URL" ]; then
@@ -224,14 +230,14 @@ if [ -n "$PUBLIC_URL" ]; then
   say "   curl -sS $PUBLIC_URL/gateway/health -H 'Authorization: Bearer $GATEWAY_TOKEN'"
 else
   say " Check it:"
-  say "   curl -sS http://127.0.0.1:$GATEWAY_PORT/gateway/health -H 'Authorization: Bearer $GATEWAY_TOKEN'"
+  say "   curl -sS http://$PROBE_HOST:$GATEWAY_PORT/gateway/health -H 'Authorization: Bearer $GATEWAY_TOKEN'"
 fi
 say ""
 say " Logs: gateway $LOG | tunnel $TUNNEL_LOG"
 say " Stop: Ctrl-C (or: pkill -f tray/gateway.py; pkill -f 'cloudflared tunnel')"
 say ""
 say " Last frame of a clip (PNG on stdout):"
-say "   curl -sS -X POST http://127.0.0.1:$GATEWAY_PORT/gateway/last-frame \\"
+say "   curl -sS -X POST http://$PROBE_HOST:$GATEWAY_PORT/gateway/last-frame \\"
 say "     -H 'Authorization: Bearer $GATEWAY_TOKEN' -H 'Content-Type: application/json' \\"
 say "     -d '{\"url\":\"https://example.com/clip.mp4\"}' -o last-frame.png"
 say "════════════════════════════════════════════════════════════════════"

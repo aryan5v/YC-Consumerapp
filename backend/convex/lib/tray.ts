@@ -1,11 +1,21 @@
-import { mockLatencyMs } from "./config";
 import { envFlag, sleep } from "./env";
+import { mockLatencyMs } from "./config";
 import { mockJobId, stockClipForJob } from "./stock";
+import {
+  UniserveRequest,
+  deleteVideoJob,
+  fetchVideoJob,
+  referenceLegend,
+  submitVideo,
+  uniserveModel,
+  uniserveTask,
+} from "./trayUniserve";
 
 export type Box = { x: number; y: number; w: number; h: number };
 
 export type TrayAnchors = {
   continuityFrameUrl: string | null;
+  continuityVideoUrl: string | null;
   characterSheetUrl: string | null;
   styleImageUrl: string | null;
   voiceRefUrl: string | null;
@@ -27,57 +37,50 @@ export type TrayJobState = {
 
 export type TrayDetectResult = { boxes: Record<string, Box | null> };
 
+export function trayUrls(): string[] {
+  const list = envFlag("FASTH3_URLS");
+  const single = envFlag("FASTH3_URL");
+  const raw = list ?? single ?? "";
+  return raw
+    .split(",")
+    .map((entry) => entry.trim().replace(/\/+$/, ""))
+    .filter((entry) => entry !== "");
+}
+
 export function trayMode(): "live" | "mock" {
-  return envFlag("FASTH3_URL") === null ? "mock" : "live";
+  return trayUrls().length === 0 ? "mock" : "live";
 }
 
-function baseUrl(): string {
-  const raw = envFlag("FASTH3_URL");
-  if (raw === null) throw new Error("FASTH3_URL is not set");
-  return raw.replace(/\/+$/, "");
+export function instanceCount(): number {
+  const count = trayUrls().length;
+  return count === 0 ? 0 : count;
 }
 
-function headers(): Record<string, string> {
-  const key = envFlag("FASTH3_API_KEY");
-  const base: Record<string, string> = { "content-type": "application/json" };
-  if (key !== null) base.authorization = `Bearer ${key}`;
-  return base;
+export function instanceForSeed(seed: number): string | null {
+  const urls = trayUrls();
+  if (urls.length === 0) return null;
+  return urls[Math.abs(Math.trunc(seed)) % urls.length];
 }
 
-async function postJson(path: string, body: unknown, timeoutMs: number): Promise<Record<string, unknown>> {
-  const res = await fetch(`${baseUrl()}${path}`, {
-    method: "POST",
-    headers: headers(),
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(timeoutMs),
-  });
-  const text = await res.text();
-  if (!res.ok) throw new Error(`tray POST ${path} failed: ${res.status} ${text.slice(0, 400)}`);
-  if (text.trim() === "") return {};
-  const parsed = JSON.parse(text);
-  if (parsed === null || typeof parsed !== "object") throw new Error(`tray POST ${path} returned ${typeof parsed}`);
-  return parsed as Record<string, unknown>;
+function instanceFor(seed: number): string {
+  const url = instanceForSeed(seed);
+  if (url === null) throw new Error("FASTH3_URLS is not set");
+  return url;
 }
 
-async function getJson(path: string, timeoutMs: number): Promise<Record<string, unknown>> {
-  const res = await fetch(`${baseUrl()}${path}`, {
-    method: "GET",
-    headers: headers(),
-    signal: AbortSignal.timeout(timeoutMs),
-  });
-  const text = await res.text();
-  if (!res.ok) throw new Error(`tray GET ${path} failed: ${res.status} ${text.slice(0, 400)}`);
-  const parsed = JSON.parse(text);
-  if (parsed === null || typeof parsed !== "object") throw new Error(`tray GET ${path} returned ${typeof parsed}`);
-  return parsed as Record<string, unknown>;
+function apiKey(): string | null {
+  return envFlag("FASTH3_API_KEY");
 }
 
-function readString(source: Record<string, unknown>, keys: string[]): string | null {
-  for (const key of keys) {
-    const value = source[key];
-    if (typeof value === "string" && value.trim() !== "") return value.trim();
-  }
-  return null;
+export function detectConfigured(): boolean {
+  return envFlag("DETECT_URL") !== null;
+}
+
+export function trayJobReference(jobId: string): { jobId: string; baseUrl: string | null } {
+  const separator = jobId.lastIndexOf("@");
+  if (separator === -1) return { jobId, baseUrl: null };
+  const baseUrl = jobId.slice(separator + 1);
+  return { jobId: jobId.slice(0, separator), baseUrl: baseUrl === "" ? null : baseUrl };
 }
 
 export async function trayGenerate(request: TrayGenerateRequest): Promise<{ jobId: string }> {
@@ -85,59 +88,61 @@ export async function trayGenerate(request: TrayGenerateRequest): Promise<{ jobI
     await sleep(mockLatencyMs());
     return { jobId: mockJobId(`${request.seed}:${request.prompt}`) };
   }
-  const body = {
-    prompt: request.prompt,
-    continuity_frame_url: request.continuityFrameUrl,
-    character_sheet_url: request.characterSheetUrl,
-    style_image_url: request.styleImageUrl,
-    voice_ref_url: request.voiceRefUrl,
+  const baseUrl = instanceFor(request.seed);
+  const legend = referenceLegend(request);
+  const uniserve: UniserveRequest = {
+    baseUrl,
+    apiKey: apiKey(),
+    model: uniserveModel(),
+    task: uniserveTask(),
+    prompt: legend === "" ? request.prompt : `${request.prompt}\n\n${legend}`,
     seed: request.seed,
     aspect: request.aspect,
     seconds: request.seconds,
+    continuityFrameUrl: request.continuityFrameUrl,
+    continuityVideoUrl: request.continuityVideoUrl,
+    characterSheetUrl: request.characterSheetUrl,
+    styleImageUrl: request.styleImageUrl,
+    voiceRefUrl: request.voiceRefUrl,
   };
-  const res = await postJson("/generate", body, 1800000);
-  const jobId = readString(res, ["job_id", "jobId", "id"]);
-  if (jobId === null) throw new Error("tray /generate returned no job_id");
-  return { jobId };
+  const jobId = await submitVideo(uniserve);
+  return { jobId: `${jobId}@${baseUrl}` };
 }
 
 export async function trayGetJob(jobId: string): Promise<TrayJobState> {
   if (trayMode() === "mock") {
     return { status: "ready", mp4Url: stockClipForJob(jobId), lastFrameUrl: null };
   }
-  const res = await getJson(`/jobs/${encodeURIComponent(jobId)}`, 30000);
-  const raw = (readString(res, ["status", "state"]) ?? "generating").toLowerCase();
-  const status = normalizeStatus(raw);
-  const mp4Url = readString(res, ["mp4_url", "mp4Url", "url", "video_url"]);
-  if (raw.includes("cancel")) {
-    return { status: "failed", mp4Url: null, lastFrameUrl: null, error: "tray job was cancelled" };
+  const reference = trayJobReference(jobId);
+  if (reference.baseUrl === null) {
+    return { status: "failed", mp4Url: null, lastFrameUrl: null, error: `job ${jobId} has no instance` };
   }
-  if (status === "failed") {
-    return { status, mp4Url, lastFrameUrl: null, error: readString(res, ["error", "message"]) ?? "tray job failed" };
-  }
-  return {
-    status,
-    mp4Url,
-    lastFrameUrl: readString(res, ["last_frame_url", "lastFrameUrl", "last_frame", "end_frame_url"]),
-  };
-}
-
-function normalizeStatus(raw: string): TrayJobState["status"] {
-  if (["ready", "succeeded", "success", "done", "complete", "completed", "finished"].includes(raw)) return "ready";
-  if (["failed", "error", "cancelled", "canceled"].includes(raw)) return "failed";
-  if (["queued", "pending", "submitted"].includes(raw)) return "queued";
-  return "generating";
+  return await fetchVideoJob({ baseUrl: reference.baseUrl, apiKey: apiKey(), jobId: reference.jobId });
 }
 
 export async function trayDetect(frameUrl: string, targets: string[]): Promise<TrayDetectResult> {
-  if (trayMode() === "mock" || targets.length === 0) return { boxes: {} };
-  const res = await postJson("/detect", { frame_url: frameUrl, targets }, 60000);
-  return { boxes: normalizeBoxes(res.boxes) };
+  const url = envFlag("DETECT_URL");
+  if (url === null || targets.length === 0) return { boxes: {} };
+  const key = envFlag("DETECT_API_KEY");
+  const headers: Record<string, string> = { "content-type": "application/json" };
+  if (key !== null) headers.authorization = `Bearer ${key}`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ frame_url: frameUrl, targets }),
+    signal: AbortSignal.timeout(60000),
+  });
+  const text = await res.text();
+  if (!res.ok) throw new Error(`detect failed: ${res.status} ${text.slice(0, 200)}`);
+  const parsed = JSON.parse(text) as { boxes?: unknown };
+  return { boxes: normalizeBoxes(parsed.boxes) };
 }
 
 export async function trayCancel(jobId: string): Promise<void> {
   if (trayMode() === "mock") return;
-  await postJson(`/jobs/${encodeURIComponent(jobId)}/cancel`, {}, 15000);
+  const reference = trayJobReference(jobId);
+  if (reference.baseUrl === null) return;
+  await deleteVideoJob({ baseUrl: reference.baseUrl, apiKey: apiKey(), jobId: reference.jobId });
 }
 
 function normalizeBoxes(raw: unknown): Record<string, Box | null> {

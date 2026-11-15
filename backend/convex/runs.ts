@@ -1,15 +1,20 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
-import { Doc } from "./_generated/dataModel";
+import { Doc, Id } from "./_generated/dataModel";
 import { ensureActiveUser } from "./lib/session";
 import { ensureEpisode } from "./lib/episodes";
 import { pacificDate } from "./lib/pacific";
 import { runViewValidator } from "./lib/validators";
 import { buildRunView } from "./lib/view";
 import { DirectorPuzzleStop } from "./lib/director";
-import { checkAnswer, outcomeLabel } from "./lib/story";
-import { cancelSiblings, childrenOfBeat, clipForBeat, kickRun, promoteTo } from "./lib/orchestration";
+import { answerPuzzle, chooseOption, loadCurrent } from "./lib/advance";
+import { askAgainLine, matchSpokenOption, SpokenOption } from "./lib/speech";
+import { openaiConfigured, synthesize, transcribe } from "./lib/openai";
+import { deepseekJSON, directorMode, parseJSONObject } from "./lib/deepseek";
+import { graderMessages, speechMapperMessages } from "./lib/director";
+import { checkAnswer } from "./lib/story";
+import { childrenOfBeat, clipForBeat, kickRun } from "./lib/orchestration";
 
 export const startToday = mutation({
   args: {},
@@ -76,14 +81,7 @@ export const choose = mutation({
   args: { runId: v.id("runs"), optionId: v.string() },
   returns: v.null(),
   handler: async (ctx, { runId, optionId }) => {
-    const { run, beat } = await loadCurrent(ctx, runId);
-    const stop = beat.stop as { kind: string; options?: { id: string; label: string }[] } | undefined;
-    if (stop === undefined || stop.kind !== "choice" || stop.options === undefined) {
-      throw new Error("the current beat is not a choice stop");
-    }
-    const option = stop.options.find((entry) => entry.id === optionId);
-    if (option === undefined) throw new Error(`no option "${optionId}" on the current beat`);
-    await promote(ctx, run, beat, optionId, option.label);
+    await chooseOption(ctx, runId, optionId);
     return null;
   },
 });
@@ -92,40 +90,162 @@ export const answer = mutation({
   args: { runId: v.id("runs"), answer: v.string() },
   returns: v.object({ correct: v.boolean() }),
   handler: async (ctx, { runId, answer: given }) => {
-    const { run, beat } = await loadCurrent(ctx, runId);
-    const stop = beat.stop as DirectorPuzzleStop | undefined;
-    if (stop === undefined || stop.kind !== "puzzle") throw new Error("the current beat is not a puzzle stop");
-    const correct = checkAnswer(stop, given);
-    const optionId = correct ? "success" : "failure";
-    await promote(ctx, run, beat, optionId, outcomeLabel(stop, correct));
+    const correct = await answerPuzzle(ctx, runId, given);
     return { correct };
   },
 });
 
-async function loadCurrent(ctx: Parameters<typeof ensureActiveUser>[0], runId: Doc<"runs">["_id"]) {
-  const run = await ctx.db.get(runId);
-  if (run === null) throw new Error("run not found");
-  if (run.status !== "active") throw new Error("this run has already ended");
-  const beatId = run.currentBeatId;
-  if (beatId === undefined) throw new Error("run has no current beat");
-  const beat = await ctx.db.get(beatId);
-  if (beat === null) throw new Error("current beat not found");
-  return { run, beat };
-}
+export const speakContext = internalQuery({
+  args: { runId: v.id("runs") },
+  handler: async (ctx, { runId }) => {
+    const run = await ctx.db.get(runId);
+    if (run === null || run.status !== "active") return null;
+    const beatId = run.currentBeatId;
+    if (beatId === undefined) return null;
+    const beat = await ctx.db.get(beatId);
+    if (beat === null) return null;
+    const episode = await ctx.db.get(run.episodeId);
+    if (episode === null) return null;
+    return {
+      stop: beat.stop ?? null,
+      spokenLine: beat.spokenLine ?? "",
+      characterName: episode.character.name,
+      characterVoice: episode.character.voice,
+      voiceId: episode.voiceId,
+      pathLabels: run.path,
+    };
+  },
+});
 
-async function promote(
-  ctx: Parameters<typeof cancelSiblings>[0],
-  run: Doc<"runs">,
-  beat: Doc<"beats">,
-  optionId: string,
-  label: string,
-): Promise<void> {
-  const children = await childrenOfBeat(ctx, beat._id);
-  const chosen = children.find((child) => child.optionId === optionId);
-  if (chosen === undefined) throw new Error(`option "${optionId}" has no shot yet`);
-  await cancelSiblings(
-    ctx,
-    children.filter((child) => child._id !== chosen._id),
-  );
-  await promoteTo(ctx, run, chosen, label, optionId);
-}
+export const speakChoose = internalMutation({
+  args: { runId: v.id("runs"), optionId: v.string() },
+  returns: v.null(),
+  handler: async (ctx, { runId, optionId }) => {
+    await chooseOption(ctx, runId, optionId);
+    return null;
+  },
+});
+
+export const speakAnswer = internalMutation({
+  args: { runId: v.id("runs"), answer: v.string(), correct: v.boolean() },
+  returns: v.null(),
+  handler: async (ctx, { runId, answer, correct }) => {
+    await answerPuzzle(ctx, runId, answer, correct);
+    return null;
+  },
+});
+
+export const speakUploadUrl = mutation({
+  args: {},
+  returns: v.string(),
+  handler: async (ctx) => {
+    if (!openaiConfigured()) {
+      throw new Error("voice is not configured on this deployment: OPENAI_API_KEY is unset");
+    }
+    return await ctx.storage.generateUploadUrl();
+  },
+});
+
+export const speak = action({
+  args: { runId: v.id("runs"), audioStorageId: v.id("_storage") },
+  returns: v.object({
+    transcript: v.string(),
+    matchedOptionId: v.union(v.string(), v.null()),
+    correct: v.union(v.boolean(), v.null()),
+    reply: v.union(v.string(), v.null()),
+    replyAudioUrl: v.union(v.string(), v.null()),
+  }),
+  handler: async (ctx, { runId, audioStorageId }) => {
+    if (!openaiConfigured()) {
+      throw new Error("voice is not configured on this deployment: OPENAI_API_KEY is unset");
+    }
+    const context = await ctx.runQuery(internal.runs.speakContext, { runId });
+    if (context === null) throw new Error("this run is no longer active");
+    const recording = await ctx.storage.get(audioStorageId);
+    if (recording === null) throw new Error("that recording is no longer in storage");
+    const transcript = await transcribe(recording, "m4a");
+    const replyAudio = async (text: string): Promise<{ reply: string; replyAudioUrl: string | null }> => {
+      try {
+        const audio = await synthesize({
+          text,
+          voice: context.voiceId,
+          instructions: `You are ${context.characterName}. ${context.characterVoice} Say one short line of dialogue plainly.`,
+        });
+        const stored = await ctx.storage.store(audio);
+        return { reply: text, replyAudioUrl: await ctx.storage.getUrl(stored) };
+      } catch {
+        return { reply: text, replyAudioUrl: null };
+      }
+    };
+    const nothingHeard = () => replyAudio("I did not catch that. Say it again, or tap one of the three.");
+    const stop = context.stop as
+      | { kind: "choice"; options: { id: string; label: string; target: string; spoken_line: string }[] }
+      | DirectorPuzzleStop
+      | null;
+    const said = transcript.trim();
+    if (stop === null) {
+      const spoken = await replyAudio("Hold on a beat and say that again.");
+      return { transcript, matchedOptionId: null, correct: null, ...spoken };
+    }
+    if (said === "") {
+      const spoken = await nothingHeard();
+      return { transcript, matchedOptionId: null, correct: null, ...spoken };
+    }
+
+    if (stop.kind === "puzzle") {
+      let correct = checkAnswer(stop, said);
+      if (!correct && said !== "" && directorMode() === "live") {
+        try {
+          const raw = await deepseekJSON(
+            graderMessages({ question: stop.question, answers: stop.answers, transcript: said }),
+            120,
+          );
+          const parsed = parseJSONObject(raw) as { correct?: unknown };
+          if (parsed.correct === true) correct = true;
+        } catch {
+          correct = false;
+        }
+      }
+      await ctx.runMutation(internal.runs.speakAnswer, { runId, answer: said, correct });
+      return { transcript, matchedOptionId: correct ? "success" : "failure", correct, reply: null, replyAudioUrl: null };
+    }
+
+    const options: SpokenOption[] = stop.options.map((option) => ({
+      id: option.id,
+      label: option.label,
+      target: option.target,
+      spokenLine: option.spoken_line,
+    }));
+    const local = matchSpokenOption(options, said);
+    let optionId = local.optionId;
+    let reply: string | null = null;
+    if (optionId === null && said !== "" && directorMode() === "live") {
+      try {
+        const raw = await deepseekJSON(
+          speechMapperMessages({
+            character: context.characterName,
+            question: context.spokenLine === "" ? "What do you do?" : context.spokenLine,
+            spokenLine: context.spokenLine,
+            options: options.map((option) => ({ id: option.id, label: option.label, target: option.target })),
+            transcript: said,
+          }),
+          200,
+        );
+        const parsed = parseJSONObject(raw) as { option_id?: unknown; reply?: unknown };
+        const candidate = typeof parsed.option_id === "string" ? parsed.option_id.trim().toLowerCase() : null;
+        if (candidate !== null && options.some((option) => option.id === candidate)) optionId = candidate;
+        if (typeof parsed.reply === "string" && parsed.reply.trim() !== "") reply = parsed.reply.trim();
+      } catch {
+        reply = null;
+      }
+    }
+    if (optionId === null) {
+      const spoken = await replyAudio(reply ?? askAgainLine(context.characterName));
+      return { transcript, matchedOptionId: null, correct: null, ...spoken };
+    }
+    await ctx.runMutation(internal.runs.speakChoose, { runId, optionId });
+    return { transcript, matchedOptionId: optionId, correct: null, reply: null, replyAudioUrl: null };
+  },
+});
+
+export { loadCurrent };

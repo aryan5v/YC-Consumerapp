@@ -9,9 +9,10 @@ import {
   voiceRefUrl,
 } from "./config";
 import { STYLE_BIBLE } from "./style";
+import { voiceFor } from "./openai";
 import { dayIndex } from "./pacific";
 
-type CatalogEntry = { title: string; tagline: string; premise: string; poster: string };
+type CatalogEntry = { title: string; tagline: string; premise: string; poster: string; character: { name: string; voice: string } };
 
 const CATALOG: CatalogEntry[] = [
   {
@@ -20,6 +21,7 @@ const CATALOG: CatalogEntry[] = [
     premise:
       "A courier gets off the last bus at midnight carrying a sealed parcel that hums. The street is short, the shop is shuttered and a man in a grey coat is watching from the corner.",
     poster: "fork-parcel",
+    character: { name: "the man in the grey coat", voice: "Flat, tired, never raises his voice, speaks in short questions, and has been on this corner every night this week." },
   },
   {
     title: "Four Wet Blocks",
@@ -27,6 +29,7 @@ const CATALOG: CatalogEntry[] = [
     premise:
       "The last bus drops a courier four blocks from a delivery address that does not exist on any map, on the wettest night of the year.",
     poster: "fork-blocks",
+    character: { name: "the clerk in the green visor", voice: "Fast, dry and over-polite, volunteers nothing, and keeps counting the change while he talks." },
   },
   {
     title: "The Grey Coat",
@@ -34,6 +37,7 @@ const CATALOG: CatalogEntry[] = [
     premise:
       "A man in a grey coat has been on the same corner every night this week, and tonight he steps off it and follows the courier instead of watching.",
     poster: "fork-coat",
+    character: { name: "the man in the grey coat", voice: "Flat, tired, never raises his voice, speaks in short questions, and has been on this corner every night this week." },
   },
   {
     title: "Last Bus Home",
@@ -41,6 +45,7 @@ const CATALOG: CatalogEntry[] = [
     premise:
       "A courier rides the last bus past their own stop and gets off where the lights end, carrying something they were told not to open.",
     poster: "fork-bus",
+    character: { name: "the bus driver", voice: "Warm and unhurried, talks like he has all night, and asks the question you were avoiding." },
   },
   {
     title: "The Red Door",
@@ -48,6 +53,7 @@ const CATALOG: CatalogEntry[] = [
     premise:
       "Every door on this street is shuttered for the night except one red door, which is standing open with the light on inside.",
     poster: "fork-reddoor",
+    character: { name: "the woman behind the red door", voice: "Quiet and precise, only ever says half of what she means, and never opens the door any wider." },
   },
   {
     title: "One Hour Before Rain",
@@ -55,6 +61,7 @@ const CATALOG: CatalogEntry[] = [
     premise:
       "The rain is one hour out and three people on one street are all waiting for the same courier to make a mistake.",
     poster: "fork-rain",
+    character: { name: "the man in the grey coat", voice: "Flat, tired, never raises his voice, speaks in short questions, and has been on this corner every night this week." },
   },
   {
     title: "The Store That Never Closes",
@@ -62,6 +69,7 @@ const CATALOG: CatalogEntry[] = [
     premise:
       "A corner store is open at midnight with one clerk behind the counter who has been expecting this exact courier for a week.",
     poster: "fork-store",
+    character: { name: "the clerk in the green visor", voice: "Fast, dry and over-polite, volunteers nothing, and keeps counting the change while he talks." },
   },
   {
     title: "A Coin and Two Doors",
@@ -69,6 +77,7 @@ const CATALOG: CatalogEntry[] = [
     premise:
       "There is a coin on the wet pavement and two doors, and whoever picks up the coin has to explain which door they came out of.",
     poster: "fork-coin",
+    character: { name: "the man in the grey coat", voice: "Flat, tired, never raises his voice, speaks in short questions, and has been on this corner every night this week." },
   },
 ];
 
@@ -104,6 +113,8 @@ export async function ensureEpisode(ctx: MutationCtx, date: string): Promise<Doc
     title: entry.title,
     tagline: entry.tagline,
     premise: entry.premise,
+    character: entry.character,
+    voiceId: voiceFor(entry.character.name),
     styleBible: STYLE_BIBLE,
     styleImageUrl: styleImageUrl(),
     characterSheetUrl: characterSheetUrl(),

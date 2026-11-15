@@ -10,6 +10,8 @@ const runStopValidator = v.union(
   v.null(),
   v.object({
     kind: v.literal("choice"),
+    spokenLine: v.string(),
+    spokenAudioUrl: v.union(v.string(), v.null()),
     options: v.array(
       v.object({
         id: v.string(),
@@ -22,6 +24,8 @@ const runStopValidator = v.union(
   }),
   v.object({
     kind: v.literal("puzzle"),
+    spokenLine: v.string(),
+    spokenAudioUrl: v.union(v.string(), v.null()),
     question: v.string(),
     answerType: v.union(v.literal("pick"), v.literal("number"), v.literal("text")),
     choices: v.union(v.array(v.string()), v.null()),
@@ -42,7 +46,18 @@ export const runViewValidator = v.object({
   stop: runStopValidator,
   ending: v.union(
     v.null(),
-    v.object({ title: v.string(), summary: v.string(), path: v.array(v.string()) }),
+    v.object({
+      title: v.string(),
+      summary: v.string(),
+      path: v.array(v.string()),
+      text: v.optional(
+        v.object({
+          character: v.string(),
+          number: v.union(v.string(), v.null()),
+          prompt: v.string(),
+        }),
+      ),
+    }),
   ),
 });
 

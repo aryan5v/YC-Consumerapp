@@ -1,6 +1,15 @@
 export type EnvName =
   | "FASTH3_URL"
+  | "FASTH3_URLS"
   | "FASTH3_API_KEY"
+  | "FASTH3_MODEL"
+  | "FASTH3_TASK"
+  | "FASTH3_SIZE"
+  | "FASTH3_SHORT_EDGE"
+  | "FASTH3_NUM_FRAMES"
+  | "FASTH3_SUBMIT_TIMEOUT_MS"
+  | "DETECT_URL"
+  | "DETECT_API_KEY"
   | "DEEPSEEK_API_KEY"
   | "DEEPSEEK_BASE_URL"
   | "DEEPSEEK_MODEL"
@@ -13,14 +22,44 @@ export type EnvName =
   | "STYLE_IMAGE_URL"
   | "CHARACTER_SHEET_URL"
   | "VOICE_REF_URL"
-  | "DIRECTOR_TIMEOUT_MS";
+  | "DIRECTOR_TIMEOUT_MS"
+  | "KEIKI_API_KEY"
+  | "KEIKI_AGENT_ID"
+  | "KEIKI_AGENT_NAME"
+  | "KEIKI_LINE"
+  | "KEIKI_TOOL_SECRET"
+  | "KEIKI_BASE_URL"
+  | "KEIKI_OUTBOUND"
+  | "OPENAI_API_KEY"
+  | "OPENAI_TTS_MODEL"
+  | "OPENAI_STT_MODEL"
+  | "OPENAI_BASE_URL"
+  | "OPENAI_TIMEOUT_MS";
 
 export function env(name: EnvName): string | undefined {
   switch (name) {
     case "FASTH3_URL":
       return process.env.FASTH3_URL;
+    case "FASTH3_URLS":
+      return process.env.FASTH3_URLS;
     case "FASTH3_API_KEY":
       return process.env.FASTH3_API_KEY;
+    case "FASTH3_MODEL":
+      return process.env.FASTH3_MODEL;
+    case "FASTH3_TASK":
+      return process.env.FASTH3_TASK;
+    case "FASTH3_SIZE":
+      return process.env.FASTH3_SIZE;
+    case "FASTH3_SHORT_EDGE":
+      return process.env.FASTH3_SHORT_EDGE;
+    case "FASTH3_NUM_FRAMES":
+      return process.env.FASTH3_NUM_FRAMES;
+    case "FASTH3_SUBMIT_TIMEOUT_MS":
+      return process.env.FASTH3_SUBMIT_TIMEOUT_MS;
+    case "DETECT_URL":
+      return process.env.DETECT_URL;
+    case "DETECT_API_KEY":
+      return process.env.DETECT_API_KEY;
     case "DEEPSEEK_API_KEY":
       return process.env.DEEPSEEK_API_KEY;
     case "DEEPSEEK_BASE_URL":
@@ -47,6 +86,30 @@ export function env(name: EnvName): string | undefined {
       return process.env.VOICE_REF_URL;
     case "DIRECTOR_TIMEOUT_MS":
       return process.env.DIRECTOR_TIMEOUT_MS;
+    case "KEIKI_API_KEY":
+      return process.env.KEIKI_API_KEY;
+    case "KEIKI_AGENT_ID":
+      return process.env.KEIKI_AGENT_ID;
+    case "KEIKI_AGENT_NAME":
+      return process.env.KEIKI_AGENT_NAME;
+    case "KEIKI_LINE":
+      return process.env.KEIKI_LINE;
+    case "KEIKI_TOOL_SECRET":
+      return process.env.KEIKI_TOOL_SECRET;
+    case "KEIKI_BASE_URL":
+      return process.env.KEIKI_BASE_URL;
+    case "KEIKI_OUTBOUND":
+      return process.env.KEIKI_OUTBOUND;
+    case "OPENAI_API_KEY":
+      return process.env.OPENAI_API_KEY;
+    case "OPENAI_TTS_MODEL":
+      return process.env.OPENAI_TTS_MODEL;
+    case "OPENAI_STT_MODEL":
+      return process.env.OPENAI_STT_MODEL;
+    case "OPENAI_BASE_URL":
+      return process.env.OPENAI_BASE_URL;
+    case "OPENAI_TIMEOUT_MS":
+      return process.env.OPENAI_TIMEOUT_MS;
   }
 }
 

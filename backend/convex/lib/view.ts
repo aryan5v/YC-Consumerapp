@@ -1,6 +1,6 @@
 import { Doc, Id } from "../_generated/dataModel";
 import { Box } from "./tray";
-import { DirectorPuzzleStop, DirectorStop } from "./director";
+import { DEFAULT_SPOKEN_LINE, DirectorPuzzleStop, DirectorStop } from "./director";
 
 export type ViewClipState = { status: "generating" | "ready"; clipUrl: string | null };
 
@@ -8,6 +8,8 @@ export type ViewStop =
   | null
   | {
       kind: "choice";
+      spokenLine: string;
+      spokenAudioUrl: string | null;
       options: {
         id: string;
         label: string;
@@ -18,6 +20,8 @@ export type ViewStop =
     }
   | {
       kind: "puzzle";
+      spokenLine: string;
+      spokenAudioUrl: string | null;
       question: string;
       answerType: "pick" | "number" | "text";
       choices: string[] | null;
@@ -35,8 +39,18 @@ export type RunView = {
     status: "generating" | "ready";
   };
   stop: ViewStop;
-  ending: null | { title: string; summary: string; path: string[] };
+  ending: null | {
+    title: string;
+    summary: string;
+    path: string[];
+    text?: { character: string; number: string | null; prompt: string };
+  };
 };
+
+export function spokenLineFor(beat: Doc<"beats">, stop: DirectorStop): string {
+  if (beat.spokenLine !== undefined && beat.spokenLine.trim() !== "") return beat.spokenLine;
+  return stop.kind === "puzzle" ? stop.question : DEFAULT_SPOKEN_LINE;
+}
 
 export function advanceableClipState(clip: Doc<"clips"> | null): ViewClipState {
   if (clip === null) return { status: "generating", clipUrl: null };
@@ -62,6 +76,8 @@ export function buildRunView(args: {
     if (directorStop.kind === "choice") {
       stop = {
         kind: "choice",
+        spokenLine: spokenLineFor(beat, directorStop),
+        spokenAudioUrl: beat.spokenAudioUrl ?? null,
         options: directorStop.options.map((option) => {
           const child = children.find((entry) => entry.beat.optionId === option.id);
           const childState = advanceableClipState(child?.clip ?? null);
@@ -80,6 +96,8 @@ export function buildRunView(args: {
       const failure = children.find((entry) => entry.beat.optionId === "failure");
       stop = {
         kind: "puzzle",
+        spokenLine: spokenLineFor(beat, directorStop),
+        spokenAudioUrl: beat.spokenAudioUrl ?? null,
         question: puzzle.question,
         answerType: puzzle.answer_type,
         choices: puzzle.choices,
@@ -102,6 +120,14 @@ export function buildRunView(args: {
       status: currentState.status,
     },
     stop,
-    ending: run.ending === undefined ? null : { title: run.ending.title, summary: run.ending.summary, path: run.path },
+    ending:
+      run.ending === undefined
+        ? null
+        : {
+            title: run.ending.title,
+            summary: run.ending.summary,
+            path: run.path,
+            text: run.ending.text,
+          },
   };
 }

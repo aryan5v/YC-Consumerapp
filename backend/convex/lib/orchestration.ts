@@ -2,8 +2,17 @@ import { internal } from "../_generated/api";
 import { Doc, Id } from "../_generated/dataModel";
 import { MutationCtx, QueryCtx } from "../_generated/server";
 import { childSpecs, composeChildPrompt } from "./story";
-import { styledPrompt } from "./style";
+import { clipPrompt } from "./style";
 import { bumpStreak } from "./streak";
+import {
+  characterQuestion,
+  endingPrompt,
+  keikiConfigured,
+  keikiOutboundEnabled,
+  makeCode,
+  openerText,
+  sharedLine,
+} from "./keiki";
 
 export const MAX_GENERATE_ATTEMPTS = 2;
 
@@ -38,7 +47,7 @@ export async function maybePrefetch(ctx: MutationCtx, beatId: Id<"beats">): Prom
   let started = 0;
   let index = 0;
   for (const spec of specs) {
-    const clipPrompt = styledPrompt(composeChildPrompt(beat.clipPrompt, spec));
+    const prompt = clipPrompt(composeChildPrompt(beat.clipPrompt, spec));
     const createdAt = Date.now();
     const childId = await ctx.db.insert("beats", {
       runId: beat.runId,
@@ -47,7 +56,8 @@ export async function maybePrefetch(ctx: MutationCtx, beatId: Id<"beats">): Prom
       depth: beat.depth + 1,
       status: "generating",
       narration: spec.narration,
-      clipPrompt,
+      spokenLine: spec.spokenLine,
+      clipPrompt: prompt,
       directorAttempts: 0,
       createdAt,
     });
@@ -56,7 +66,7 @@ export async function maybePrefetch(ctx: MutationCtx, beatId: Id<"beats">): Prom
       beatId: childId,
       option: spec.optionId,
       status: "queued",
-      prompt: clipPrompt,
+      prompt,
       seed: episode.seed + beat.depth * 97 + index,
       aspect: episode.aspect,
       seconds: episode.seconds,
@@ -64,6 +74,7 @@ export async function maybePrefetch(ctx: MutationCtx, beatId: Id<"beats">): Prom
       createdAt,
     });
     await ctx.scheduler.runAfter(0, internal.tray.startClip, { beatId: childId });
+    await ctx.scheduler.runAfter(0, internal.speech.renderLine, { beatId: childId });
     started += 1;
     index += 1;
   }
@@ -79,8 +90,52 @@ export async function maybeFinish(ctx: MutationCtx, runId: Id<"runs">, beatId: I
   const clip = await clipForBeat(ctx, beatId);
   if (clip === null || clip.status !== "ready") return false;
   const episode = await ctx.db.get(run.episodeId);
-  await ctx.db.patch(runId, { status: "ended", ending: beat.ending, endedAt: Date.now() });
-  if (episode !== null) await bumpStreak(ctx, run.userId, episode.date);
+  if (episode === null) return false;
+
+  const character = episode.character;
+  const line = sharedLine();
+  let code = makeCode(`${run.userId}:${episode.date}`);
+  for (let attempt = 1; attempt <= 4; attempt += 1) {
+    const clash = await ctx.db
+      .query("storyMessages")
+      .withIndex("by_code", (q) => q.eq("code", code))
+      .first();
+    if (clash === null) break;
+    code = makeCode(`${run.userId}:${episode.date}`, attempt);
+  }
+  const lastAction = run.path.length === 0 ? null : run.path[run.path.length - 1];
+  const opener = openerText({
+    characterName: character.name,
+    lastAction,
+    question: characterQuestion(run._id),
+  });
+  const createdAt = Date.now();
+
+  await ctx.db.patch(runId, {
+    status: "ended",
+    ending: {
+      ...beat.ending,
+      text: {
+        character: character.name,
+        number: line,
+        prompt: endingPrompt({ characterName: character.name, code, line }),
+      },
+    },
+    endedAt: createdAt,
+  });
+  await bumpStreak(ctx, run.userId, episode.date);
+  await ctx.db.insert("storyMessages", {
+    userId: run.userId,
+    episodeId: episode._id,
+    runId,
+    character: character.name,
+    direction: "outbound",
+    text: opener,
+    code,
+    delivery: keikiConfigured() && keikiOutboundEnabled() ? "queued" : "fallback",
+    createdAt,
+  });
+  await ctx.scheduler.runAfter(0, internal.keiki.sendOpener, { runId });
   return true;
 }
 

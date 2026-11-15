@@ -18,7 +18,7 @@ export const generateBeat = internalAction({
   handler: async (ctx, { beatId }) => {
     const data = await ctx.runQuery(internal.beats.context, { beatId });
     if (data === null) return null;
-    const { beat, run, episode, pathLabels } = data;
+    const { beat, run, episode, pathLabels, lastPlayerText } = data;
     if (beat.status === "cancelled") return null;
     if (beat.stop !== undefined || beat.ending !== undefined) {
       await ctx.runMutation(internal.clips.ensureForBeat, { beatId });
@@ -45,13 +45,14 @@ export const generateBeat = internalAction({
             {
               episodeTitle: episode.title,
               premise: episode.premise,
-              styleBible: episode.styleBible,
+              character: episode.character,
               beatIndex: beat.depth,
               beatsTotal: episode.beatsTotal,
               beatsLeft,
               expectedKind,
               pathLabels,
               state,
+              lastPlayerText: beat.depth === 0 ? lastPlayerText : null,
             },
             lastError,
           ),
@@ -65,7 +66,13 @@ export const generateBeat = internalAction({
     }
 
     if (director === null) {
-      director = fallbackBeat({ beatIndex: beat.depth, beatsLeft, expectedKind, state });
+      director = fallbackBeat({
+        beatIndex: beat.depth,
+        beatsLeft,
+        expectedKind,
+        state,
+        characterName: episode.character.name,
+      });
     }
     await ctx.runMutation(internal.beats.applyDirector, { beatId, director });
     return null;

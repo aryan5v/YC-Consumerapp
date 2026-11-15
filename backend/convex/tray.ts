@@ -14,6 +14,7 @@ export const startClip = internalAction({
       const job = await trayGenerate({
         prompt: data.clip.prompt,
         continuityFrameUrl: data.anchors.continuityFrameUrl,
+        continuityVideoUrl: data.anchors.continuityVideoUrl,
         characterSheetUrl: data.anchors.characterSheetUrl,
         styleImageUrl: data.anchors.styleImageUrl,
         voiceRefUrl: data.anchors.voiceRefUrl,

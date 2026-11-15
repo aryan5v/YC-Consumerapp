@@ -7,6 +7,9 @@ import { checkAnswer } from "../convex/lib/story";
 import { DirectorPuzzleStop, validateBeat } from "../convex/lib/director";
 import { fixtureBeat } from "../convex/lib/fixture";
 import { addDays, pacificDate } from "../convex/lib/pacific";
+import { matchSpokenOption } from "../convex/lib/speech";
+import { extractCode } from "../convex/keiki";
+import { KEIKI_SECRET, MOCK_LINE, keikiTool } from "./keiki-fixture";
 
 const rawModules = import.meta.glob("../convex/**/*.*s");
 const modules = Object.fromEntries(
@@ -47,6 +50,8 @@ async function playEpisode(t: Backend, options: { wrongAnswers?: number } = {}) 
     expect(view.current.status).toBe("ready");
     expect(view.current.clipUrl).toMatch(/^https:\/\//);
 
+    expect(stop.spokenLine.length).toBeGreaterThan(0);
+    expect(stop.spokenAudioUrl).toBeNull();
     if (stop.kind === "choice") {
       expect(stop.options).toHaveLength(3);
       for (const option of stop.options) {
@@ -95,6 +100,10 @@ beforeAll(() => {
   process.env.MOCK_LATENCY_MS = "0";
   process.env.TRAY_POLL_MS = "0";
   process.env.EPISODE_BEATS = "7";
+  process.env.KEIKI_TOOL_SECRET = KEIKI_SECRET;
+  delete process.env.KEIKI_API_KEY;
+  delete process.env.KEIKI_AGENT_ID;
+  delete process.env.OPENAI_API_KEY;
 });
 
 describe("mock mode wiring", () => {
@@ -263,8 +272,8 @@ describe("the director contract", () => {
       answer_type: "number",
       choices: null,
       answers: ["4187"],
-      success: { id: "success", label: "s", leads_to: "a" },
-      failure: { id: "failure", label: "f", leads_to: "b" },
+      success: { id: "success", label: "s", leads_to: "a", spoken_line: "s" },
+      failure: { id: "failure", label: "f", leads_to: "b", spoken_line: "f" },
     };
     expect(checkAnswer(puzzle, "4187")).toBe(true);
     expect(checkAnswer(puzzle, " 4 1 8 7 ")).toBe(true);
@@ -367,5 +376,161 @@ describe("clip failures", () => {
       }
     }
     expect(view.current.beatId).toBe(built.beatId);
+  });
+});
+
+describe("the ending hands off to Keiki", () => {
+  test("the ending carries the character, the line to text and a five-letter code", async () => {
+    const t = newBackend();
+    const { view, runId } = await playEpisode(t);
+    const text = view.ending?.text;
+    expect(text).toBeDefined();
+    expect(text?.character).toBe("the man in the grey coat");
+    expect(text?.number).toBe(MOCK_LINE);
+    expect(text?.prompt).toMatch(/Text [A-Z0-9]{5} to \+15551234567/);
+
+    const code = text?.prompt.match(/Text ([A-Z0-9]{5})/)?.[1] ?? "";
+    expect(extractCode(text?.prompt ?? "")).toBe(code);
+
+    const messages = await t.run(async (ctx) => await ctx.db.query("storyMessages").collect());
+    const outbound = messages.filter((message) => message.direction === "outbound");
+    expect(outbound).toHaveLength(1);
+    expect(outbound[0].code).toBe(code);
+    expect(outbound[0].character).toBe("the man in the grey coat");
+    expect(outbound[0].delivery).toBe("fallback");
+    expect(outbound[0].text).toContain("I have been thinking about it all night");
+    expect(outbound[0].runId).toBe(runId);
+  });
+
+  test("the tool endpoints match a player by phone and record what they said", async () => {
+    const t = newBackend();
+    await t.mutation(api.users.setPhone, { phone: "(415) 555-0142" });
+    await playEpisode(t);
+
+    const story = await keikiTool(t, "/keiki/story", { phone: "+14155550142" });
+    expect(story.status).toBe(200);
+    const payload = (await story.json()) as Record<string, unknown>;
+    expect(payload.matched_by).toBe("phone");
+    expect((payload.character as { name: string }).name).toBe("the man in the grey coat");
+    expect((payload.story as { path: string[] }).path).toHaveLength(6);
+    expect(String(payload.instruction)).toContain("You are the man in the grey coat");
+
+    const reply = await keikiTool(t, "/keiki/reply", {
+      phone: "+14155550142",
+      text: "I came out of the red door, and I never opened it.",
+    });
+    const replyPayload = (await reply.json()) as Record<string, unknown>;
+    expect(replyPayload.ok).toBe(true);
+    expect(replyPayload.matched_by).toBe("phone");
+
+    const after = await t.run(async (ctx) => await ctx.db.query("storyMessages").collect());
+    const inbound = after.filter((message) => message.direction === "inbound");
+    expect(inbound).toHaveLength(1);
+    expect(inbound[0].text).toContain("red door");
+
+    const second = await keikiTool(t, "/keiki/story", { phone: "+14155550142" });
+    const secondPayload = (await second.json()) as Record<string, unknown>;
+    expect(secondPayload.last_reply).toContain("red door");
+  });
+
+  test("a stranger can be matched by the code on their ending card", async () => {
+    const t = newBackend();
+    const { view, runId } = await playEpisode(t);
+    const code = view.ending?.text?.prompt.match(/Text ([A-Z0-9]{5})/)?.[1] ?? "";
+
+    const unknown = await keikiTool(t, "/keiki/story", { phone: "+19998887777" });
+    const unknownPayload = (await unknown.json()) as Record<string, unknown>;
+    expect(unknownPayload.matched_by).toBe("none");
+    expect(String(unknownPayload.instruction)).toContain("five-letter code");
+
+    const claimed = await keikiTool(t, "/keiki/story", {
+      phone: "+19998887777",
+      text: `hi this is me ${code}`,
+    });
+    const claimedPayload = (await claimed.json()) as Record<string, unknown>;
+    expect(claimedPayload.matched_by).toBe("code");
+    expect((claimedPayload.player as { id: string }).id).toBeDefined();
+
+    const reply = await keikiTool(t, "/keiki/reply", {
+      phone: "+19998887777",
+      text: `my code is ${code}, I took the long street`,
+    });
+    expect(((await reply.json()) as Record<string, unknown>).ok).toBe(true);
+
+    const run = await t.run(async (ctx) => await ctx.db.get(runId));
+    expect(run).not.toBeNull();
+    const users = await t.run(async (ctx) => await ctx.db.query("users").collect());
+    expect(users.some((user) => user.phone === "+19998887777")).toBe(true);
+  });
+
+  test("the tools refuse a caller without the shared secret", async () => {
+    const t = newBackend();
+    await playEpisode(t);
+    const noHeader = await t.fetch("/keiki/story", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ phone: "+14155550142" }),
+    });
+    expect(noHeader.status).toBe(401);
+    const wrong = await t.fetch("/keiki/story", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-keiki-secret": "nope" },
+      body: JSON.stringify({ phone: "+14155550142" }),
+    });
+    expect(wrong.status).toBe(401);
+    const health = await t.fetch("/keiki/health", { method: "GET" });
+    expect(health.status).toBe(200);
+    expect(((await health.json()) as Record<string, unknown>).tools).toBe("ready");
+  });
+
+  test("what the player texted opens the next episode", async () => {
+    const t = newBackend();
+    await t.mutation(api.users.setPhone, { phone: "+14155550142" });
+    const { runId } = await playEpisode(t);
+    await keikiTool(t, "/keiki/reply", { phone: "+14155550142", text: "I still have the parcel" });
+
+    const second = await t.mutation(api.runs.startToday, {});
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
+    expect(second).not.toBe(runId);
+
+    const beatId = await t.run(async (ctx) => (await ctx.db.get(second))?.currentBeatId);
+    const context = await t.query(internal.beats.context, { beatId: beatId! });
+    expect(context?.lastPlayerText).toBe("I still have the parcel");
+
+    const fresh = await t.query(api.runs.view, { runId: second });
+    expect(fresh.beatIndex).toBe(0);
+    expect(fresh.stop?.spokenLine.length).toBeGreaterThan(0);
+  });
+});
+
+describe("speaking back", () => {
+  test("voice is off cleanly without an OpenAI key", async () => {
+    const t = newBackend();
+    await startRun(t);
+    await expect(t.mutation(api.runs.speakUploadUrl, {})).rejects.toThrow(/OPENAI_API_KEY/);
+  });
+
+  test("maps what the player said onto an existing option and never invents one", () => {
+    const options = [
+      { id: "a", label: "Go into the store", target: "red store door", spokenLine: "You went in the red door." },
+      { id: "b", label: "Walk down the street", target: "street ahead", spokenLine: "Down the street then." },
+      { id: "c", label: "Talk to the man", target: "man in grey coat", spokenLine: "Come here." },
+    ];
+    expect(matchSpokenOption(options, "I go into the store").optionId).toBe("a");
+    expect(matchSpokenOption(options, "the red door").optionId).toBe("a");
+    expect(matchSpokenOption(options, "talk to the man").optionId).toBe("c");
+    expect(matchSpokenOption(options, "the second one").optionId).toBe("b");
+    expect(matchSpokenOption(options, "walk down the street").optionId).toBe("b");
+    expect(matchSpokenOption(options, "I would like a sandwich please").optionId).toBeNull();
+    expect(matchSpokenOption(options, "").optionId).toBeNull();
+    expect(matchSpokenOption(options, "um").optionId).toBeNull();
+    const ambiguous = matchSpokenOption(
+      [
+        { id: "a", label: "Open the door", target: "red door", spokenLine: "" },
+        { id: "b", label: "Open the door", target: "blue door", spokenLine: "" },
+      ],
+      "open the door",
+    );
+    expect(ambiguous.optionId).toBeNull();
   });
 });

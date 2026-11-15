@@ -7,6 +7,7 @@ export type DirectorOption = {
   leads_to: string;
   clip_prompt?: string;
   narration?: string;
+  spoken_line: string;
 };
 
 export type DirectorChildIntent = {
@@ -15,6 +16,7 @@ export type DirectorChildIntent = {
   leads_to: string;
   clip_prompt?: string;
   narration?: string;
+  spoken_line: string;
 };
 
 export type DirectorChoiceStop = {
@@ -41,10 +43,13 @@ export type DirectorBeatState = {
   beats_left: number;
 };
 
+export type DirectorCharacter = { name: string; voice: string };
+
 export type DirectorBeat = {
   beat_id: string;
   clip_prompt: string;
   narration: string;
+  spoken_line: string;
   stop: DirectorStop | null;
   state: DirectorBeatState;
   ending: { title: string; summary: string } | null;
@@ -53,16 +58,18 @@ export type DirectorBeat = {
 export type DirectorContext = {
   episodeTitle: string;
   premise: string;
-  styleBible: string;
+  character: DirectorCharacter;
   beatIndex: number;
   beatsTotal: number;
   beatsLeft: number;
   expectedKind: "choice" | "puzzle" | "ending";
   pathLabels: string[];
   state: DirectorBeatState;
+  lastPlayerText: string | null;
 };
 
 export const CHOICE_OPTION_COUNT = 3;
+export const DEFAULT_SPOKEN_LINE = "So what do you do?";
 
 export function expectedStopKind(depth: number, beatsTotal: number, rhythm = 3): "choice" | "puzzle" | "ending" {
   if (depth >= beatsTotal - 1) return "ending";
@@ -71,32 +78,33 @@ export function expectedStopKind(depth: number, beatsTotal: number, rhythm = 3):
   return "choice";
 }
 
-export function buildDirectorMessages(
-  context: DirectorContext,
-  previousError?: string,
-): ChatMessage[] {
+export function buildDirectorMessages(context: DirectorContext, previousError?: string): ChatMessage[] {
+  const character = context.character.name;
   const system = [
     "You are the director of Fork, a daily interactive animated video story. Each turn you write exactly one beat.",
     "",
-    "A beat is one shot of about five seconds that ends on a decision the player makes by watching the shot.",
+    "A beat is one shot of about five seconds that ends on a decision the player makes by watching the shot. The player may answer by tapping a target or by saying their answer out loud, so the character has to ask for it in words.",
     "",
     "Hard rules:",
     "1. Write action and setting only. Never write style, palette, colour, lighting, lens, camera or rendering words; the studio appends a fixed style bible to every shot and a stray style word breaks consistency.",
     "2. Continuity. The same protagonist, the same night, the same street, the same moment. No time skips, no new characters you did not introduce, no weather changes.",
     "3. Every target must be a physical object that is actually visible in the shot you just wrote for this beat, and the shot ends on a steady wide frame where all the targets are separated.",
-    "4. Failure is never game over. A failed puzzle sends the story somewhere worse and more interesting.",
-    "5. Reply with a single JSON object and nothing else. No prose, no markdown fence.",
+    `4. ${character} speaks in every shot. spoken_line is the line ${character} says out loud at the end of the shot, just before it settles into the wide decision frame. Keep it under fourteen words so it fits in about four seconds. Write it as speech, not as a caption: contractions, plain words, no stage directions, no quotation marks inside it.`,
+    `5. Every option and every outcome carries its own spoken_line: what ${character} says out loud at the end of that following shot.`,
+    "6. Failure is never game over. A failed puzzle sends the story somewhere worse and more interesting.",
+    "7. Reply with a single JSON object and nothing else. No prose, no markdown fence.",
   ].join("\n");
 
   const choiceShape = [
-    '{',
+    "{",
     '  "beat_id": "b<index>",',
     '  "clip_prompt": "1-3 sentences of on-screen action and setting for this shot",',
-    '  "narration": "one spoken line, present tense, under 14 words",',
+    '  "narration": "one line of narration, present tense, under 14 words",',
+    '  "spoken_line": "what the character says out loud at the end of this shot, under 14 words",',
     '  "stop": {',
     '    "kind": "choice",',
     '    "options": [',
-    '      { "id": "a", "label": "3-5 word verb phrase shown on a chip", "target": "a physical thing visible in the shot, 2-4 words", "leads_to": "one line: what happens if the player picks this", "narration": "one spoken line for the shot that follows" },',
+    '      { "id": "a", "label": "3-5 word verb phrase shown on a chip", "target": "a physical thing visible in the shot, 2-4 words", "leads_to": "one line: what happens if the player picks this", "spoken_line": "what the character says at the end of that following shot", "narration": "one narration line for the shot that follows" },',
     '      { "id": "b", ... },',
     '      { "id": "c", ... }',
     "    ]",
@@ -107,30 +115,32 @@ export function buildDirectorMessages(
   ].join("\n");
 
   const puzzleShape = [
-    '{',
+    "{",
     '  "beat_id": "b<index>",',
     '  "clip_prompt": "1-3 sentences of on-screen action and setting for this shot",',
-    '  "narration": "one spoken line, present tense, under 14 words",',
+    '  "narration": "one line of narration, present tense, under 14 words",',
+    '  "spoken_line": "the question itself, said out loud by the character at the end of this shot, under 14 words",',
     '  "stop": {',
     '    "kind": "puzzle",',
     '    "question": "one short question the scene has just set up",',
     '    "answer_type": "number",',
     '    "choices": null,',
     '    "answers": ["every acceptable answer, lowercase, digits only for a number"],',
-    '    "success": { "id": "success", "label": "3 word outcome", "leads_to": "one line", "narration": "one spoken line" },',
-    '    "failure": { "id": "failure", "label": "3 word outcome", "leads_to": "one line", "narration": "one spoken line" }',
+    '    "success": { "id": "success", "label": "3 word outcome", "leads_to": "one line", "spoken_line": "what the character says at the end of that shot", "narration": "one narration line" },',
+    '    "failure": { "id": "failure", "label": "3 word outcome", "leads_to": "one line", "spoken_line": "what the character says at the end of that shot", "narration": "one narration line" }',
     "  },",
     '  "state": { "items": [], "trust": 0, "clues": [], "beats_left": <N> },',
     '  "ending": null',
     "}",
-    "For a pick puzzle use \"answer_type\": \"pick\" with 2 to 4 \"choices\" and the same strings in \"answers\". For a short free text puzzle use \"answer_type\": \"text\".",
+    'For a pick puzzle use "answer_type": "pick" with 2 to 4 "choices" and the same strings in "answers". For a short free text puzzle use "answer_type": "text".',
   ].join("\n");
 
   const endingShape = [
     "{",
     '  "beat_id": "b<index>",',
     '  "clip_prompt": "1-3 sentences: the closing shot of this path",',
-    '  "narration": "one spoken closing line, present tense, under 14 words",',
+    '  "narration": "one closing narration line, present tense, under 14 words",',
+    '  "spoken_line": "the character\'s last line, said out loud at the end of the closing shot, under 14 words",',
     '  "stop": null,',
     '  "state": { "items": [], "trust": 0, "clues": [], "beats_left": 1 },',
     '  "ending": { "title": "three words", "summary": "one or two sentences naming what the player did and where it left them" }',
@@ -138,16 +148,30 @@ export function buildDirectorMessages(
   ].join("\n");
 
   const wantsEnding = context.expectedKind === "ending";
-  const user = [
+  const lines = [
     `Episode: ${context.episodeTitle}`,
     `Premise: ${context.premise}`,
+    "",
+    `Recurring character: ${character}. ${context.character.voice}`,
+    `${character} is the only other person in tonight's story and speaks every spoken_line.`,
     "",
     `This is beat ${context.beatIndex + 1} of at most ${context.beatsTotal}. You have ${context.beatsLeft} beat(s) left including this one.`,
     `The path so far: ${context.pathLabels.length === 0 ? "(the player has just arrived)" : context.pathLabels.join(" -> ")}`,
     `Hidden state carried forward: items=${JSON.stringify(context.state.items)}, trust=${context.state.trust}, clues=${JSON.stringify(context.state.clues)}`,
+  ];
+
+  if (context.lastPlayerText !== null) {
+    lines.push(
+      "",
+      `After the last episode the player texted ${character}: "${context.lastPlayerText}"`,
+      `Open this episode from that. ${character} remembers it, and the first shot, the first narration and the first spoken_line all follow from what the player said. Do not ignore it and do not explain it away.`,
+    );
+  }
+
+  lines.push(
     "",
     wantsEnding
-      ? `This beat must END the episode. Set "stop" to null and "ending" to the ending object. Do not offer a choice or a puzzle.`
+      ? 'This beat must END the episode. Set "stop" to null and "ending" to the ending object. Do not offer a choice or a puzzle.'
       : `This beat must end on a ${context.expectedKind.toUpperCase()} stop. The rhythm of the episode is choice, choice, puzzle, and the house rule is that the player is never only watching.`,
     context.beatsLeft <= 2 && !wantsEnding
       ? "You are running out of beats: this stop must steer the story toward a real ending on the next beat."
@@ -163,14 +187,15 @@ export function buildDirectorMessages(
     "",
     "Ending beat:",
     endingShape,
-    previousError === undefined ? "" : `\nYour previous reply was rejected: ${previousError}. Reply again with valid JSON only.`,
-  ]
-    .filter((line) => line !== "")
-    .join("\n");
+  );
+
+  if (previousError !== undefined) {
+    lines.push("", `Your previous reply was rejected: ${previousError}. Reply again with valid JSON only.`);
+  }
 
   return [
     { role: "system", content: system },
-    { role: "user", content: user },
+    { role: "user", content: lines.filter((line) => line !== "").join("\n") },
   ];
 }
 
@@ -189,17 +214,33 @@ export function validateBeat(
   const beatId = asText(source.beat_id ?? source.beatId) ?? `b${options.beatIndex}`;
   const state = validateState(source.state, options.beatsLeft);
   const ending = validateEnding(source.ending);
+  const topSpoken = asText(source.spoken_line ?? source.spokenLine);
 
   const wantsEnding = options.expectedKind === "ending";
   if (wantsEnding) {
     if (ending === null) return { ok: false, error: "the final beat must include an ending object" };
-    return { ok: true, beat: { beat_id: beatId, clip_prompt: clipPrompt, narration, stop: null, state, ending } };
+    return {
+      ok: true,
+      beat: {
+        beat_id: beatId,
+        clip_prompt: clipPrompt,
+        narration,
+        spoken_line: topSpoken ?? narration,
+        stop: null,
+        state,
+        ending,
+      },
+    };
   }
 
   if (ending !== null) return { ok: false, error: "ending must be null before the last beat" };
   const stop = validateStop(source.stop, options.expectedKind);
   if (!stop.ok) return { ok: false, error: stop.error };
-  return { ok: true, beat: { beat_id: beatId, clip_prompt: clipPrompt, narration, stop: stop.stop, state, ending: null } };
+  const spokenLine = topSpoken ?? (stop.stop.kind === "puzzle" ? stop.stop.question : DEFAULT_SPOKEN_LINE);
+  return {
+    ok: true,
+    beat: { beat_id: beatId, clip_prompt: clipPrompt, narration, spoken_line: spokenLine, stop: stop.stop, state, ending: null },
+  };
 }
 
 function validateStop(
@@ -235,6 +276,7 @@ function validateStop(
         leads_to: leadsTo,
         clip_prompt: asText(option.clip_prompt ?? option.clipPrompt) ?? undefined,
         narration: asText(option.narration) ?? undefined,
+        spoken_line: asText(option.spoken_line ?? option.spokenLine) ?? label,
       });
       if (parsed.length === CHOICE_OPTION_COUNT) break;
     }
@@ -285,14 +327,16 @@ function validateChildIntent(
   const child = raw as Record<string, unknown>;
   const leadsTo = asText(child.leads_to ?? child.leadsTo);
   if (leadsTo === null) return { ok: false, error: `the ${id} intent needs leads_to` };
+  const label = asText(child.label) ?? (id === "success" ? "Solved it" : "Got it wrong");
   return {
     ok: true,
     child: {
       id,
-      label: asText(child.label) ?? (id === "success" ? "Solved it" : "Got it wrong"),
+      label,
       leads_to: leadsTo,
       clip_prompt: asText(child.clip_prompt ?? child.clipPrompt) ?? undefined,
       narration: asText(child.narration) ?? undefined,
+      spoken_line: asText(child.spoken_line ?? child.spokenLine) ?? label,
     },
   };
 }
@@ -341,14 +385,17 @@ export function fallbackBeat(options: {
   beatsLeft: number;
   expectedKind: "choice" | "puzzle" | "ending";
   state: DirectorBeatState;
+  characterName?: string;
 }): DirectorBeat {
   const state = { ...options.state, beats_left: options.beatsLeft };
+  const speaker = options.characterName ?? "The man in the grey coat";
   if (options.expectedKind === "ending") {
     return {
       beat_id: `b${options.beatIndex}`,
       clip_prompt:
         "The protagonist walks out of the street into a wide empty intersection as the streetlights go out one by one behind them.",
       narration: "The city closes behind you.",
+      spoken_line: "Go on then. I will keep the corner.",
       stop: null,
       state,
       ending: {
@@ -364,6 +411,7 @@ export function fallbackBeat(options: {
       clip_prompt:
         "The protagonist stops under a streetlight where a metal locker stands against a brick wall with three painted marks on its door and a keypad beside the handle.",
       narration: "Three marks on the locker door. The keypad wants a number.",
+      spoken_line: "Three marks on the door. How many is that? Say the number.",
       stop: {
         kind: "puzzle",
         question: "The locker door shows three painted marks. How many marks are on the door?",
@@ -375,12 +423,14 @@ export function fallbackBeat(options: {
           label: "The locker opens",
           leads_to: "The locker falls open on a staircase going down.",
           narration: "The locker gives way.",
+          spoken_line: "There. Down you go.",
         },
         failure: {
           id: "failure",
           label: "The lock holds",
           leads_to: "The keypad buzzes red and the streetlight above cuts out.",
           narration: "The lock holds and the light dies.",
+          spoken_line: "Wrong. Now the light is out.",
         },
       },
       state,
@@ -392,6 +442,7 @@ export function fallbackBeat(options: {
     clip_prompt:
       "The protagonist stands at a junction in the rain where a lit doorway, an alley mouth and a parked van are all visible in one wide shot.",
     narration: "Three ways on, and the rain is getting worse.",
+    spoken_line: "Three ways out of this rain. Which one are you taking?",
     stop: {
       kind: "choice",
       options: [
@@ -401,6 +452,7 @@ export function fallbackBeat(options: {
           target: "lit doorway",
           leads_to: "Push through the lit doorway into the room beyond.",
           narration: "The door gives on the first shove.",
+          spoken_line: "The door gives. Come in.",
         },
         {
           id: "b",
@@ -408,6 +460,7 @@ export function fallbackBeat(options: {
           target: "alley mouth",
           leads_to: "Walk into the dark alley beside the building.",
           narration: "The alley swallows the light behind you.",
+          spoken_line: "The alley is shorter than it looks.",
         },
         {
           id: "c",
@@ -415,10 +468,73 @@ export function fallbackBeat(options: {
           target: "parked van",
           leads_to: "Try the handle of the parked van at the kerb.",
           narration: "The van is not locked.",
+          spoken_line: "It is not locked. Get in.",
         },
       ],
     },
     state,
     ending: null,
   };
+}
+
+export function speechMapperMessages(args: {
+  character: string;
+  question: string;
+  spokenLine: string;
+  options: { id: string; label: string; target: string }[];
+  transcript: string;
+}): ChatMessage[] {
+  return [
+    {
+      role: "system",
+      content: [
+        `You map what a player said out loud to one of the options a story character has already offered. The character is ${args.character}.`,
+        "",
+        "Rules:",
+        "1. Choose only from the option ids you are given. Never invent an option and never reword one.",
+        "2. If what the player said does not clearly mean one of the options, or they said nothing usable, answer with option_id null.",
+        "3. reply is a short line in the character's voice asking again, under twelve words. Only write a reply when option_id is null.",
+        "4. Reply with a single JSON object and nothing else:",
+        '{ "option_id": "a" | "b" | "c" | null, "reply": "..." | null }',
+      ].join("\n"),
+    },
+    {
+      role: "user",
+      content: [
+        `${args.character} asked out loud: "${args.spokenLine}"`,
+        `The offer on the table: ${args.question}`,
+        "",
+        "The options, which are physical things the player can also tap:",
+        ...args.options.map((option) => `- ${option.id}: ${option.label} (${option.target})`),
+        "",
+        `The player said: "${args.transcript}"`,
+      ].join("\n"),
+    },
+  ];
+}
+
+export function graderMessages(args: {
+  question: string;
+  answers: string[];
+  transcript: string;
+}): ChatMessage[] {
+  return [
+    {
+      role: "system",
+      content: [
+        "You grade a spoken answer to one short question. The player answered out loud, so the transcript comes from speech recognition and may misspell names, numbers or homophones.",
+        "Accept a spoken answer that means the same thing as an accepted answer, including a homophone or a different word order.",
+        "Reply with a single JSON object and nothing else:",
+        '{ "correct": true | false }',
+      ].join("\n"),
+    },
+    {
+      role: "user",
+      content: [
+        `Question: ${args.question}`,
+        `Accepted answers: ${args.answers.join(" | ")}`,
+        `The player said: "${args.transcript}"`,
+      ].join("\n"),
+    },
+  ];
 }

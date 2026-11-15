@@ -11,6 +11,13 @@ export const stateValidator = v.object({
 export const endingValidator = v.object({
   title: v.string(),
   summary: v.string(),
+  text: v.optional(
+    v.object({
+      character: v.string(),
+      number: v.union(v.string(), v.null()),
+      prompt: v.string(),
+    }),
+  ),
 });
 
 export const boxValidator = v.object({
@@ -38,11 +45,32 @@ export const beatStatusValidator = v.union(
 export default defineSchema({
   users: defineTable({
     name: v.optional(v.string()),
+    phone: v.optional(v.string()),
     kind: v.union(v.literal("anonymous"), v.literal("named")),
     createdAt: v.number(),
   })
     .index("by_name", ["name"])
-    .index("by_kind", ["kind"]),
+    .index("by_kind", ["kind"])
+    .index("by_phone", ["phone"]),
+
+  storyMessages: defineTable({
+    userId: v.id("users"),
+    episodeId: v.optional(v.id("episodes")),
+    runId: v.optional(v.id("runs")),
+    character: v.string(),
+    direction: v.union(v.literal("outbound"), v.literal("inbound")),
+    text: v.string(),
+    phone: v.optional(v.string()),
+    code: v.optional(v.string()),
+    conversationId: v.optional(v.string()),
+    delivery: v.optional(v.union(v.literal("sent"), v.literal("queued"), v.literal("failed"), v.literal("fallback"))),
+    error: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_user", ["userId", "createdAt"])
+    .index("by_phone", ["phone", "createdAt"])
+    .index("by_code", ["code"])
+    .index("by_run", ["runId"]),
 
   sessions: defineTable({
     key: v.string(),
@@ -56,6 +84,8 @@ export default defineSchema({
     title: v.string(),
     tagline: v.string(),
     premise: v.string(),
+    character: v.object({ name: v.string(), voice: v.string() }),
+    voiceId: v.string(),
     styleBible: v.string(),
     styleImageUrl: v.string(),
     characterSheetUrl: v.string(),
@@ -91,6 +121,10 @@ export default defineSchema({
     depth: v.number(),
     status: beatStatusValidator,
     narration: v.optional(v.string()),
+    spokenLine: v.optional(v.string()),
+    spokenAudioStorageId: v.optional(v.id("_storage")),
+    spokenAudioUrl: v.optional(v.string()),
+    spokenVoice: v.optional(v.string()),
     clipPrompt: v.string(),
     stopKind: v.optional(v.union(v.literal("choice"), v.literal("puzzle"))),
     stop: v.optional(v.any()),

@@ -45,6 +45,7 @@ export const work = internalQuery({
       targets,
       anchors: {
         continuityFrameUrl: parentClip?.lastFrameUrl ?? null,
+        continuityVideoUrl: parentClip?.url ?? null,
         characterSheetUrl: episode.characterSheetUrl,
         styleImageUrl: episode.styleImageUrl,
         voiceRefUrl: episode.voiceRefUrl,

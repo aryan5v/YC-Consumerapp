@@ -7,6 +7,7 @@ export type ChildSpec = {
   target: string | null;
   clipPrompt?: string;
   narration?: string;
+  spokenLine: string;
 };
 
 export function childSpecs(stop: DirectorStop): ChildSpec[] {
@@ -18,6 +19,7 @@ export function childSpecs(stop: DirectorStop): ChildSpec[] {
       target: option.target,
       clipPrompt: option.clip_prompt,
       narration: option.narration,
+      spokenLine: option.spoken_line,
     }));
   }
   return [stop.success, stop.failure].map((child: DirectorChildIntent) => ({
@@ -27,6 +29,7 @@ export function childSpecs(stop: DirectorStop): ChildSpec[] {
     target: null,
     clipPrompt: child.clip_prompt,
     narration: child.narration,
+    spokenLine: child.spoken_line,
   }));
 }
 

@@ -1,14 +1,14 @@
 import { pathX, shore } from './terrain';
 import type { ThingKind } from './things';
 
-export const SECTOR = 192;
+export const SECTOR = 440;
 export const kinds: ThingKind[] = ['lantern', 'stranger', 'well', 'arch', 'cabin', 'boat', 'lighthouse'];
-const offsets = [5, -6, -13, -25, -40, -48, -65];
-const side = [3, -3, 6, 0, -10, 0, 0];
+const offsets = [-8, -68, -128, -190, -250, -312, -378];
+const side = [3.4, -3.6, 8.5, 0, -15, 0, 0];
 
 export function spot(index: number, sector: number, seed: number) {
   const kind = kinds[index], z = -sector * SECTOR + offsets[index];
-  const x = kind === 'boat' ? shore(z, seed) - 1 : kind === 'lighthouse' ? shore(z, seed) - 9 : pathX(z, seed) + side[index];
+  const x = kind === 'boat' ? shore(z, seed) - 1.5 : kind === 'lighthouse' ? shore(z, seed) - 13 : pathX(z, seed) + side[index];
   return { kind, x, z };
 }
 

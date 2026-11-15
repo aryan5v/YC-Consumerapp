@@ -11,6 +11,7 @@ import { theme } from './theme';
 import { defaultSkyStyle } from './sky';
 import { presets, type WorldStyle } from './presets';
 import { kinds } from './layout';
+import { NearField } from './grass';
 import { Controls } from './controls';
 import { Sky } from './sky';
 import { Landmarks } from './landmarks';
@@ -30,6 +31,7 @@ camera.rotation.order='YXZ';
 let seed=8741;
 let terrain=new Terrain(seed);scene.add(terrain.group);
 let landmarks=new Landmarks(seed);scene.add(landmarks.group);
+let near=new NearField(seed);scene.add(near.group);
 const player=new THREE.Vector3(pathX(12,seed),0,12);
 const sky=new Sky(scene);
 const composer=new EffectComposer(renderer);
@@ -42,7 +44,7 @@ const audio=new Soundscape();
 
 let asciiFrom=0,asciiTo=0,asciiStart=0,asciiDuration=0;
 const velocity=new THREE.Vector3();
-let viewYaw=0,viewPitch=-.04,stepPhase=0;
+let viewYaw=-.3,viewPitch=.1,stepPhase=0;
 const unlock=()=>audio.unlock();
 window.addEventListener('pointerdown',unlock);window.addEventListener('keydown',unlock);window.addEventListener('touchend',unlock);
 const controls=new Controls(canvas,tap);
@@ -73,7 +75,7 @@ function tap(x:number,y:number){
   const thing=landmarks.things.get(root.userData.thingId);
   if(!thing||!landmarks.reachable(player).includes(thing))return;
   const materials=new Map<THREE.Mesh,THREE.Material|THREE.Material[]>();
-  const fill=new THREE.ShaderMaterial({uniforms:{base:{value:thing.root.position.y}},vertexShader:'varying float h;uniform float base;void main(){vec4 w=modelMatrix*vec4(position,1.);h=w.y-base;gl_Position=projectionMatrix*viewMatrix*w;}',fragmentShader:'varying float h;void main(){vec3 c=mix(vec3(1.,.42,.52),vec3(.91,.933,.945),smoothstep(0.,4.,h));gl_FragColor=vec4(c,1.);}',side:THREE.DoubleSide});
+  const fill=new THREE.ShaderMaterial({uniforms:{base:{value:thing.root.position.y},span:{value:landmarks.height(thing)}},vertexShader:'varying float h;uniform float base,span;void main(){vec4 w=modelMatrix*vec4(position,1.);h=(w.y-base)/span;gl_Position=projectionMatrix*viewMatrix*w;}',fragmentShader:'varying float h;void main(){vec3 c=mix(vec3(1.,.42,.52),vec3(.91,.933,.945),smoothstep(0.,1.,h));gl_FragColor=vec4(c,1.);}',side:THREE.DoubleSide});
   thing.root.traverse(o=>{if(o instanceof THREE.Mesh&&!o.userData.effect){materials.set(o,o.material);o.material=fill;}});
   interaction={thing,end:performance.now()+300,frames:0,materials,fill};controls.enabled=false;controls.reset();
 }
@@ -100,13 +102,14 @@ bridge(message=>{
 },()=>({position:player.toArray(),yaw:controls.yaw,timeOfDay:sky.hours,day:sky.day,seed,paused,ascii:ascii.uniforms.amount.value,audio:audio.state(),chunks:terrain.chunks.size,pixelRatio:ratio,drawCalls:frameCalls,triangles:frameTriangles,things:[...landmarks.things.values()].map(t=>{const v=t.root.position.clone().add(new THREE.Vector3(0,1,0)).project(camera);const onScreen=v.z>-1&&v.z<1&&Math.abs(v.x)<1&&Math.abs(v.y)<1;return {id:t.id,kind:t.kind,name:t.name,position:t.root.position.toArray(),visible:t.root.visible,reachable:landmarks.reachable(player).includes(t),screen:onScreen?[(v.x*.5+.5)*innerWidth,(-v.y*.5+.5)*innerHeight]:null};})}));
 
 function reseed(value:number|string){
-  clearInteraction();scene.remove(terrain.group,landmarks.group);terrain.dispose();const names=landmarks.names;landmarks.dispose();seed=seedNumber(value);
-  terrain=new Terrain(seed);landmarks=new Landmarks(seed,names);scene.add(terrain.group,landmarks.group);player.set(pathX(12,seed),0,12);controls.yaw=0;viewYaw=0;velocity.set(0,0,0);controls.reset();controls.enabled=!paused;
+  clearInteraction();scene.remove(terrain.group,landmarks.group,near.group);terrain.dispose();near.dispose();const names=landmarks.names;landmarks.dispose();seed=seedNumber(value);
+  terrain=new Terrain(seed);landmarks=new Landmarks(seed,names);near=new NearField(seed);scene.add(terrain.group,landmarks.group,near.group);player.set(pathX(12,seed),0,12);controls.yaw=-.3;controls.pitch=.1;viewYaw=-.3;velocity.set(0,0,0);controls.reset();controls.enabled=!paused;
 }
 
 function color(value:unknown,minL:number,maxL:number,maxS:number){
   if(typeof value!=='string'||!/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(value.trim()))return null;
   const c=new THREE.Color(value.trim()),hsl={h:0,s:0,l:0};c.getHSL(hsl);
+  if(hsl.h>.66&&hsl.h<.93)hsl.h=hsl.h<.8?.58:.98;
   return c.setHSL(hsl.h,Math.min(hsl.s,maxS),THREE.MathUtils.clamp(hsl.l,minL,maxL));
 }
 
@@ -161,7 +164,7 @@ function render(now:number){
   velocity.lerp(movement.multiplyScalar(speed),1-Math.exp(-dt*7));
   const next=player.clone().addScaledVector(velocity,dt);
   if(heightAt(next.x,next.z,seed)>WATER-.2&&landmarks.canWalk(next.x,next.z)){player.x=next.x;player.z=next.z;}else velocity.multiplyScalar(.5);
-  const ground=heightAt(player.x,player.z,seed)+1.7;
+  const ground=heightAt(player.x,player.z,seed)+1.8;
   player.y+=(ground-player.y)*(1-Math.exp(-dt*12));
   const pace=velocity.length()/4.5;
   stepPhase+=dt*pace*9.5;
@@ -172,7 +175,7 @@ function render(now:number){
   shared.time.value=sky.elapsed;shared.night.value=THREE.MathUtils.smoothstep(-sky.sunDir.y,.0,.22)*(1-sky.style.snow*.65);shared.rim.value.copy(sky.rim.value);
   if(asciiDuration>=0){const t=asciiDuration===0?1:Math.min(1,(now-asciiStart)/asciiDuration);const e=t*t*(3-2*t);ascii.uniforms.amount.value=asciiFrom+(asciiTo-asciiFrom)*e;ascii.enabled=ascii.uniforms.amount.value>.001;}
   audio.update(dt,{moving:Math.min(pace,1.6),surface:surfaceAt(player.x,player.z,seed),shore:Math.max(0,shore(player.z,seed)-player.x),hours:sky.hours,elapsed:sky.elapsed});
-  terrain.update(player.x,player.z);sky.update(Math.min(raw,.5),player,scene);landmarks.update(player,sky.elapsed);
+  terrain.update(player.x,player.z);near.update(player);sky.update(Math.min(raw,.5),player,scene);landmarks.update(player,sky.elapsed);
   const reachable=landmarks.reachable(player);
   outline.selectedObjects=[];
   for(const thing of reachable)thing.root.traverse(o=>{if(o instanceof THREE.Mesh&&!o.userData.effect)outline.selectedObjects.push(o);});
@@ -181,7 +184,7 @@ function render(now:number){
   label.style.display='none';
   if(reachable.length&&!interaction&&!dissolved){
     const thing=reachable.sort((a,b)=>a.root.position.distanceToSquared(player)-b.root.position.distanceToSquared(player))[0];
-    screenPosition.copy(thing.root.position).add(new THREE.Vector3(0,thing.kind==='lantern'?3.6:2.5,0)).project(camera);
+    screenPosition.copy(thing.root.position).add(new THREE.Vector3(0,landmarks.height(thing)+.5,0)).project(camera);
     if(screenPosition.z<1&&screenPosition.z>-1&&Math.abs(screenPosition.x)<.9&&Math.abs(screenPosition.y)<.9){label.textContent=thing.name;label.style.display='block';label.style.left=`${(screenPosition.x*.5+.5)*innerWidth}px`;label.style.top=`${(-screenPosition.y*.5+.5)*innerHeight}px`;}
   }
   if(Math.floor(now/1000)!==lastClock){

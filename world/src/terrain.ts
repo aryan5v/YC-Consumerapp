@@ -159,7 +159,8 @@ export class Terrain {
       const trail = Math.abs(x - pathX(z, this.seed));
       color.copy(lush).lerp(meadow, noise(x * .03, z * .03, this.seed + 9));
       if (h > 7) color.lerp(stone, THREE.MathUtils.smoothstep(h, 7, 11) * .8);
-      color.lerp(path, (1 - THREE.MathUtils.smoothstep(trail, .5, 1.7)) * .9);
+      color.multiplyScalar(1 - (1 - THREE.MathUtils.smoothstep(trail, 1.6, 2.6)) * THREE.MathUtils.smoothstep(trail, 1.2, 1.7) * .18);
+      color.lerp(path, (1 - THREE.MathUtils.smoothstep(trail, 1.1, 1.6)) * .92);
       color.lerp(sand, 1 - THREE.MathUtils.smoothstep(h, -1.2, .2));
       color.multiplyScalar(.92 + noise(x * .4, z * .4, this.seed + 4) * .16);
       colors.push(color.r, color.g, color.b);
@@ -168,13 +169,13 @@ export class Terrain {
     geometry.computeVertexNormals();
     group.add(new THREE.Mesh(geometry, this.ground));
     const trees: number[][] = [], rocks: number[][] = [], tufts: number[][] = [], flowers: number[][] = [];
-    for (let i = 0; i < 2400; i++) {
+    for (let i = 0; i < 30; i++) {
       const x = (cx + hash(cx * 103 + i, cz, this.seed)) * CHUNK, z = (cz + hash(cx, cz * 107 + i, this.seed + 1)) * CHUNK;
       const y = heightAt(x, z, this.seed), trail = Math.abs(x - pathX(z, this.seed));
       const r = hash(cx * 89 + i, cz * 97, this.seed + 7);
       if (y < -.6) continue;
       const room = i >= 30 && i < 190 ? 99 : clearance(x, z, this.seed);
-      if (i < 30 && room < 8) continue;
+      if (i < 30 && room < 13) continue;
       if (i >= 190 && room < 2.2) continue;
       if (i < 22) { if (trail > 8 && x < shore(z, this.seed) - 14) trees.push([x, y, z, 4 + r * 6, r]); continue; }
       if (i < 30) { if (trail > 3) rocks.push([x, y, z, .4 + r * 1.6, r]); continue; }

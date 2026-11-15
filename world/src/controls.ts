@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 
 export class Controls {
-  yaw = 0;
-  pitch = -.04;
+  yaw = -.3;
+  pitch = .1;
   walk = new THREE.Vector2();
   keys = new Set<string>();
   enabled = true;

@@ -64,7 +64,7 @@ function Shell() {
   return (
     <View style={styles.root}>
       <StatusBar style="light" hidden={playing || world} animated />
-      <Home starting={starting} onPlay={openWorld} onSettings={() => setSettings(true)} />
+      <Home starting={starting} onPlay={play} onWander={story.interact ? openWorld : undefined} onSettings={() => setSettings(true)} />
       {world && (
         <Animated.View style={[StyleSheet.absoluteFill, { opacity: worldIn }]}>
           <World active={!playing && !runId} onClose={closeWorld} onStory={play} />

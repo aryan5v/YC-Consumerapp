@@ -3,7 +3,7 @@ import * as Crypto from "expo-crypto";
 import * as SecureStore from "expo-secure-store";
 import { useEffect, useState } from "react";
 
-const KEY = "fork.deviceToken";
+const KEY = "synqui.deviceToken";
 let pending: Promise<string> | null = null;
 
 async function read() {

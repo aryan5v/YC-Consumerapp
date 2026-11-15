@@ -21,7 +21,7 @@ function dateLabel(iso: string) {
   return `${DAYS[date.getDay()]}, ${MONTHS[date.getMonth()]} ${date.getDate()}`;
 }
 
-export function Home({ starting, onPlay, onSettings }: { starting: boolean; onPlay: () => void; onSettings: () => void }) {
+export function Home({ starting, onPlay, onWander, onSettings }: { starting: boolean; onPlay: () => void; onWander?: () => void; onSettings: () => void }) {
   const story = useStory();
   const reduceMotion = useReduceMotion();
   const home = story.useHome();
@@ -118,6 +118,13 @@ export function Home({ starting, onPlay, onSettings }: { starting: boolean; onPl
             )}
           </Pressable>
           </Glass>
+          {onWander && (
+            <Glass interactive style={styles.wanderGlass}>
+              <Pressable accessibilityRole="button" accessibilityLabel="Wander" disabled={starting} onPress={onWander} style={styles.wander}>
+                <Text maxFontSizeMultiplier={1.4} style={styles.wanderText}>Wander</Text>
+              </Pressable>
+            </Glass>
+          )}
         </Animated.View>
       )}
     </View>
@@ -150,6 +157,9 @@ const styles = StyleSheet.create({
   pipOn: { backgroundColor: colors.text },
   pipToday: { backgroundColor: colors.accent },
   playGlass: { borderRadius: radius.button, marginTop: 24 },
+  wanderGlass: { borderRadius: radius.button, marginTop: 12 },
+  wander: { minHeight: 48, alignItems: "center", justifyContent: "center" },
+  wanderText: { fontFamily: fonts.uiMedium, fontSize: type.control, letterSpacing: 1, color: colors.text },
   play: {
     minHeight: 62,
     flexDirection: "row",

@@ -1,6 +1,7 @@
 import { setAudioModeAsync } from "expo-audio";
 import { CormorantGaramond_500Medium, CormorantGaramond_500Medium_Italic } from "@expo-google-fonts/cormorant-garamond";
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold } from "@expo-google-fonts/inter";
+import { JetBrainsMono_400Regular, JetBrainsMono_500Medium } from "@expo-google-fonts/jetbrains-mono";
 import { useFonts } from "expo-font";
 import { StatusBar } from "expo-status-bar";
 import { Component, type ReactNode, useCallback, useRef, useState } from "react";
@@ -100,6 +101,8 @@ export default function App() {
     Inter_400Regular,
     Inter_500Medium,
     Inter_600SemiBold,
+    JetBrainsMono_400Regular,
+    JetBrainsMono_500Medium,
   });
   if (!loaded) return <View style={styles.root} />;
   return (

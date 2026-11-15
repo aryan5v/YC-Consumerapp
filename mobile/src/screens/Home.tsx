@@ -1,5 +1,4 @@
 import * as Haptics from "expo-haptics";
-import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { useEffect, useRef } from "react";
 import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
@@ -8,8 +7,10 @@ import { useReduceMotion } from "../a11y";
 import { Glass } from "../components/Glass";
 import { Ring } from "../components/Ring";
 import { SettingsGlyph } from "../components/SettingsSheet";
-import { imageSource, useStory } from "../data";
-import { colors, ease, fonts, gradients, motion, radius, type } from "../theme";
+import { useStory } from "../data";
+import { AsciiDivider } from "../components/AsciiDivider";
+import { AsciiScene } from "../components/AsciiScene";
+import { ascii, colors, ease, fonts, gradients, motion, radius, type } from "../theme";
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -25,21 +26,8 @@ export function Home({ starting, onPlay, onSettings }: { starting: boolean; onPl
   const reduceMotion = useReduceMotion();
   const home = story.useHome();
   const insets = useSafeAreaInsets();
-  const drift = useRef(new Animated.Value(0)).current;
   const appear = useRef(new Animated.Value(0)).current;
   const loaded = home !== undefined;
-
-  useEffect(() => {
-    if (reduceMotion) return;
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(drift, { toValue: 1, duration: motion.drift, easing: ease.inOut, useNativeDriver: true }),
-        Animated.timing(drift, { toValue: 0, duration: motion.drift, easing: ease.inOut, useNativeDriver: true }),
-      ]),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [drift, reduceMotion]);
 
   useEffect(() => {
     if (loaded) Animated.timing(appear, { toValue: 1, duration: motion.slower, delay: 150, easing: ease.out, useNativeDriver: true }).start();
@@ -50,11 +38,9 @@ export function Home({ starting, onPlay, onSettings }: { starting: boolean; onPl
   return (
     <View style={styles.root}>
       {home && (
-        <Animated.View
-          style={[StyleSheet.absoluteFill, { transform: [{ scale: drift.interpolate({ inputRange: [0, 1], outputRange: [1.02, reduceMotion ? 1.02 : 1.1] }) }] }]}
-        >
-          <Image source={imageSource(home.episode.posterUrl)} contentFit="cover" transition={600} style={StyleSheet.absoluteFill} />
-        </Animated.View>
+        <View style={[StyleSheet.absoluteFill, { top: insets.top + ascii.top }]}>
+          <AsciiScene />
+        </View>
       )}
       <LinearGradient
         colors={gradients.home.colors}
@@ -86,6 +72,10 @@ export function Home({ starting, onPlay, onSettings }: { starting: boolean; onPl
           <Text style={styles.kicker}>Today{"\u2019"}s episode</Text>
           <Text style={styles.title}>{home.episode.title}</Text>
           <Text style={styles.tagline}>{home.episode.tagline}</Text>
+
+          <View style={styles.divider}>
+            <AsciiDivider />
+          </View>
 
           <View style={styles.streak}>
             <Text style={styles.streakNumber}>{home.streak}</Text>
@@ -137,21 +127,19 @@ const styles = StyleSheet.create({
   wordmark: { flex: 1, fontFamily: fonts.display, fontSize: type.wordmark, letterSpacing: 0.5, color: colors.text },
   settings: { width: 44, height: 44, marginLeft: 16, borderRadius: radius.round },
   settingsHit: { flex: 1, alignItems: "center", justifyContent: "center" },
-  date: { fontFamily: fonts.uiSemibold, fontSize: type.micro, letterSpacing: type.labelTracking, textTransform: "uppercase", color: colors.dim },
+  date: { fontFamily: fonts.mono, fontSize: type.micro, letterSpacing: ascii.monoTracking, textTransform: "uppercase", color: colors.dim },
   bottom: { position: "absolute", left: 26, right: 26, bottom: 0 },
-  kicker: { fontFamily: fonts.uiSemibold, fontSize: type.micro, letterSpacing: type.labelTracking, textTransform: "uppercase", color: colors.dim, marginBottom: 12 },
+  kicker: { fontFamily: fonts.mono, fontSize: type.micro, letterSpacing: ascii.monoTracking, textTransform: "uppercase", color: colors.dim, marginBottom: 12 },
   title: { fontFamily: fonts.display, fontSize: type.hero, lineHeight: type.hero * 1.02, color: colors.text },
   tagline: { fontFamily: fonts.ui, fontSize: type.lead, lineHeight: 26, color: colors.dim, marginTop: 14 },
   streak: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: 28,
-    paddingTop: 18,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.hairline,
+    marginTop: 14,
   },
-  streakNumber: { fontFamily: fonts.display, fontSize: type.stat, lineHeight: 36, color: colors.text },
-  streakLabel: { fontFamily: fonts.uiMedium, fontSize: type.label, color: colors.dim, marginLeft: 10, flex: 1 },
+  divider: { marginTop: 24 },
+  streakNumber: { fontFamily: fonts.monoMedium, fontSize: type.stat, lineHeight: 36, color: colors.text },
+  streakLabel: { fontFamily: fonts.mono, fontSize: type.small, color: colors.dim, marginLeft: 10, flex: 1 },
   pips: { flexDirection: "row", gap: 6 },
   pip: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.inactive },
   pipOn: { backgroundColor: colors.text },

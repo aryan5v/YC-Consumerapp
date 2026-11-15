@@ -94,6 +94,38 @@ export const fonts = {
   ui: "Inter_400Regular",
   uiMedium: "Inter_500Medium",
   uiSemibold: "Inter_600SemiBold",
+  mono: "JetBrainsMono_400Regular",
+  monoMedium: "JetBrainsMono_500Medium",
+};
+
+// Home ASCII scene (src/components/AsciiScene.tsx). Glyph advance is 0.6em in JetBrains Mono, so the
+// grid fits the screen width exactly at fontSize = width / (cols * advance).
+export const ascii = {
+  advance: 0.6,
+  lineHeight: 1,
+  silver: "#C8CDD4",
+  silverOpacity: 0.5,
+  amber: accent,
+  amberOpacity: 0.78,
+  highlight: "#FFE9B9",
+  glow: [
+    { period: 5200, delay: 0, min: 0.05, max: 1 },
+    { period: 7300, delay: 1800, min: 0.1, max: 0.85 },
+    { period: 9100, delay: 3900, min: 0.05, max: 0.95 },
+  ],
+  flicker: { min: 0.55, max: 0.9, period: 3100 },
+  rain: [
+    { color: "#AEB8C6", opacity: 0.2, duration: 5200, density: 0.035, seed: 11 },
+    { color: "#AEB8C6", opacity: 0.12, duration: 8400, density: 0.03, seed: 29 },
+  ],
+  rainGlyphs: "|'.`:",
+  sceneOpacity: 0.95,
+  top: 70,
+  ornament: "·  ─ ─ ─  ✦  ─ ─ ─  ·",
+  ornamentColor: "rgba(242,235,223,0.3)",
+  ornamentSize: 12,
+  ornamentTracking: 2,
+  monoTracking: 1.2,
 };
 
 export const type = {

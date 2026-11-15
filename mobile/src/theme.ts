@@ -1,47 +1,52 @@
 import { Easing } from "react-native";
 
-// Synqui: Paper Mono, minimal and glassy. Cool neutral base, silver-white light, amber only for
-// selection. Every visual token lives here so a direction can be swapped in one pass.
+// Synqui: Paper Mono, minimal and glassy, a daydream. Moonstone is the light, Lagoon the base,
+// Blossom the one stand-out (selection, the primary action, a scene's single warm light).
+// Every visual token lives here so a direction can be swapped in one pass.
 
-const accent = "#F5A442";
+const accent = "#FF8E9E";
+const moonstone = "#E8EEF1";
+const lagoon = "#0E2C36";
+const lagoonDeep = "#071A21";
 
 export const colors = {
-  bg: "#090B0F",
+  bg: lagoonDeep,
+  deep: lagoon,
   black: "#000000",
   white: "#FFFFFF",
-  text: "#EEF1F5",
-  dim: "#9AA3AF",
-  faint: "rgba(238,241,245,0.38)",
-  inactive: "rgba(255,255,255,0.3)",
-  passed: "#FFFFFF",
-  hairline: "rgba(238,241,245,0.12)",
-  wash: "rgba(238,241,245,0.05)",
-  washActive: "rgba(238,241,245,0.16)",
-  glass: "rgba(16,20,28,0.6)",
-  scrim: "rgba(0,0,0,0.4)",
-  holdDim: "rgba(0,0,0,0.16)",
-  puzzleDim: "rgba(0,0,0,0.38)",
-  letterboxVeil: "rgba(9,11,15,0.5)",
-  textShadow: "rgba(0,0,0,0.85)",
-  tag: "rgba(10,13,18,0.55)",
+  text: moonstone,
+  dim: "#A9BCC3",
+  faint: "rgba(232,238,241,0.42)",
+  inactive: "rgba(232,238,241,0.32)",
+  passed: moonstone,
+  hairline: "rgba(232,238,241,0.14)",
+  wash: "rgba(232,238,241,0.06)",
+  washActive: "rgba(232,238,241,0.18)",
+  glass: "rgba(14,44,54,0.5)",
+  scrim: "rgba(7,26,33,0.4)",
+  holdDim: "rgba(7,26,33,0.14)",
+  puzzleDim: "rgba(7,26,33,0.34)",
+  letterboxVeil: "rgba(7,26,33,0.45)",
+  textShadow: "rgba(4,16,21,0.8)",
+  tag: "rgba(14,44,54,0.55)",
   glow: accent,
   accent,
-  accentInk: "#1A1007",
+  accentInk: "#2A0E14",
   bubble: "#E9E9EB",
   bubbleInk: "#000000",
 };
 
 export const gradients = {
-  home: { colors: ["rgba(9,11,15,0.62)", "rgba(9,11,15,0)", "rgba(9,11,15,0.55)", "rgba(9,11,15,0.96)"], locations: [0, 0.24, 0.56, 0.92] },
-  ending: { colors: ["rgba(9,11,15,0.15)", "rgba(9,11,15,0.8)", "rgba(9,11,15,0.97)"], locations: [0, 0.34, 0.72] },
+  home: { colors: ["rgba(7,26,33,0.62)", "rgba(7,26,33,0)", "rgba(7,26,33,0.55)", "rgba(7,26,33,0.96)"], locations: [0, 0.24, 0.56, 0.92] },
+  ending: { colors: ["rgba(7,26,33,0.15)", "rgba(7,26,33,0.8)", "rgba(7,26,33,0.97)"], locations: [0, 0.34, 0.72] },
   playerTop: { colors: ["rgba(0,0,0,0.5)", "rgba(0,0,0,0)"], locations: [0, 1] },
   playerBottom: { colors: ["rgba(0,0,0,0)", "rgba(0,0,0,0.72)"], locations: [0, 1] },
 } as const;
 
 // Three strokes on one shape, bottom to top: a dark contrast ring, the accent halo, a white core.
 export const glow = {
-  silhouette: "#F4F3EF",
-  gradientEnd: "#FFE9B9",
+  silhouette: moonstone,
+  gradientEnd: moonstone,
   silhouetteWidth: 1.5,
   silhouetteBlur: 4,
   silhouetteFill: 0.45,
@@ -65,10 +70,10 @@ export const glow = {
 // Liquid Glass for controls floating over video. Fallback is a material blur where the system
 // effect is unavailable, and a solid fill when Reduce Transparency is on.
 export const glass = {
-  tint: "rgba(220,228,240,0.16)",
+  tint: "rgba(255,142,158,0.3)",
   fallbackBlur: 30,
-  fallbackFill: "rgba(16,20,28,0.5)",
-  solidFill: "rgba(16,20,28,0.94)",
+  fallbackFill: "rgba(14,44,54,0.42)",
+  solidFill: "rgba(14,44,54,0.95)",
   sheetBlur: 22,
 };
 
@@ -112,10 +117,10 @@ export const fontFiles = {
 export const ascii = {
   advance: 0.606,
   lineHeight: 1,
-  silver: "#C9D1DC",
+  silver: moonstone,
   silverOpacity: 0.5,
-  amber: "#E8EEF6",
-  amberOpacity: 0.7,
+  amber: accent,
+  amberOpacity: 0.62,
   highlight: "#FFFFFF",
   glow: [
     { period: 5200, delay: 0, min: 0.05, max: 1 },
@@ -135,14 +140,14 @@ export const ascii = {
     veil: 0.55,
     caption: "·  the next scene is forming  ·",
     layers: [
-      { color: "#C8CDD4", opacity: 0.38, density: 0.42, seed: 7, period: 2600 },
-      { color: "#E8EEF6", opacity: 0.5, density: 0.12, seed: 41, period: 3400 },
-      { color: "#F5A442", opacity: 0.7, density: 0.03, seed: 97, period: 1900 },
+      { color: moonstone, opacity: 0.38, density: 0.42, seed: 7, period: 2600 },
+      { color: "#BFD3D9", opacity: 0.5, density: 0.12, seed: 41, period: 3400 },
+      { color: accent, opacity: 0.7, density: 0.03, seed: 97, period: 1900 },
     ],
   },
   top: 70,
   ornament: "·  ─ ─ ─  ✦  ─ ─ ─  ·",
-  ornamentColor: "rgba(238,241,245,0.3)",
+  ornamentColor: "rgba(232,238,241,0.32)",
   ornamentSize: 12,
   ornamentTracking: 2,
   monoTracking: 1.2,

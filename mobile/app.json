@@ -7,7 +7,7 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
-    "backgroundColor": "#07070A",
+    "backgroundColor": "#071A21",
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.aryan5v.fork",
@@ -18,7 +18,7 @@
     "android": {
       "package": "com.aryan5v.fork",
       "adaptiveIcon": {
-        "backgroundColor": "#07070A",
+        "backgroundColor": "#071A21",
         "foregroundImage": "./assets/android-icon-foreground.png"
       }
     },

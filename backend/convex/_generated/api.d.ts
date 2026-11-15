@@ -34,6 +34,7 @@ import type * as lib_story from "../lib/story.js";
 import type * as lib_streak from "../lib/streak.js";
 import type * as lib_style from "../lib/style.js";
 import type * as lib_tray from "../lib/tray.js";
+import type * as lib_trayUniserve from "../lib/trayUniserve.js";
 import type * as lib_validators from "../lib/validators.js";
 import type * as lib_view from "../lib/view.js";
 import type * as runs from "../runs.js";
@@ -75,6 +76,7 @@ declare const fullApi: ApiFromModules<{
   "lib/streak": typeof lib_streak;
   "lib/style": typeof lib_style;
   "lib/tray": typeof lib_tray;
+  "lib/trayUniserve": typeof lib_trayUniserve;
   "lib/validators": typeof lib_validators;
   "lib/view": typeof lib_view;
   runs: typeof runs;

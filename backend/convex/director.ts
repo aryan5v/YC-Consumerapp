@@ -66,13 +66,19 @@ export const generateBeat = internalAction({
     }
 
     if (director === null) {
-      director = fallbackBeat({
-        beatIndex: beat.depth,
-        beatsLeft,
-        expectedKind,
-        state,
-        characterName: episode.character.name,
-      });
+      const written = validateBeat(
+        fixtureBeat({ depth: beat.depth, beatsTotal: episode.beatsTotal, state, pathLabels }),
+        { expectedKind, beatsLeft, beatIndex: beat.depth },
+      );
+      director = written.ok
+        ? written.beat
+        : fallbackBeat({
+            beatIndex: beat.depth,
+            beatsLeft,
+            expectedKind,
+            state,
+            characterName: episode.character.name,
+          });
     }
     await ctx.runMutation(internal.beats.applyDirector, { beatId, director });
     return null;

@@ -182,7 +182,14 @@ fallback.
 npm run typecheck   # tsc --noEmit
 npm test            # vitest: the playthrough, the tray adapter, the speech matcher, Keiki tools
 npm run e2e         # just the playthrough, printing the beat-by-beat transcript
+npm run smoke       # plays a whole episode against the deployed backend and prints the transcript
 ```
+
+`npm run smoke` is the fastest way to tell whether the director and the tray are healthy: it starts a
+run, waits for each stop, picks the first option or answers each puzzle, and prints the ending, the
+path and the text block. Add `-- --prod` to target the linked production deployment, or
+`-- --answer 4187` to force an answer. When a beat never produces a stop it says so, which is what a
+rejected director key or an unreachable tray looks like from the outside.
 
 ## Known gaps
 

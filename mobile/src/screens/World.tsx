@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { WebView } from "react-native-webview";
 import { useReduceMotion } from "../a11y";
 import { Glass } from "../components/Glass";
-import { mockStory, useStory, videoSource } from "../data";
+import { useStory, videoSource } from "../data";
 import { useSettings } from "../settings";
 import { colors, ease, fonts, motion, radius, type } from "../theme";
 import { worldHtml } from "../world/worldHtml";
@@ -78,8 +78,8 @@ export function World({ active, onClose, onStory }: { active: boolean; onClose: 
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
       send({ type: "setAscii", amount: 1 });
       try {
-        const provider = story.interact ? story : mockStory;
-        const result = await provider.interact!({
+        if (!story.interact) throw new Error("World scenes are not available");
+        const result = await story.interact({
           thingId: String(m.thingId),
           name: String(m.name),
           description: String(m.description),
@@ -87,7 +87,9 @@ export function World({ active, onClose, onStory }: { active: boolean; onClose: 
           timeOfDay: Number(m.timeOfDay),
           day: Number(m.day),
           seed: m.seed as number | string,
+          state: (m.state as Record<string, unknown> | undefined) ?? undefined,
         });
+        if (result.configure) send({ type: "configure", ...result.configure, transitionMs: result.transitionMs ?? 0 });
         send({ type: "pause" });
         await playClip(result.clipUrl);
         await fadeTo(0);

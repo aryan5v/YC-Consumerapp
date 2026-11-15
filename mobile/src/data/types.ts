@@ -59,8 +59,9 @@ export type WorldInteraction = {
   timeOfDay: number;
   day: number;
   seed: number | string;
+  state?: Record<string, unknown>;
 };
-export type WorldInteractionResult = { clipUrl: string; change?: Record<string, unknown> };
+export type WorldInteractionResult = { clipUrl: string; change?: Record<string, unknown>; configure?: Record<string, unknown>; transitionMs?: number };
 
 export interface StoryProvider {
   name: "mock" | "convex";

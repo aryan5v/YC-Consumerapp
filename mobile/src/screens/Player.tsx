@@ -14,7 +14,7 @@ import { MicButton } from "../components/MicButton";
 import { Presence } from "../components/Presence";
 import { PuzzleSheet, type PuzzleState } from "../components/PuzzleSheet";
 import { SettingsGlyph, SettingsSheet } from "../components/SettingsSheet";
-import { audioSource, useStory, videoSource, type Ending, type Stop } from "../data";
+import { audioSource, useStory, videoSource, preloadClip, type Ending, type Stop } from "../data";
 import { useReduceMotion } from "../a11y";
 import { useSettings } from "../settings";
 import { Glass } from "../components/Glass";
@@ -34,7 +34,7 @@ let speakUnavailable = false;
 
 type Slot = { url: string | null; ready: boolean; aspect: number | null; retries: number; backdrop: VideoThumbnail | null };
 type Snap = { beatId: string; clipUrl: string; narration: string; stop: Stop | null; ending: Ending | null; beatIndex: number; beatsTotal: number };
-type Commit = { fromBeatId: string; optionId?: string; url: string | null };
+type Commit = { fromBeatId: string; optionId?: string; actionId?: string; url: string | null };
 
 function setup(player: VideoPlayer) {
   player.loop = false;
@@ -161,15 +161,17 @@ export function Player({
     if (view.current.status === "ready" && view.current.clipUrl) wanted.push(view.current.clipUrl);
     if (commit?.url) wanted.push(commit.url);
     if (view.stop?.kind === "choice") {
-      for (const o of view.stop.options) if (o.childStatus === "ready" && o.childClipUrl) wanted.push(o.childClipUrl);
+      for (const o of view.stop.options) for (const action of o.actions) if (action.childStatus === "ready" && action.childClipUrl) wanted.push(action.childClipUrl);
     }
     if (view.stop?.kind === "puzzle") {
       for (const o of [view.stop.outcomes.success, view.stop.outcomes.failure]) if (o.status === "ready" && o.clipUrl) wanted.push(o.clipUrl);
     }
-    for (const url of wanted) {
+    wanted.forEach((url) => { void preloadClip(url); });
+    const resident = [...new Set(wanted)].slice(0, SLOTS.length - (previousRef.current >= 0 ? 1 : 0));
+    for (const url of resident) {
       if (slots.some((s) => s.url === url)) continue;
       const i = slots.findIndex(
-        (s, index) => index !== activeRef.current && index !== previousRef.current && (s.url === null || !wanted.includes(s.url)),
+        (s, index) => index !== activeRef.current && index !== previousRef.current && (s.url === null || !resident.includes(s.url)),
       );
       if (i < 0) continue;
       slots[i] = { url, ready: false, aspect: null, retries: 0, backdrop: null };
@@ -215,7 +217,8 @@ export function Player({
       target = commit.url;
       if (!target && commit.optionId && view.stop?.kind === "choice") {
         const option = view.stop.options.find((o) => o.id === commit.optionId);
-        if (option?.childStatus === "ready") target = option.childClipUrl;
+        const action = option?.actions.find((a) => a.id === commit.actionId);
+        if (action?.childStatus === "ready") target = action.childClipUrl;
       }
     } else if (view.current.status === "ready") {
       target = view.current.clipUrl;
@@ -386,15 +389,19 @@ export function Player({
     />
   );
 
-  const pick = (optionId: string) => {
+  const pick = (optionId: string, actionId: string) => {
     const live = viewRef.current;
     if (!current || picked || voiceBusy || live?.stop?.kind !== "choice") return;
     const option = live.stop.options.find((o) => o.id === optionId);
     if (!option) return;
+    const action = option.actions.find((a) => a.id === actionId);
+    if (!action) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setPicked(optionId);
-    setCommit({ fromBeatId: current.beatId, optionId, url: option.childStatus === "ready" ? option.childClipUrl : null });
-    story.choose(runId, optionId, current.beatId).catch(() => {
+    notBefore.current = Date.now() + motion.silhouette;
+    setCommit({ fromBeatId: current.beatId, optionId, actionId, url: action.childStatus === "ready" ? action.childClipUrl : null });
+    story.choose(runId, optionId, actionId, current.beatId).catch(() => {
+      notBefore.current = 0;
       setPicked(null);
       setCommit(null);
     });
@@ -418,7 +425,7 @@ export function Player({
   const share = () => {
     if (!current?.ending) return;
     Share.share({
-      message: `Fork \u00B7 ${episodeTitle}\nI reached \u201C${current.ending.title}\u201D.\n${current.ending.path.join(" \u2192 ")}\n${streak}-day streak.`,
+      message: `Synqui \u00B7 ${episodeTitle}\nI reached \u201C${current.ending.title}\u201D.\n${current.ending.path.join(" \u2192 ")}\n${streak}-day streak.`,
     }).catch(() => {});
   };
 

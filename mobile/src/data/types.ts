@@ -1,14 +1,14 @@
 import type { ComponentType, ReactNode } from "react";
 
-export type Box = { x: number; y: number; w: number; h: number };
+export type Point = [number, number];
+export type Region = { centroid: { x: number; y: number }; polygon: Point[] | Point[][] | null; maskUrl: string | null };
 export type ClipStatus = "generating" | "ready";
 
 export type ChoiceOption = {
   id: string;
   label: string;
-  box: Box | null;
-  childStatus: ClipStatus;
-  childClipUrl: string | null;
+  region: Region | null;
+  actions: { id: string; label: string; childStatus: ClipStatus; childClipUrl: string | null }[];
 };
 
 export type Outcome = { status: ClipStatus; clipUrl: string | null };
@@ -58,7 +58,7 @@ export interface StoryProvider {
   useHome(): HomeView | undefined;
   useRun(runId: string | null): RunView | undefined;
   startToday(): Promise<string>;
-  choose(runId: string, optionId: string, expectedBeatId: string): Promise<void>;
+  choose(runId: string, optionId: string, actionId: string, expectedBeatId: string): Promise<void>;
   answer(runId: string, answer: string, expectedBeatId: string): Promise<{ correct: boolean }>;
   setPhone(phone: string): Promise<void>;
   speak?(runId: string, recordingUri: string, expectedBeatId: string): Promise<SpeakResult>;

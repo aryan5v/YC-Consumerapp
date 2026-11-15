@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Fork",
+    "name": "Synqui",
     "slug": "fork",
     "scheme": "fork",
     "version": "1.0.0",
@@ -29,7 +29,7 @@
       [
         "expo-audio",
         {
-          "microphonePermission": "Fork listens only while you hold the microphone, to answer a character out loud."
+          "microphonePermission": "Synqui listens only while you hold the microphone, to answer a character out loud."
         }
       ],
       "expo-secure-store",

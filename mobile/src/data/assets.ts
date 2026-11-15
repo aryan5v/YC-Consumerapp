@@ -26,8 +26,23 @@ const bundled: Record<string, number> = {
   "mock://voice/reply": require("../../assets/mock/voice/reply.m4a"),
 };
 
+const clips = new Map<string, string>();
+const downloads = new Set<string>();
+
+export async function preloadClip(url: string) {
+  if (bundled[url] || downloads.has(url)) return;
+  downloads.add(url);
+  try {
+    const { Asset } = await import("expo-asset");
+    const asset = await Asset.fromURI(url).downloadAsync();
+    if (asset.localUri) clips.set(url, asset.localUri);
+  } catch {
+    downloads.delete(url);
+  }
+}
+
 export function videoSource(url: string): VideoSource {
-  return bundled[url] ?? { uri: url };
+  return bundled[url] ?? { uri: clips.get(url) ?? url };
 }
 
 export function audioSource(url: string): number | { uri: string } {

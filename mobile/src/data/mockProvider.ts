@@ -60,7 +60,12 @@ function buildRun(r: Run): RunView {
               spokenAudioUrl: spoken[r.node].audioUrl,
               options: node.stop.options.map((o) => {
                 const c = child(o.to);
-                return { id: o.id, label: o.label, box: o.box, childStatus: c.status, childClipUrl: c.clipUrl };
+                return {
+                  id: o.id,
+                  label: o.label,
+                  region: o.region,
+                  actions: [{ id: "go", label: o.label, childStatus: c.status, childClipUrl: c.clipUrl }],
+                };
               }),
             }
           : {
@@ -155,12 +160,13 @@ export const mockProvider: StoryProvider = {
     emit();
     return r.id;
   },
-  async choose(runId, optionId, expectedBeatId) {
+  async choose(runId, optionId, actionId, expectedBeatId) {
     await latency();
     const r = activeRun(runId, expectedBeatId);
     const stop = nodes[r.node].stop;
     const option = stop?.kind === "choice" ? stop.options.find((o) => o.id === optionId) : undefined;
     if (!option) throw new Error("Unknown option");
+    if (actionId !== "go") throw new Error("Unknown action");
     advance(r, option.to, option.label);
   },
   async answer(runId, answer, expectedBeatId) {

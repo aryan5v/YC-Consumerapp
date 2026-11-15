@@ -63,7 +63,7 @@ export function Home({ starting, onPlay, onSettings }: { starting: boolean; onPl
       />
 
       <View style={[styles.top, { paddingTop: insets.top + 18 }]}>
-        <Text style={styles.wordmark}>Fork</Text>
+        <Text style={styles.wordmark}>Synqui</Text>
         {home && <Text style={styles.date}>{dateLabel(home.episode.date)}</Text>}
         <Glass interactive style={styles.settings}>
           <Pressable accessibilityRole="button" accessibilityLabel="Settings" onPress={onSettings} style={styles.settingsHit}>

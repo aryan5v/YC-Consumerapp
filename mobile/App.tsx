@@ -3,15 +3,15 @@ import { CormorantGaramond_500Medium, CormorantGaramond_500Medium_Italic } from 
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold } from "@expo-google-fonts/inter";
 import { useFonts } from "expo-font";
 import { StatusBar } from "expo-status-bar";
-import { useCallback, useRef, useState } from "react";
-import { Animated, StyleSheet, View } from "react-native";
+import { Component, type ReactNode, useCallback, useRef, useState } from "react";
+import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 import { SettingsSheet } from "./src/components/SettingsSheet";
 import { convexStory, mockStory, StoryContext, useStory } from "./src/data";
-import { useSettings } from "./src/settings";
+import { setSetting, useSettings } from "./src/settings";
 import { Home } from "./src/screens/Home";
 import { Player } from "./src/screens/Player";
-import { colors, ease, motion } from "./src/theme";
+import { colors, ease, fonts, motion, radius, type } from "./src/theme";
 
 setAudioModeAsync({ playsInSilentMode: true, allowsRecording: false }).catch(() => {});
 
@@ -63,15 +63,33 @@ function Shell() {
   );
 }
 
+class StoryError extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() { return { failed: true }; }
+  render() {
+    if (!this.state.failed) return this.props.children;
+    return <View style={[styles.root, { justifyContent: "center", padding: 28, gap: 20 }]}>
+      <Text style={{ color: colors.text, fontFamily: fonts.display, fontSize: type.hero }}>The signal went quiet.</Text>
+      <Text style={{ color: colors.dim, fontFamily: fonts.ui, fontSize: type.body }}>The live story is unavailable. You can still play the demo.</Text>
+      <Pressable accessibilityRole="button" onPress={() => setSetting("demo", true)} style={{ padding: 18, backgroundColor: colors.accent, borderRadius: radius.button }}>
+        <Text style={{ color: colors.accentInk, fontFamily: fonts.uiSemibold, fontSize: type.control }}>Play demo story</Text>
+      </Pressable>
+      <Pressable accessibilityRole="button" onPress={() => this.setState({ failed: false })} style={{ padding: 16 }}>
+        <Text style={{ color: colors.text, fontFamily: fonts.ui, fontSize: type.control }}>Try again</Text>
+      </Pressable>
+    </View>;
+  }
+}
+
 function Story() {
   const { demo } = useSettings();
   const story = demo || !convexStory ? mockStory : convexStory;
   return (
-    <story.Root key={story.name}>
+    <StoryError key={story.name}><story.Root>
       <StoryContext.Provider value={story}>
         <Shell />
       </StoryContext.Provider>
-    </story.Root>
+    </story.Root></StoryError>
   );
 }
 

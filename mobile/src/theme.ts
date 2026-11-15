@@ -40,6 +40,11 @@ export const gradients = {
 
 // Three strokes on one shape, bottom to top: a dark contrast ring, the accent halo, a white core.
 export const glow = {
+  silhouette: "#F4F3EF",
+  gradientEnd: "#FFE9B9",
+  silhouetteWidth: 1.5,
+  silhouetteBlur: 4,
+  silhouetteFill: 0.45,
   color: accent,
   contrast: "rgba(0,0,0,0.5)",
   contrastWidth: 6,
@@ -113,6 +118,7 @@ export const type = {
 };
 
 export const motion = {
+  silhouette: 240,
   instant: 70,
   fade: 180,
   quick: 240,

@@ -1,6 +1,6 @@
-# Fork mobile app
+# Synqui mobile app
 
-Expo (SDK 58) React Native app for Fork, a daily interactive video story. iOS first.
+Expo (SDK 58) React Native app for Synqui, a daily interactive video story. iOS first.
 
 ## Run
 

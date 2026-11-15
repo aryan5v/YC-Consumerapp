@@ -120,6 +120,17 @@ export const ascii = {
   ],
   rainGlyphs: "|'.`:",
   sceneOpacity: 0.95,
+  dissolve: {
+    inMs: 900,
+    outMs: 520,
+    veil: 0.55,
+    caption: "·  the next scene is forming  ·",
+    layers: [
+      { color: "#C8CDD4", opacity: 0.38, density: 0.42, seed: 7, period: 2600 },
+      { color: "#F5A442", opacity: 0.55, density: 0.12, seed: 41, period: 3400 },
+      { color: "#FFE9B9", opacity: 0.8, density: 0.03, seed: 97, period: 1900 },
+    ],
+  },
   top: 70,
   ornament: "·  ─ ─ ─  ✦  ─ ─ ─  ·",
   ornamentColor: "rgba(242,235,223,0.3)",

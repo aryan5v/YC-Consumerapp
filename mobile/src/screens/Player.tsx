@@ -6,6 +6,7 @@ import { useVideoPlayer, VideoView, type VideoPlayer, type VideoThumbnail } from
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Animated, Pressable, Share, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { AsciiDissolve } from "../components/AsciiDissolve";
 import { BeatDots } from "../components/BeatDots";
 import { Captions } from "../components/Captions";
 import { ChoiceOverlay, chipsHeight } from "../components/ChoiceOverlay";
@@ -268,6 +269,11 @@ export function Player({
 
   const current = snap && snap.clipUrl === displayedUrl ? snap : null;
   const held = phase === "held" && current !== null;
+  const pendingAction =
+    stale && commit?.optionId && view?.stop?.kind === "choice"
+      ? view.stop.options.find((o) => o.id === commit.optionId)?.actions.find((a) => a.id === commit.actionId)
+      : undefined;
+  const generating = !!pendingAction && !(pendingAction.childStatus === "ready" && pendingAction.childClipUrl);
   const choice = held && current.stop?.kind === "choice" ? current.stop : null;
   const puzzle = held && current.stop?.kind === "puzzle" ? current.stop : null;
   const puzzleOpen = puzzle !== null;
@@ -502,6 +508,8 @@ export function Player({
         <Presence show={held && phase === "held"} duration={900}>
           <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: puzzleOpen ? colors.puzzleDim : colors.holdDim }]} />
         </Presence>
+
+        <AsciiDissolve show={generating} />
 
         <Presence show={(captionsOn || listening || heard !== null || reply !== null) && current !== null && !puzzle && !ending}>
           <View pointerEvents="none" style={[styles.captions, { bottom: insets.bottom + 34 }]}>

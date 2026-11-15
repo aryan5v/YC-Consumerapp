@@ -38,6 +38,7 @@ type Commit = { fromBeatId: string; optionId?: string; actionId?: string; url: s
 function setup(player: VideoPlayer) {
   player.loop = false;
   player.muted = true;
+  player.timeUpdateEventInterval = 0.25;
 }
 
 export function Player({
@@ -150,6 +151,9 @@ export function Player({
       }),
       player.addListener("playToEnd", () => {
         if (activeRef.current === i) setPhase("held");
+      }),
+      player.addListener("timeUpdate", ({ currentTime }) => {
+        if (activeRef.current === i && player.duration > 0 && currentTime >= player.duration - 0.2) setPhase("held");
       }),
     ]);
     return () => subs.forEach((s) => s.remove());

@@ -1,9 +1,9 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "Fork story tools",
+    "title": "Synqui story tools",
     "version": "1.0.0",
-    "description": "The two tools the Keiki agent uses against the Fork backend. Add the header x-keiki-secret with the shared secret on every request."
+    "description": "The two tools the Keiki agent uses against the Synqui backend. Add the header x-keiki-secret with the shared secret on every request."
   },
   "servers": [{ "url": "https://reliable-opossum-456.convex.site" }],
   "components": {

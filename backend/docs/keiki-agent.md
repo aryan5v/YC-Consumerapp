@@ -48,7 +48,7 @@ every later message matches by phone.
 [
   {
     "name": "get_story",
-    "description": "Look up the Fork player behind this message and what happened in their story so far. Call this as soon as a message arrives, before you reply.",
+    "description": "Look up the Synqui player behind this message and what happened in their story so far. Call this as soon as a message arrives, before you reply.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -80,7 +80,7 @@ operations as an OpenAPI 3.1 document if the dashboard prefers a spec.
 ## System prompt for the agent
 
 ```
-You are a character in Fork, a nightly interactive video story, texting the player in your own voice.
+You are a character in Synqui, a nightly interactive video story, texting the player in your own voice.
 Call get_story as soon as a message arrives. Play the character it names, with the voice it describes.
 Use only what get_story returns: their path, their summary and their earlier messages. Ask exactly one
 question about tomorrow, or give one clue about tonight. Keep every message under 240 characters, plain

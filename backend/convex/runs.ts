@@ -6,7 +6,7 @@ import { ensureDeviceUser, requireDeviceUser, runOwnedBy } from "./lib/session";
 import { ensureEpisode } from "./lib/episodes";
 import { pacificDate } from "./lib/pacific";
 import { runViewValidator } from "./lib/validators";
-import { buildRunView } from "./lib/view";
+import { buildRunView, runIsReadable } from "./lib/view";
 import { DirectorPuzzleStop } from "./lib/director";
 import { answerPuzzle, chooseOption, loadCurrent } from "./lib/advance";
 import { askAgainLine, matchSpokenOption, SpokenOption } from "./lib/speech";
@@ -66,8 +66,15 @@ export const startToday = mutation({
       .order("desc")
       .first();
     if (existing !== null && existing.status === "active") {
-      await kickRun(ctx, existing);
-      return existing._id;
+      if (await runIsReadable(ctx, existing)) {
+        await kickRun(ctx, existing);
+        return existing._id;
+      }
+      await ctx.db.patch(existing._id, {
+        status: "ended",
+        endedAt: Date.now(),
+        error: "abandoned: this run could not be read, a fresh one was started",
+      });
     }
     await refuseWhenAtCapacity(ctx);
     const runId = await ctx.db.insert("runs", {

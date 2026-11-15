@@ -2,7 +2,7 @@ import { Id, Doc } from "../_generated/dataModel";
 import { MutationCtx } from "../_generated/server";
 import { DirectorPuzzleStop } from "./director";
 import { cancelSiblings, childrenOfBeat, promoteTo } from "./orchestration";
-import { checkAnswer, outcomeLabel } from "./story";
+import { checkAnswer, outcomeLabel, stopObjectViews } from "./story";
 
 export async function loadCurrent(
   ctx: MutationCtx,
@@ -49,11 +49,9 @@ export async function chooseOption(
 ): Promise<boolean> {
   const { run, beat } = await loadCurrent(ctx, runId);
   if (beat._id !== expectedBeatId) return false;
-  const stop = beat.stop as { kind: string; objects?: { id: string; label: string; actions: { id: string; label: string }[] }[] } | undefined;
-  if (stop === undefined || stop.kind !== "choice" || stop.objects === undefined) {
-    throw new Error("the current beat is not a choice stop");
-  }
-  const object = stop.objects.find((entry) => entry.id === optionId);
+  const objects = stopObjectViews(beat.stop);
+  if (objects.length === 0) throw new Error("the current beat is not a choice stop");
+  const object = objects.find((entry) => entry.id === optionId);
   if (object === undefined) throw new Error(`no option "${optionId}" on the current beat`);
   const action =
     actionId === undefined ? object.actions[0] : object.actions.find((entry) => entry.id === actionId) ?? object.actions[0];

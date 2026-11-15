@@ -424,3 +424,148 @@ function jsonResponse(body: Record<string, unknown>): Response {
     headers: { "content-type": "application/json" },
   });
 }
+
+describe("stored runs outlive the code that wrote them", () => {
+  test("an old-shape choice stop still renders and still advances", async () => {
+    const t = newBackend();
+    await t.mutation(api.episodes.seed, { days: 1 });
+    const userId = await t.mutation(api.session.signInAnonymously, { deviceToken: JUDGE_ONE });
+    const built = await t.run(async (ctx) => {
+      const episode = await ctx.db.query("episodes").first();
+      if (episode === null) throw new Error("no episode seeded");
+      const runId = await ctx.db.insert("runs", {
+        userId,
+        episodeId: episode._id,
+        status: "active",
+        path: [],
+        optionPath: [],
+        beatsSeen: 0,
+        state: { items: [], trust: 0, clues: [], beats_left: episode.beatsTotal },
+        startedAt: Date.now(),
+      });
+      const parentBeatId = await ctx.db.insert("beats", {
+        runId,
+        depth: 0,
+        status: "ready",
+        narration: "The old shape of a beat.",
+        spokenLine: "Which way?",
+        clipPrompt: "a wet street at night",
+        directorAttempts: 1,
+        stopKind: "choice",
+        stop: {
+          kind: "choice",
+          options: [
+            { id: "a", label: "Go in", target: "red door", leads_to: "push the red door", narration: "In you go", spoken_line: "The door gives." },
+            { id: "b", label: "Walk on", target: "street", leads_to: "walk on down", narration: "On you walk", spoken_line: "Keep going." },
+            { id: "c", label: "Wait", target: "corner", leads_to: "wait at the corner", narration: "You wait", spoken_line: "Wait there." },
+          ],
+        },
+        state: { items: [], trust: 0, clues: [], beats_left: episode.beatsTotal },
+        createdAt: Date.now(),
+      });
+      await ctx.db.patch(runId, { currentBeatId: parentBeatId });
+      await ctx.db.insert("clips", {
+        runId,
+        beatId: parentBeatId,
+        status: "ready",
+        url: STOCK_MP4S[0],
+        prompt: "a wet street at night",
+        seed: 1,
+        aspect: episode.aspect,
+        seconds: 5,
+        attempts: 1,
+        createdAt: Date.now(),
+      });
+      const childBeatId = await ctx.db.insert("beats", {
+        runId,
+        parentBeatId,
+        optionId: "a",
+        depth: 1,
+        status: "ready",
+        narration: "Through the old door.",
+        clipPrompt: "inside the shop",
+        directorAttempts: 1,
+        createdAt: Date.now(),
+      });
+      await ctx.db.insert("clips", {
+        runId,
+        beatId: childBeatId,
+        option: "a",
+        status: "ready",
+        url: STOCK_MP4S[1],
+        prompt: "inside the shop",
+        seed: 2,
+        aspect: episode.aspect,
+        seconds: 5,
+        attempts: 1,
+        createdAt: Date.now(),
+      });
+      return { runId, parentBeatId, childBeatId };
+    });
+
+    const view = await t.query(api.runs.view, { runId: built.runId, deviceToken: JUDGE_ONE });
+    expect(view.stop?.kind).toBe("choice");
+    if (view.stop?.kind !== "choice") throw new Error("expected a choice stop");
+    expect(view.stop.options).toHaveLength(3);
+    for (const option of view.stop.options) {
+      expect(option.region).toBeNull();
+      expect(option.actions).toHaveLength(1);
+      expect(option.actions[0].id).toBe(`${option.id}1`);
+    }
+    expect(view.stop.options[0].actions[0].childStatus).toBe("ready");
+    expect(view.stop.options[0].actions[0].childClipUrl).toBe(STOCK_MP4S[1]);
+
+    await t.mutation(api.runs.choose, {
+      runId: built.runId,
+      optionId: "a",
+      expectedBeatId: built.parentBeatId,
+      deviceToken: JUDGE_ONE,
+    });
+    const after = await t.query(api.runs.view, { runId: built.runId, deviceToken: JUDGE_ONE });
+    expect(after.current.beatId).toBe(built.childBeatId);
+  });
+
+  test("a run that cannot be read at all is replaced by a fresh one", async () => {
+    const t = newBackend();
+    await t.mutation(api.episodes.seed, { days: 1 });
+    const userId = await t.mutation(api.session.signInAnonymously, { deviceToken: JUDGE_ONE });
+    const broken = await t.run(async (ctx) => {
+      const episode = await ctx.db.query("episodes").first();
+      if (episode === null) throw new Error("no episode seeded");
+      const runId = await ctx.db.insert("runs", {
+        userId,
+        episodeId: episode._id,
+        status: "active",
+        path: [],
+        optionPath: [],
+        beatsSeen: 0,
+        state: { items: [], trust: 0, clues: [], beats_left: episode.beatsTotal },
+        startedAt: Date.now(),
+      });
+      const beatId = await ctx.db.insert("beats", {
+        runId,
+        depth: 0,
+        status: "ready",
+        narration: "A stop nothing can read.",
+        clipPrompt: "a wet street at night",
+        directorAttempts: 1,
+        stopKind: "choice",
+        stop: { kind: "choice" },
+        createdAt: Date.now(),
+      });
+      await ctx.db.patch(runId, { currentBeatId: beatId });
+      return { runId, beatId };
+    });
+
+    const home = await t.query(api.home.today, { deviceToken: JUDGE_ONE });
+    expect(home.run).toBeNull();
+
+    const fresh = await t.mutation(api.runs.startToday, { deviceToken: JUDGE_ONE });
+    expect(fresh).not.toBe(broken.runId);
+    const old = await t.run(async (ctx) => await ctx.db.get(broken.runId));
+    expect(old?.status).toBe("ended");
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
+    const view = await t.query(api.runs.view, { runId: fresh, deviceToken: JUDGE_ONE });
+    expect(view.current.beatId).not.toBe(broken.beatId);
+  });
+});

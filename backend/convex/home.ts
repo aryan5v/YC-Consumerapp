@@ -3,6 +3,7 @@ import { query } from "./_generated/server";
 import { homeValidator } from "./lib/validators";
 import { deviceUser } from "./lib/session";
 import { pacificDate } from "./lib/pacific";
+import { runIsReadable } from "./lib/view";
 
 export const today = query({
   args: { deviceToken: v.string() },
@@ -36,11 +37,15 @@ export const today = query({
       .query("streaks")
       .withIndex("by_user", (q) => q.eq("userId", user._id))
       .unique();
-    const run = await ctx.db
+    const candidate = await ctx.db
       .query("runs")
       .withIndex("by_user_episode", (q) => q.eq("userId", user._id).eq("episodeId", episode._id))
       .order("desc")
       .first();
+    const run =
+      candidate === null || candidate.status !== "active" || (await runIsReadable(ctx, candidate))
+        ? candidate
+        : null;
     return {
       episode: {
         id: episode._id,

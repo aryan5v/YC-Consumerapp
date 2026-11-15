@@ -1,9 +1,11 @@
 import {
   DirectorChildIntent,
+  DirectorOption,
   DirectorPuzzleStop,
   DirectorStop,
   StopAction,
   StopObject,
+  optionToObject,
 } from "./director";
 import { Region } from "./segment";
 
@@ -21,12 +23,71 @@ export type ChildSpec = {
 
 export function stopObjects(stop: DirectorStop): StopObject[] {
   if (stop.kind !== "choice") return [];
-  return stop.objects;
+  return stop.objects ?? [];
+}
+
+export type StopObjectView = {
+  id: string;
+  label: string;
+  region: Region | null;
+  actions: { id: string; label: string }[];
+};
+
+// Stored runs outlive the code that wrote them: a phone can hold a run whose stop was written
+// before objects existed. Always read a stop through here so older rows stay playable.
+export function stopObjectViews(stop: unknown): StopObjectView[] {
+  if (stop === null || typeof stop !== "object") return [];
+  const row = stop as { kind?: unknown; objects?: unknown; options?: unknown };
+  if (row.kind !== "choice") return [];
+  if (Array.isArray(row.objects)) {
+    return row.objects.flatMap((entry) => {
+      if (entry === null || typeof entry !== "object") return [];
+      const object = entry as { id?: unknown; label?: unknown; region?: unknown; actions?: unknown };
+      if (typeof object.id !== "string") return [];
+      const actions = Array.isArray(object.actions)
+        ? object.actions.flatMap((action) => {
+            if (action === null || typeof action !== "object") return [];
+            const shaped = action as { id?: unknown; label?: unknown };
+            if (typeof shaped.id !== "string") return [];
+            return [
+              {
+                id: shaped.id,
+                label: typeof shaped.label === "string" ? shaped.label : object.id as string,
+              },
+            ];
+          })
+        : [];
+      return [
+        {
+          id: object.id,
+          label: typeof object.label === "string" ? object.label : object.id,
+          region: (object.region ?? null) as Region | null,
+          actions: actions.length > 0 ? actions : [{ id: `${object.id}1`, label: String(object.label ?? object.id) }],
+        },
+      ];
+    });
+  }
+  if (Array.isArray(row.options)) {
+    return row.options.flatMap((entry) => {
+      if (entry === null || typeof entry !== "object") return [];
+      const option = entry as { id?: unknown; label?: unknown };
+      if (typeof option.id !== "string") return [];
+      const label = typeof option.label === "string" ? option.label : option.id;
+      return [{ id: option.id, label, region: null, actions: [{ id: `${option.id}1`, label }] }];
+    });
+  }
+  return [];
 }
 
 export function childSpecs(stop: DirectorStop): ChildSpec[] {
   if (stop.kind === "choice") {
-    return stop.objects.flatMap((object) =>
+    const row = stop as DirectorStop & { options?: DirectorOption[] };
+    const objects = Array.isArray(stop.objects)
+      ? stop.objects
+      : Array.isArray(row.options)
+        ? row.options.map(optionToObject)
+        : [];
+    return objects.flatMap((object) =>
       object.actions.map((action) => ({
         optionId: object.id,
         actionId: action.id,

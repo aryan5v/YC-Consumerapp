@@ -2,6 +2,8 @@ import { internal } from "../_generated/api";
 import { Doc, Id } from "../_generated/dataModel";
 import { MutationCtx, QueryCtx } from "../_generated/server";
 import { childSpecs } from "./story";
+import { clipPrompt } from "./style";
+import { expectedStopKind } from "./director";
 import { bumpStreak } from "./streak";
 import {
   characterQuestion,
@@ -31,14 +33,23 @@ export async function childrenOfBeat(ctx: { db: QueryCtx["db"] }, beatId: Id<"be
 
 export async function maybePrefetch(ctx: MutationCtx, beatId: Id<"beats">): Promise<number> {
   const beat = await ctx.db.get(beatId);
-  if (beat === null || beat.status === "cancelled" || beat.stop === undefined) return 0;
+  if (beat === null || beat.status === "cancelled") return 0;
   const run = await ctx.db.get(beat.runId);
   if (run === null || run.status !== "active") return 0;
   if (run.currentBeatId !== beatId) return 0;
   const clip = await clipForBeat(ctx, beatId);
   if (clip === null || (clip.status !== "ready" && clip.status !== "failed")) return 0;
+  if (beat.ending !== undefined) return 0;
   const existing = await childrenOfBeat(ctx, beatId);
   if (existing.length > 0) return 0;
+  if (beat.stop === undefined) {
+    const episode = await ctx.db.get(run.episodeId);
+    if (episode === null) return 0;
+    if (expectedStopKind(beat.depth, episode.beatsTotal) === "choice") {
+      await ctx.scheduler.runAfter(0, internal.director.authorObjects, { beatId });
+    }
+    return 0;
+  }
   const specs = childSpecs(beat.stop);
   let started = 0;
   for (const spec of specs) {
@@ -46,10 +57,12 @@ export async function maybePrefetch(ctx: MutationCtx, beatId: Id<"beats">): Prom
       runId: beat.runId,
       parentBeatId: beat._id,
       optionId: spec.optionId,
+      actionId: spec.actionId,
       depth: beat.depth + 1,
       status: "generating",
       narration: spec.narration,
-      clipPrompt: "",
+      spokenLine: spec.spokenLine,
+      clipPrompt: spec.clipPrompt === undefined ? "" : clipPrompt(spec.clipPrompt),
       directorAttempts: 0,
       createdAt: Date.now(),
     });

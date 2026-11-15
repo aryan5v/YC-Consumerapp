@@ -1,8 +1,10 @@
 import { v } from "convex/values";
 import { internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
+import { Id } from "./_generated/dataModel";
 import { maxPolls, pollMs } from "./lib/config";
-import { trayCancel, trayDetect, trayGenerate, trayGetJob, trayMode } from "./lib/tray";
+import { trayCancel, trayDownload, trayGenerate, trayGetJob, trayMode } from "./lib/tray";
+import { segmentConfigured, segmentFrame } from "./lib/segment";
 
 export const startClip = internalAction({
   args: { beatId: v.id("beats") },
@@ -68,11 +70,14 @@ export const pollClip = internalAction({
     try {
       const job = await trayGetJob(clip.jobId);
       if (job.status === "ready" && job.mp4Url !== null) {
+        const mirrored = await mirrorClip(ctx, job.mp4Url);
         await ctx.runMutation(internal.clips.markReady, {
           beatId,
-          url: job.mp4Url,
+          url: mirrored.url,
           lastFrameUrl: job.lastFrameUrl ?? undefined,
+          storageId: mirrored.storageId,
         });
+        if (mirrored.mirrored) await trayCancel(clip.jobId).catch(() => null);
         return null;
       }
       if (job.status === "failed") {
@@ -101,28 +106,41 @@ export const pollClip = internalAction({
   },
 });
 
-export const runDetect = internalAction({
+async function mirrorClip(
+  ctx: { storage: { store: (blob: Blob) => Promise<Id<"_storage">>; getUrl: (id: Id<"_storage">) => Promise<string | null> } },
+  mp4Url: string,
+): Promise<{ url: string; storageId?: Id<"_storage">; mirrored: boolean }> {
+  if (trayMode() === "mock") return { url: mp4Url, mirrored: false };
+  const { bytes, contentType } = await trayDownload(mp4Url);
+  const blob = new Blob([new Uint8Array(bytes)], { type: contentType });
+  const storageId = await ctx.storage.store(blob);
+  const url = await ctx.storage.getUrl(storageId);
+  if (url === null) throw new Error("stored the clip but Convex returned no URL for it");
+  return { url, storageId, mirrored: true };
+}
+
+export const runSegment = internalAction({
   args: { beatId: v.id("beats") },
   returns: v.null(),
   handler: async (ctx, { beatId }) => {
     const data = await ctx.runQuery(internal.clips.work, { beatId });
     if (data === null) return null;
     try {
-      if (data.clip.lastFrameUrl === undefined || data.targets.length === 0) {
-        await ctx.runMutation(internal.clips.setBoxes, { beatId, boxes: {} });
+      if (data.clip.lastFrameUrl === undefined || data.targets.length === 0 || !segmentConfigured()) {
+        await ctx.runMutation(internal.clips.setRegions, { beatId, regions: {} });
         return null;
       }
-      const result = await trayDetect(
+      const found = await segmentFrame(
         data.clip.lastFrameUrl,
         data.targets.map((target) => target.target),
       );
-      const boxes: Record<string, unknown> = {};
+      const regions: Record<string, unknown> = {};
       for (const target of data.targets) {
-        boxes[target.optionId] = result.boxes[target.target] ?? null;
+        regions[target.optionId] = found[target.target] ?? null;
       }
-      await ctx.runMutation(internal.clips.setBoxes, { beatId, boxes });
+      await ctx.runMutation(internal.clips.setRegions, { beatId, regions });
     } catch {
-      await ctx.runMutation(internal.clips.setBoxes, { beatId, boxes: {} });
+      await ctx.runMutation(internal.clips.setRegions, { beatId, regions: {} });
     }
     return null;
   },

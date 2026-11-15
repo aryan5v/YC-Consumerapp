@@ -1,8 +1,10 @@
 import { Doc, Id } from "../_generated/dataModel";
-import { Box } from "./tray";
 import { DEFAULT_SPOKEN_LINE, DirectorPuzzleStop, DirectorStop } from "./director";
+import { Region } from "./segment";
 
 export type ViewClipState = { status: "generating" | "ready"; clipUrl: string | null };
+
+export type ViewRegion = Region;
 
 export type ViewStop =
   | null
@@ -13,9 +15,13 @@ export type ViewStop =
       options: {
         id: string;
         label: string;
-        box: Box | null;
-        childStatus: "generating" | "ready";
-        childClipUrl: string | null;
+        region: ViewRegion | null;
+        actions: {
+          id: string;
+          label: string;
+          childStatus: "generating" | "ready";
+          childClipUrl: string | null;
+        }[];
       }[];
     }
   | {
@@ -68,7 +74,7 @@ export function buildRunView(args: {
 }): RunView {
   const { run, episode, beat, clip, children } = args;
   const currentState = advanceableClipState(clip);
-  const boxes = (clip?.boxes ?? {}) as Record<string, Box | null | undefined>;
+  const regions = (clip?.regions ?? {}) as Record<string, Region | null | undefined>;
 
   let stop: ViewStop = null;
   if (run.status === "active" && beat.stop !== undefined) {
@@ -78,17 +84,23 @@ export function buildRunView(args: {
         kind: "choice",
         spokenLine: spokenLineFor(beat, directorStop),
         spokenAudioUrl: beat.spokenAudioUrl ?? null,
-        options: directorStop.options.map((option) => {
-          const child = children.find((entry) => entry.beat.optionId === option.id);
-          const childState = advanceableClipState(child?.clip ?? null);
-          return {
-            id: option.id,
-            label: option.label,
-            box: boxes[option.id] ?? null,
-            childStatus: childState.status,
-            childClipUrl: childState.clipUrl,
-          };
-        }),
+        options: directorStop.objects.map((object) => ({
+          id: object.id,
+          label: object.label,
+          region: regions[object.id] ?? object.region ?? null,
+          actions: object.actions.map((action) => {
+            const child = children.find(
+              (entry) => entry.beat.optionId === object.id && (entry.beat.actionId ?? object.actions[0]?.id) === action.id,
+            );
+            const childState = advanceableClipState(child?.clip ?? null);
+            return {
+              id: action.id,
+              label: action.label,
+              childStatus: childState.status,
+              childClipUrl: childState.clipUrl,
+            };
+          }),
+        })),
       };
     } else {
       const puzzle = directorStop as DirectorPuzzleStop;

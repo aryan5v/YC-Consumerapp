@@ -15,7 +15,15 @@ import { deepseekJSON, directorMode, parseJSONObject } from "./lib/deepseek";
 import { graderMessages, speechMapperMessages } from "./lib/director";
 import { checkAnswer } from "./lib/story";
 import { childrenOfBeat, clipForBeat, kickRun } from "./lib/orchestration";
-import { activeRunTtlMs, maxActiveRuns, maxUploadBytes, speechAttemptsPerBeat } from "./lib/config";
+import {
+  activeRunTtlMs,
+  customRunsPerHour,
+  episodeBeats,
+  maxActiveRuns,
+  maxUploadBytes,
+  speechAttemptsPerBeat,
+} from "./lib/config";
+import { customEpisodeRow, defaultCustomSeed, sanitizeCustomPrompt } from "./lib/custom";
 
 const NO_SPEECH = {
   transcript: "",
@@ -86,6 +94,53 @@ export const startToday = mutation({
   },
 });
 
+export const startCustom = mutation({
+  args: { deviceToken: v.string(), prompt: v.string() },
+  returns: v.id("runs"),
+  handler: async (ctx, { deviceToken, prompt }) => {
+    const user = await ensureDeviceUser(ctx, deviceToken);
+    const clean = sanitizeCustomPrompt(prompt);
+    if (!clean.ok) throw new Error(clean.message);
+    const recent = await ctx.db
+      .query("runs")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .collect();
+    const cutoff = Date.now() - 60 * 60 * 1000;
+    const customs = recent.filter((run) => run.startedAt >= cutoff && run.custom === true).length;
+    if (customs >= customRunsPerHour()) {
+      throw new Error("that is a lot of worlds in one hour. Give it a few minutes and try again.");
+    }
+    await refuseWhenAtCapacity(ctx);
+    const episodeId = await ctx.db.insert("episodes", customEpisodeRow(defaultCustomSeed(clean.prompt)));
+    const runId = await ctx.db.insert("runs", {
+      userId: user._id,
+      episodeId,
+      status: "active",
+      custom: true,
+      path: [],
+      optionPath: [],
+      beatsSeen: 0,
+      state: { items: [], trust: 0, clues: [], beats_left: episodeBeats() },
+      startedAt: Date.now(),
+    });
+    const beatId = await ctx.db.insert("beats", {
+      runId,
+      depth: 0,
+      status: "generating",
+      clipPrompt: "",
+      directorAttempts: 0,
+      createdAt: Date.now(),
+    });
+    await ctx.db.patch(runId, { currentBeatId: beatId });
+    await ctx.scheduler.runAfter(0, internal.custom.refineSeed, {
+      episodeId,
+      beatId,
+      prompt: clean.prompt,
+    });
+    return runId;
+  },
+});
+
 export const view = query({
   args: { runId: v.id("runs"), deviceToken: v.string() },
   returns: runViewValidator,
@@ -108,11 +163,17 @@ export const view = query({
 });
 
 export const choose = mutation({
-  args: { runId: v.id("runs"), optionId: v.string(), expectedBeatId: v.id("beats"), deviceToken: v.string() },
+  args: {
+    runId: v.id("runs"),
+    optionId: v.string(),
+    actionId: v.optional(v.string()),
+    expectedBeatId: v.id("beats"),
+    deviceToken: v.string(),
+  },
   returns: v.null(),
-  handler: async (ctx, { runId, optionId, expectedBeatId, deviceToken }) => {
+  handler: async (ctx, { runId, optionId, actionId, expectedBeatId, deviceToken }) => {
     await runOwnedBy(ctx, runId, deviceToken);
-    await chooseOption(ctx, runId, optionId, expectedBeatId);
+    await chooseOption(ctx, runId, optionId, actionId, expectedBeatId);
     return null;
   },
 });
@@ -154,13 +215,14 @@ export const speakChoose = internalMutation({
   args: {
     runId: v.id("runs"),
     optionId: v.string(),
+    actionId: v.optional(v.string()),
     expectedBeatId: v.id("beats"),
     deviceToken: v.string(),
   },
   returns: v.boolean(),
-  handler: async (ctx, { runId, optionId, expectedBeatId, deviceToken }) => {
+  handler: async (ctx, { runId, optionId, actionId, expectedBeatId, deviceToken }) => {
     await runOwnedBy(ctx, runId, deviceToken);
-    return await chooseOption(ctx, runId, optionId, expectedBeatId);
+    return await chooseOption(ctx, runId, optionId, actionId, expectedBeatId);
   },
 });
 

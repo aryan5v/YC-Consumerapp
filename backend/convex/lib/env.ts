@@ -9,6 +9,11 @@ export type EnvName =
   | "FASTH3_SUBMIT_TIMEOUT_MS"
   | "DETECT_URL"
   | "DETECT_API_KEY"
+  | "SEGMENT_URL"
+  | "SEGMENT_API_KEY"
+  | "CUSTOM_RUNS_PER_HOUR"
+  | "OBJECTS_PER_BEAT"
+  | "ACTIONS_PER_OBJECT"
   | "DIRECTOR_PROVIDER"
   | "DIRECTOR_BASE_URL"
   | "DIRECTOR_MODEL"
@@ -69,6 +74,16 @@ export function env(name: EnvName): string | undefined {
       return process.env.DETECT_URL;
     case "DETECT_API_KEY":
       return process.env.DETECT_API_KEY;
+    case "SEGMENT_URL":
+      return process.env.SEGMENT_URL;
+    case "SEGMENT_API_KEY":
+      return process.env.SEGMENT_API_KEY;
+    case "CUSTOM_RUNS_PER_HOUR":
+      return process.env.CUSTOM_RUNS_PER_HOUR;
+    case "OBJECTS_PER_BEAT":
+      return process.env.OBJECTS_PER_BEAT;
+    case "ACTIONS_PER_OBJECT":
+      return process.env.ACTIONS_PER_OBJECT;
     case "DIRECTOR_PROVIDER":
       return process.env.DIRECTOR_PROVIDER;
     case "DIRECTOR_BASE_URL":

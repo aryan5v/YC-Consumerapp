@@ -127,6 +127,17 @@ export async function trayGetJob(jobId: string): Promise<TrayJobState> {
   };
 }
 
+export async function trayDownload(mp4Url: string): Promise<{ bytes: Uint8Array; contentType: string }> {
+  const key = apiKey();
+  const headers: Record<string, string> = {};
+  if (key !== null) headers.authorization = `Bearer ${key}`;
+  const res = await fetch(mp4Url, { method: "GET", headers, signal: AbortSignal.timeout(180000) });
+  if (!res.ok) throw new Error(`clip download failed: ${res.status} ${(await res.text()).slice(0, 200)}`);
+  const bytes = new Uint8Array(await res.arrayBuffer());
+  if (bytes.byteLength === 0) throw new Error("clip download returned no bytes");
+  return { bytes, contentType: res.headers.get("content-type") ?? "video/mp4" };
+}
+
 export async function trayDetect(frameUrl: string, targets: string[]): Promise<TrayDetectResult> {
   const url = envFlag("DETECT_URL");
   if (url === null || targets.length === 0) return { boxes: {} };

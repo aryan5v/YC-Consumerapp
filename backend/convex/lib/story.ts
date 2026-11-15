@@ -1,32 +1,51 @@
-import { DirectorPuzzleStop, DirectorStop, DirectorChildIntent, DirectorOption } from "./director";
+import {
+  DirectorChildIntent,
+  DirectorPuzzleStop,
+  DirectorStop,
+  StopAction,
+  StopObject,
+} from "./director";
+import { Region } from "./segment";
 
 export type ChildSpec = {
   optionId: string;
+  actionId?: string;
   label: string;
   action: string;
   target: string | null;
+  region: Region | null;
   clipPrompt?: string;
   narration?: string;
   spokenLine: string;
 };
 
+export function stopObjects(stop: DirectorStop): StopObject[] {
+  if (stop.kind !== "choice") return [];
+  return stop.objects;
+}
+
 export function childSpecs(stop: DirectorStop): ChildSpec[] {
   if (stop.kind === "choice") {
-    return stop.options.map((option: DirectorOption) => ({
-      optionId: option.id,
-      label: option.label,
-      action: option.leads_to,
-      target: option.target,
-      clipPrompt: option.clip_prompt,
-      narration: option.narration,
-      spokenLine: option.spoken_line,
-    }));
+    return stop.objects.flatMap((object) =>
+      object.actions.map((action) => ({
+        optionId: object.id,
+        actionId: action.id,
+        label: object.actions.length > 1 ? `${object.label} — ${action.label}` : object.label,
+        action: action.label,
+        target: object.target,
+        region: object.region,
+        clipPrompt: action.clip_prompt,
+        narration: action.narration,
+        spokenLine: action.spoken_line,
+      })),
+    );
   }
   return [stop.success, stop.failure].map((child: DirectorChildIntent) => ({
     optionId: child.id,
     label: child.label,
     action: child.leads_to,
     target: null,
+    region: null,
     clipPrompt: child.clip_prompt,
     narration: child.narration,
     spokenLine: child.spoken_line,

@@ -1,9 +1,16 @@
 import { v } from "convex/values";
-import { boxValidator } from "../schema";
 
 const clipStateValidator = v.object({
   status: v.union(v.literal("generating"), v.literal("ready")),
   clipUrl: v.union(v.string(), v.null()),
+});
+
+const pointValidator = v.object({ x: v.number(), y: v.number() });
+
+const regionValidator = v.object({
+  centroid: pointValidator,
+  polygon: v.union(v.array(v.array(v.array(v.number()))), v.null()),
+  maskUrl: v.union(v.string(), v.null()),
 });
 
 const runStopValidator = v.union(
@@ -16,9 +23,15 @@ const runStopValidator = v.union(
       v.object({
         id: v.string(),
         label: v.string(),
-        box: v.union(boxValidator, v.null()),
-        childStatus: v.union(v.literal("generating"), v.literal("ready")),
-        childClipUrl: v.union(v.string(), v.null()),
+        region: v.union(regionValidator, v.null()),
+        actions: v.array(
+          v.object({
+            id: v.string(),
+            label: v.string(),
+            childStatus: v.union(v.literal("generating"), v.literal("ready")),
+            childClipUrl: v.union(v.string(), v.null()),
+          }),
+        ),
       }),
     ),
   }),

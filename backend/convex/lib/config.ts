@@ -41,6 +41,18 @@ export function heldClipUrl(): string {
   return envFlag("HELD_CLIP_URL") ?? STOCK_MP4S[0];
 }
 
+export function objectsPerBeat(): number {
+  return Math.min(4, Math.max(1, Math.round(envNumber("OBJECTS_PER_BEAT", 3))));
+}
+
+export function actionsPerObject(): number {
+  return Math.min(3, Math.max(1, Math.round(envNumber("ACTIONS_PER_OBJECT", 1))));
+}
+
+export function customRunsPerHour(): number {
+  return Math.max(1, Math.round(envNumber("CUSTOM_RUNS_PER_HOUR", 6)));
+}
+
 export function maxActiveRuns(): number {
   return Math.max(1, Math.round(envNumber("MAX_ACTIVE_RUNS", 12)));
 }

@@ -4,7 +4,8 @@ import { Doc } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
 import { clipPrompt } from "./lib/style";
 import { ChildSpec, childSpecs } from "./lib/story";
-import { maybeFinish, maybePrefetch } from "./lib/orchestration";
+import { StopObject } from "./lib/director";
+import { childrenOfBeat, maybeFinish, maybePrefetch } from "./lib/orchestration";
 
 export const context = internalQuery({
   args: { beatId: v.id("beats") },
@@ -80,6 +81,44 @@ export const applyDirector = internalMutation({
     await maybePrefetch(ctx, beatId);
     await maybeFinish(ctx, run._id, beatId);
     return null;
+  },
+});
+
+export const applyObjects = internalMutation({
+  args: { beatId: v.id("beats"), objects: v.any() },
+  returns: v.number(),
+  handler: async (ctx, { beatId, objects }) => {
+    const beat = await ctx.db.get(beatId);
+    if (beat === null || beat.status === "cancelled") return 0;
+    if (beat.stop !== undefined || beat.ending !== undefined) return 0;
+    const run = await ctx.db.get(beat.runId);
+    if (run === null || run.status !== "active") return 0;
+    const existing = await childrenOfBeat(ctx, beatId);
+    if (existing.length > 0) return 0;
+    const stop = { kind: "choice" as const, objects: objects as StopObject[] };
+    const specs = childSpecs(stop);
+    if (specs.length === 0) return 0;
+    await ctx.db.patch(beatId, { stop, stopKind: "choice" });
+    let created = 0;
+    for (const spec of specs) {
+      const childId = await ctx.db.insert("beats", {
+        runId: beat.runId,
+        parentBeatId: beatId,
+        optionId: spec.optionId,
+        actionId: spec.actionId,
+        depth: beat.depth + 1,
+        status: "generating",
+        narration: spec.narration,
+        spokenLine: spec.spokenLine,
+        clipPrompt: spec.clipPrompt === undefined ? "" : clipPrompt(spec.clipPrompt),
+        directorAttempts: 0,
+        createdAt: Date.now(),
+      });
+      await ctx.scheduler.runAfter(0, internal.director.generateBeat, { beatId: childId });
+      created += 1;
+    }
+    await maybeFinish(ctx, run._id, beatId);
+    return created;
   },
 });
 

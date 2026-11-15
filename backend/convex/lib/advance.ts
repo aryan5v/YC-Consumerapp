@@ -23,10 +23,15 @@ export async function advanceToOption(
   run: Doc<"runs">,
   beat: Doc<"beats">,
   optionId: string,
+  actionId: string | undefined,
   label: string,
 ): Promise<void> {
   const children = await childrenOfBeat(ctx, beat._id);
-  const chosen = children.find((child) => child.optionId === optionId);
+  const forOption = children.filter((child) => child.optionId === optionId);
+  const chosen =
+    actionId === undefined
+      ? forOption[0]
+      : forOption.find((child) => (child.actionId ?? actionId) === actionId) ?? forOption[0];
   if (chosen === undefined) throw new Error(`option "${optionId}" has no shot yet`);
   await cancelSiblings(
     ctx,
@@ -39,17 +44,22 @@ export async function chooseOption(
   ctx: MutationCtx,
   runId: Id<"runs">,
   optionId: string,
+  actionId: string | undefined,
   expectedBeatId: Id<"beats">,
 ): Promise<boolean> {
   const { run, beat } = await loadCurrent(ctx, runId);
   if (beat._id !== expectedBeatId) return false;
-  const stop = beat.stop as { kind: string; options?: { id: string; label: string }[] } | undefined;
-  if (stop === undefined || stop.kind !== "choice" || stop.options === undefined) {
+  const stop = beat.stop as { kind: string; objects?: { id: string; label: string; actions: { id: string; label: string }[] }[] } | undefined;
+  if (stop === undefined || stop.kind !== "choice" || stop.objects === undefined) {
     throw new Error("the current beat is not a choice stop");
   }
-  const option = stop.options.find((entry) => entry.id === optionId);
-  if (option === undefined) throw new Error(`no option "${optionId}" on the current beat`);
-  await advanceToOption(ctx, run, beat, optionId, option.label);
+  const object = stop.objects.find((entry) => entry.id === optionId);
+  if (object === undefined) throw new Error(`no option "${optionId}" on the current beat`);
+  const action =
+    actionId === undefined ? object.actions[0] : object.actions.find((entry) => entry.id === actionId) ?? object.actions[0];
+  if (action === undefined) throw new Error(`option "${optionId}" has no action to take`);
+  const label = object.actions.length > 1 ? `${object.label} — ${action.label}` : object.label;
+  await advanceToOption(ctx, run, beat, optionId, action.id, label);
   return true;
 }
 
@@ -74,6 +84,6 @@ export async function answerPuzzle(
   const stop = beat.stop as DirectorPuzzleStop | undefined;
   if (stop === undefined || stop.kind !== "puzzle") throw new Error("the current beat is not a puzzle stop");
   const correct = correctOverride ?? checkAnswer(stop, given);
-  await advanceToOption(ctx, run, beat, correct ? "success" : "failure", outcomeLabel(stop, correct));
+  await advanceToOption(ctx, run, beat, correct ? "success" : "failure", undefined, outcomeLabel(stop, correct));
   return { applied: true, correct };
 }

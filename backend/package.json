@@ -11,7 +11,8 @@
     "test": "vitest run",
     "e2e": "vitest run tests/episode.test.ts --reporter=verbose",
     "seed-episodes": "convex run episodes:seed '{\"days\":8}'",
-    "smoke": "node scripts/play-live.mjs"
+    "smoke": "node scripts/play-live.mjs",
+    "custom": "node scripts/custom.mjs"
   },
   "dependencies": {
     "convex": "^1.50.0"

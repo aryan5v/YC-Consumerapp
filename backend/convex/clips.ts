@@ -120,15 +120,21 @@ export const setJob = internalMutation({
 });
 
 export const markReady = internalMutation({
-  args: { beatId: v.id("beats"), url: v.string(), lastFrameUrl: v.optional(v.string()) },
+  args: {
+    beatId: v.id("beats"),
+    url: v.string(),
+    lastFrameUrl: v.optional(v.string()),
+    storageId: v.optional(v.id("_storage")),
+  },
   returns: v.null(),
-  handler: async (ctx, { beatId, url, lastFrameUrl }) => {
+  handler: async (ctx, { beatId, url, lastFrameUrl, storageId }) => {
     const clip = await clipForBeat(ctx, beatId);
     if (clip === null || clip.status === "cancelled" || clip.status === "ready") return null;
     await ctx.db.patch(clip._id, {
       status: "ready",
       url,
       lastFrameUrl,
+      storageId,
       readyAt: Date.now(),
     });
     const beat = await ctx.db.get(beatId);
@@ -138,7 +144,7 @@ export const markReady = internalMutation({
     await maybeFinish(ctx, beat.runId, beatId);
     const run = await ctx.db.get(beat.runId);
     if (run !== null && run.currentBeatId === beatId && beat.stop !== undefined && lastFrameUrl !== undefined) {
-      await ctx.scheduler.runAfter(0, internal.tray.runDetect, { beatId });
+      await ctx.scheduler.runAfter(0, internal.tray.runSegment, { beatId });
     }
     return null;
   },
@@ -182,19 +188,19 @@ export const markFailed = internalMutation({
       beat.stop !== undefined &&
       parentClip?.lastFrameUrl !== undefined
     ) {
-      await ctx.scheduler.runAfter(0, internal.tray.runDetect, { beatId });
+      await ctx.scheduler.runAfter(0, internal.tray.runSegment, { beatId });
     }
     return null;
   },
 });
 
-export const setBoxes = internalMutation({
-  args: { beatId: v.id("beats"), boxes: v.any() },
+export const setRegions = internalMutation({
+  args: { beatId: v.id("beats"), regions: v.any() },
   returns: v.null(),
-  handler: async (ctx, { beatId, boxes }) => {
+  handler: async (ctx, { beatId, regions }) => {
     const clip = await clipForBeat(ctx, beatId);
     if (clip === null) return null;
-    await ctx.db.patch(clip._id, { boxes });
+    await ctx.db.patch(clip._id, { regions });
     return null;
   },
 });

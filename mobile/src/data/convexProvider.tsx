@@ -30,8 +30,9 @@ export function createConvexProvider(url: string): StoryProvider {
     speak: async (runId, recordingUri) => {
       const uploadUrl = await client.mutation(api.speakUploadUrl, {});
       const recording = await (await fetch(recordingUri)).blob();
+      if (recording.size === 0) throw new Error("Empty recording");
       const upload = await fetch(uploadUrl, { method: "POST", headers: { "Content-Type": "audio/mp4" }, body: recording });
-      if (!upload.ok) throw new Error("Upload failed");
+      if (!upload.ok) throw new Error(`Upload failed (${upload.status})`);
       const { storageId } = (await upload.json()) as { storageId: string };
       return client.action(api.speak, { runId, audioStorageId: storageId });
     },

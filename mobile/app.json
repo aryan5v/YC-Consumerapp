@@ -29,7 +29,7 @@
       [
         "expo-audio",
         {
-          "microphonePermission": "Fork listens only while you hold the microphone, so you can answer a character out loud."
+          "microphonePermission": "Fork listens only while you hold the microphone, to answer a character out loud."
         }
       ]
     ]

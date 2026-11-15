@@ -10,7 +10,11 @@ const listeners = new Set<() => void>();
 AsyncStorage.getItem(KEY)
   .then((stored) => {
     if (!stored) return;
-    settings = { ...settings, ...JSON.parse(stored) };
+    const parsed = JSON.parse(stored);
+    if (!parsed || typeof parsed !== "object") return;
+    for (const key of Object.keys(settings) as (keyof Settings)[]) {
+      if (typeof parsed[key] === "boolean") settings = { ...settings, [key]: parsed[key] };
+    }
     listeners.forEach((l) => l());
   })
   .catch(() => {});

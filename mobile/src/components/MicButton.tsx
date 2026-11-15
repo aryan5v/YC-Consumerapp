@@ -24,6 +24,7 @@ export function MicButton({
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const [listening, setListening] = useState(false);
   const held = useRef(false);
+  const recording = useRef(false);
   const startedAt = useRef(0);
   const appear = useRef(new Animated.Value(0)).current;
   const pulse = useRef(new Animated.Value(0)).current;
@@ -42,41 +43,64 @@ export function MicButton({
     return () => loop.stop();
   }, [listening, pulse]);
 
-  const finish = async (keep: boolean) => {
+  const playback = () => setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true }).catch(() => {});
+
+  const finish = async () => {
+    const duration = Date.now() - startedAt.current;
+    recording.current = false;
     setListening(false);
     onListening(false);
+    let uri: string | null = null;
     try {
       await recorder.stop();
-    } catch {}
-    setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true }).catch(() => {});
-    if (keep && recorder.uri && Date.now() - startedAt.current >= MIN_MS) onRecording(recorder.uri);
+      uri = recorder.uri;
+    } catch {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+    }
+    await playback();
+    if (uri && duration >= MIN_MS) onRecording(uri);
   };
 
   const pressIn = async () => {
     held.current = true;
+    let permission;
     try {
-      let permission = await getRecordingPermissionsAsync();
-      if (!permission.granted) {
-        if (permission.canAskAgain) permission = await requestRecordingPermissionsAsync();
-        if (!permission.granted) onDenied();
-        return;
-      }
+      permission = await getRecordingPermissionsAsync();
+      if (!permission.granted && permission.canAskAgain) permission = await requestRecordingPermissionsAsync();
+    } catch {
+      return;
+    }
+    if (!permission.granted) {
+      held.current = false;
+      onDenied();
+      return;
+    }
+    try {
       await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
       await recorder.prepareToRecordAsync();
-      if (!held.current) return setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true });
+      if (!held.current) {
+        await playback();
+        return;
+      }
       recorder.record();
+      recording.current = true;
       startedAt.current = Date.now();
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       setListening(true);
       onListening(true);
+      if (!held.current) finish();
     } catch {
-      onDenied();
+      recording.current = false;
+      setListening(false);
+      onListening(false);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+      await playback();
     }
   };
 
   const pressOut = () => {
     held.current = false;
-    if (listening) finish(true);
+    if (recording.current) finish();
   };
 
   return (

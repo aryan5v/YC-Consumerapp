@@ -3,12 +3,16 @@ export type WorldMessage =
   | {type:'setTime';timeOfDay:number;day?:number}
   | {type:'pause'|'resume'}
   | {type:'mute';muted:boolean}
+  | {type:'setSound';on:boolean}
+  | {type:'setMusic';on:boolean}
+  | {type:'setAscii';amount:number;durationMs?:number}
   | {type:'applyOutcome';thingId:string;change:Record<string,unknown>};
 
 declare global {
   interface Window {
     ReactNativeWebView?: {postMessage:(message:string)=>void};
     ForkWorld: {receive:(message:unknown)=>void;getState:()=>unknown};
+    SynquiWorld: {receive:(message:unknown)=>void;getState:()=>unknown};
   }
 }
 
@@ -27,12 +31,14 @@ export function bridge(receive:(message:WorldMessage)=>void,getState:()=>unknown
     if(m.type==='setSeed'&&(typeof m.seed==='string'&&m.seed.length<256||typeof m.seed==='number'&&Number.isFinite(m.seed))){receive(m as WorldMessage);return;}
     if(m.type==='setTime'&&typeof m.timeOfDay==='number'&&Number.isFinite(m.timeOfDay)&&(m.day===undefined||typeof m.day==='number'&&Number.isFinite(m.day)&&m.day>=1)){receive(m as WorldMessage);return;}
     if(m.type==='mute'&&typeof m.muted==='boolean'){receive(m as WorldMessage);return;}
+    if((m.type==='setSound'||m.type==='setMusic')&&typeof m.on==='boolean'){receive(m as WorldMessage);return;}
+    if(m.type==='setAscii'&&typeof m.amount==='number'&&Number.isFinite(m.amount)&&(m.durationMs===undefined||typeof m.durationMs==='number'&&Number.isFinite(m.durationMs)&&m.durationMs>=0)){receive(m as WorldMessage);return;}
     if(m.type==='applyOutcome'&&typeof m.thingId==='string'&&m.change&&typeof m.change==='object'&&!Array.isArray(m.change)){receive(m as WorldMessage);}
   };
   const event=(e:MessageEvent)=>accept(e.data);
   window.addEventListener('message',event);
   document.addEventListener('message',event as EventListener);
-  window.ForkWorld={receive:accept,getState};
+  window.ForkWorld=window.SynquiWorld={receive:accept,getState};
 }
 
 export function seedNumber(seed:number|string){

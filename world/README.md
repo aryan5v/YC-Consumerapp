@@ -1,6 +1,6 @@
-# Fork · The other shore
+# Synqui · The other shore
 
-An original, self-contained Three.js coastal world for the Fork WebView. All geometry, skies, vegetation, water and effects are generated locally. No external assets, fonts, network services, or runtime dependencies beyond Three.js.
+An original, self-contained Three.js coastal world for the Synqui WebView. All geometry, skies, vegetation, water and effects are generated locally. No external assets, fonts, network services, or runtime dependencies beyond Three.js.
 
 ```sh
 cd world

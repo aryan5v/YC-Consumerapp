@@ -13,7 +13,7 @@ const palettes = [
 ];
 
 export class Sky {
-  hours=18.3;
+  hours=19.4;
   day=1;
   elapsed=0;
   group=new THREE.Group();
@@ -24,8 +24,8 @@ export class Sky {
   private sun=new THREE.Mesh(new THREE.SphereGeometry(3,16,12),new THREE.MeshBasicMaterial({color:'#ffddac',fog:false}));
   private moon=new THREE.Mesh(new THREE.SphereGeometry(2,16,12),new THREE.MeshBasicMaterial({color:'#d9e8fa',fog:false}));
   private stars:THREE.Points;
-  private seaMaterial=new THREE.ShaderMaterial({uniforms:{time:{value:0},color:{value:new THREE.Color('#364d63')},horizon:{value:new THREE.Color('#a8a7ab')},sun:{value:new THREE.Vector3()},night:{value:0}},vertexShader:`varying vec3 vWorld;uniform float time;void main(){vec3 p=position;p.z+=sin(p.x*.18+time*.7)*.08+sin(p.y*.3+time*.5)*.05;vec4 w=modelMatrix*vec4(p,1.);vWorld=w.xyz;gl_Position=projectionMatrix*viewMatrix*w;}`,fragmentShader:`varying vec3 vWorld;uniform float time;uniform vec3 color;uniform vec3 horizon;uniform vec3 sun;uniform float night;void main(){vec3 eye=normalize(cameraPosition-vWorld);float distance=length(cameraPosition.xz-vWorld.xz);float waves=sin(vWorld.x*.9+vWorld.z*1.9+time*.8+sin(vWorld.z*.32-time*.3)*2.);float glint=pow(max(0.,waves),22.);float streak=pow(max(0.,dot(normalize(vec2(sun.x,sun.z)),normalize(vWorld.xz-cameraPosition.xz))),24.);vec3 c=mix(color,horizon,pow(1.-max(eye.y,0.),3.)*.6);c+=vec3(.95,.65,.3)*glint*streak*.55;c+=vec3(.2,.28,.35)*smoothstep(.97,1.,waves)*.1;c=mix(c,horizon,1.-exp(-distance*.008));gl_FragColor=vec4(c,1.);\n#include <tonemapping_fragment>\n#include <colorspace_fragment>\n}`});
-  sea=new THREE.Mesh(new THREE.PlaneGeometry(1000,1000,48,48),this.seaMaterial);
+  private seaMaterial=new THREE.ShaderMaterial({uniforms:{time:{value:0},color:{value:new THREE.Color('#364d63')},horizon:{value:new THREE.Color('#a8a7ab')},sun:{value:new THREE.Vector3()},night:{value:0}},vertexShader:`varying vec3 vWorld;void main(){vec4 w=modelMatrix*vec4(position,1.);vWorld=w.xyz;gl_Position=projectionMatrix*viewMatrix*w;}`,fragmentShader:`varying vec3 vWorld;uniform float time;uniform vec3 color;uniform vec3 horizon;uniform vec3 sun;uniform float night;float wave(vec2 p){return sin(p.x*.22+time*.55)*sin(p.y*.17-time*.31)+sin((p.x+p.y)*.09+time*.2)*.6;}void main(){vec2 p=vWorld.xz;float h=wave(p);float hx=wave(p+vec2(.8,0.));float hz=wave(p+vec2(0.,.8));vec3 n=normalize(vec3(h-hx,.35,h-hz));vec3 eye=normalize(cameraPosition-vWorld);vec3 light=normalize(sun);float fresnel=pow(1.-max(dot(eye,vec3(0.,1.,0.)),0.),3.);float glint=pow(max(dot(reflect(-light,n),eye),0.),48.);float distance=length(cameraPosition.xz-p);vec3 c=mix(color*.55,horizon,fresnel*.75+glint*.35);c+=vec3(1.,.72,.42)*glint*(.25+night*.45);c=mix(c,horizon,1.-exp(-distance*.006));gl_FragColor=vec4(c,1.);\n#include <tonemapping_fragment>\n#include <colorspace_fragment>\n}`});
+  sea=new THREE.Mesh(new THREE.PlaneGeometry(4000,4000,1,1),this.seaMaterial);
 
   constructor(scene:THREE.Scene){
     this.dome.renderOrder=-10;this.group.add(this.dome,this.sun,this.moon);

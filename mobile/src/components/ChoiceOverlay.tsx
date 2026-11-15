@@ -13,8 +13,10 @@ const CHIP_HEIGHT = 48;
 const CHIP_GAP = 12;
 const LABEL_WIDTH = 180;
 
+const drawable = (o: ChoiceOption) => !!o.region && (!!o.region.polygon?.length || !!o.region.maskUrl);
+
 export function chipsHeight(options: ChoiceOption[]) {
-  const chips = options.filter((o) => !o.region).length;
+  const chips = options.filter((o) => !drawable(o)).length;
   return chips === 0 ? 0 : chips * CHIP_HEIGHT + (chips - 1) * CHIP_GAP + 22;
 }
 function useTarget(index: number, picked: string | null, id: string) {
@@ -217,13 +219,13 @@ export function ChoiceOverlay({ options, video, holdScale, picked, onPick, botto
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
   const actionsHeight = selected ? selected.actions.length * (CHIP_HEIGHT + CHIP_GAP) : 0;
-  const actionTop = selected?.region ? Math.max(safe.top, Math.min(safe.bottom - actionsHeight, video.y + selected.region.centroid.y * video.h + 54)) : undefined;
+  const actionTop = selected && drawable(selected) && selected.region ? Math.max(safe.top, Math.min(safe.bottom - actionsHeight, video.y + selected.region.centroid.y * video.h + 54)) : undefined;
   return <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
     <Animated.View pointerEvents="box-none" style={[StyleSheet.absoluteFill, { transform: [{ scale: holdScale }] }]}>
-      {options.map((option, index) => option.region ? <Silhouette key={option.id} {...{ option, index, picked, preview, video, screenWidth, safe }} onPick={select} /> : null)}
+      {options.map((option, index) => drawable(option) ? <Silhouette key={option.id} {...{ option, index, picked, preview, video, screenWidth, safe }} onPick={select} /> : null)}
     </Animated.View>
     <View pointerEvents="box-none" style={[styles.chips, { bottom: bottomInset + 14 }]}>
-      {!selected && options.map((option, index) => !option.region ? <Chip key={option.id} {...{ option, index, picked }} onPick={select} /> : null)}
+      {!selected && options.map((option, index) => !drawable(option) ? <Chip key={option.id} {...{ option, index, picked }} onPick={select} /> : null)}
     </View>
     {selected && <View style={[styles.chips, actionTop === undefined ? { bottom: bottomInset + 14 } : { top: actionTop }]}>
       {selected.actions.map((action) => <Glass key={action.id} interactive style={styles.chip}>

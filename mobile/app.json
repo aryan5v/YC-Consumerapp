@@ -32,7 +32,8 @@
           "microphonePermission": "Fork listens only while you hold the microphone, to answer a character out loud."
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-font"
     ]
   }
 }

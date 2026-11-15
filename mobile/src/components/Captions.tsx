@@ -41,13 +41,11 @@ export function Captions({ text, lift }: { text: string; lift: number }) {
 
 const styles = StyleSheet.create({
   text: {
-    fontFamily: fonts.ui,
-    fontWeight: "500",
-    fontSize: type.lead,
-    lineHeight: 25,
-    letterSpacing: 0.1,
+    fontFamily: fonts.displayItalic,
+    fontSize: type.caption,
+    lineHeight: 27,
     color: colors.text,
-    textAlign: "center",
+    textAlign: "left",
     textShadowColor: colors.textShadow,
     textShadowRadius: 10,
     textShadowOffset: { width: 0, height: 1 },

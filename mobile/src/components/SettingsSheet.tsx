@@ -1,10 +1,10 @@
 import { getRecordingPermissionsAsync } from "expo-audio";
-import { BlurView } from "expo-blur";
 import * as Haptics from "expo-haptics";
 import { useEffect, useRef, useState } from "react";
 import { Animated, AppState, Linking, PanResponder, Pressable, StyleSheet, Text, View } from "react-native";
 import { convexStory } from "../data";
 import { useReduceMotion } from "../a11y";
+import { Glass } from "./Glass";
 import { setSetting, useSettings } from "../settings";
 import { colors, ease, fonts, motion, radius, type } from "../theme";
 
@@ -56,7 +56,7 @@ function Switch({ label, detail, value, onChange }: { label: string; detail: str
           style={[
             styles.knob,
             {
-              backgroundColor: value ? colors.bg : colors.text,
+              backgroundColor: value ? colors.accentInk : colors.text,
               transform: [{ translateX: knob.interpolate({ inputRange: [0, 1], outputRange: [0, 20] }) }],
             },
           ]}
@@ -115,16 +115,14 @@ export function SettingsSheet({ onClose, bottomInset }: { onClose: () => void; b
       <Animated.View
         {...pan.panHandlers}
         style={[
-          styles.sheet,
+          styles.sheetWrap,
           {
-            paddingBottom: bottomInset + 18,
             opacity: appear,
             transform: [{ translateY: Animated.add(appear.interpolate({ inputRange: [0, 1], outputRange: [reduceMotion ? 0 : 40, 0] }), drag) }],
           },
         ]}
       >
-        <BlurView intensity={48} tint="dark" style={StyleSheet.absoluteFill} />
-        <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.glass }]} />
+        <Glass style={[styles.sheet, { paddingBottom: bottomInset + 18 }]}>
         <View accessible={false} importantForAccessibility="no-hide-descendants" style={styles.grabber} />
         <View style={styles.header}>
           <Text maxFontSizeMultiplier={1.4} style={[styles.kicker, { marginBottom: 0 }]}>Sound</Text>
@@ -164,6 +162,7 @@ export function SettingsSheet({ onClose, bottomInset }: { onClose: () => void; b
           />
           </>
         )}
+        </Glass>
       </Animated.View>
     </View>
   );
@@ -173,32 +172,28 @@ const styles = StyleSheet.create({
   glyph: { width: 20, gap: 6 },
   glyphLine: { height: 1.5, borderRadius: 1, backgroundColor: colors.text, justifyContent: "center" },
   glyphKnob: { position: "absolute", width: 5.5, height: 5.5, borderRadius: 3, backgroundColor: colors.text },
+  sheetWrap: { position: "absolute", left: 0, right: 0, bottom: 0 },
   sheet: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
     paddingTop: 26,
     paddingHorizontal: 24,
     borderTopLeftRadius: radius.sheet,
     borderTopRightRadius: radius.sheet,
-    overflow: "hidden",
     borderTopWidth: StyleSheet.hairlineWidth,
     borderColor: colors.hairline,
   },
-  kicker: { fontFamily: fonts.ui, fontWeight: "600", fontSize: type.micro, letterSpacing: 2.6, textTransform: "uppercase", color: colors.dim, marginBottom: 6 },
+  kicker: { fontFamily: fonts.uiSemibold, fontSize: type.micro, letterSpacing: type.labelTracking, textTransform: "uppercase", color: colors.dim, marginBottom: 6 },
   divider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.hairline },
-  grabber: { position: "absolute", top: 8, alignSelf: "center", width: 36, height: 5, borderRadius: radius.pill, backgroundColor: colors.faint },
+  grabber: { position: "absolute", top: 8, alignSelf: "center", width: 36, height: 5, borderRadius: radius.round, backgroundColor: colors.faint },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 6 },
   done: { minHeight: 44, minWidth: 44, alignItems: "flex-end", justifyContent: "center" },
-  doneText: { fontFamily: fonts.ui, fontWeight: "500", fontSize: type.control, color: colors.dim },
+  doneText: { fontFamily: fonts.uiMedium, fontSize: type.control, color: colors.dim },
   group: { marginTop: 22 },
   notice: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 18, paddingBottom: 14 },
-  noticeText: { flex: 1, fontFamily: fonts.ui, fontWeight: "400", fontSize: type.small, lineHeight: 19, color: colors.faint },
-  noticeAction: { minHeight: 44, textAlignVertical: "center", lineHeight: 44, fontFamily: fonts.ui, fontWeight: "600", fontSize: type.small, color: colors.text },
+  noticeText: { flex: 1, fontFamily: fonts.ui, fontSize: type.small, lineHeight: 19, color: colors.faint },
+  noticeAction: { minHeight: 44, textAlignVertical: "center", lineHeight: 44, fontFamily: fonts.uiSemibold, fontSize: type.small, color: colors.text },
   row: { flexDirection: "row", alignItems: "center", gap: 18, paddingVertical: 14 },
-  label: { fontFamily: fonts.ui, fontWeight: "500", fontSize: type.lead, color: colors.text },
-  detail: { fontFamily: fonts.ui, fontWeight: "400", fontSize: type.small, lineHeight: 19, color: colors.dim, marginTop: 3 },
+  label: { fontFamily: fonts.uiMedium, fontSize: type.lead, color: colors.text },
+  detail: { fontFamily: fonts.ui, fontSize: type.small, lineHeight: 19, color: colors.dim, marginTop: 3 },
   track: {
     width: 52,
     height: 32,
@@ -209,6 +204,6 @@ const styles = StyleSheet.create({
     borderColor: colors.hairline,
     overflow: "hidden",
   },
-  trackOn: { backgroundColor: colors.text },
+  trackOn: { backgroundColor: colors.accent },
   knob: { width: 23, height: 23, borderRadius: 12 },
 });

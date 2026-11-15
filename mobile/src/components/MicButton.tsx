@@ -1,13 +1,26 @@
-import { BlurView } from "expo-blur";
 import { getRecordingPermissionsAsync, RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync, useAudioRecorder } from "expo-audio";
 import * as Haptics from "expo-haptics";
-import { useEffect, useRef, useState } from "react";
-import { Animated, Pressable, StyleSheet, View } from "react-native";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Animated, Easing, Pressable, StyleSheet, View } from "react-native";
 import { useReduceMotion } from "../a11y";
 import { colors, ease, motion, radius } from "../theme";
+import { Glass } from "./Glass";
 import { Ring } from "./Ring";
 
 const MIN_MS = 350;
+
+function Wrap({ bare, children }: { bare: boolean; children: ReactNode }) {
+  if (bare) return <View style={[styles.button, styles.bare]}>{children}</View>;
+  return (
+    <Glass interactive style={styles.button}>
+      {children}
+    </Glass>
+  );
+}
+const PRESS = { scale: 1.18, duration: 140, easing: Easing.bezier(0.2, 0.9, 0.3, 1.3) };
+const RING = 6;
+const GLOW = 24;
+const RING_OPACITY = 0.35;
 
 export function MicButton({
   busy,
@@ -15,12 +28,14 @@ export function MicButton({
   onListening,
   onRecording,
   onDenied,
+  bare = false,
 }: {
   busy: boolean;
   disabled: boolean;
   onListening: (listening: boolean) => void;
   onRecording: (uri: string) => void;
   onDenied: () => void;
+  bare?: boolean;
 }) {
   const reduceMotion = useReduceMotion();
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
@@ -29,21 +44,16 @@ export function MicButton({
   const recording = useRef(false);
   const startedAt = useRef(0);
   const appear = useRef(new Animated.Value(0)).current;
-  const pulse = useRef(new Animated.Value(0)).current;
+  const press = useRef(new Animated.Value(1)).current;
+
+  const scaleTo = (toValue: number) => {
+    if (reduceMotion) return;
+    Animated.timing(press, { toValue, duration: PRESS.duration, easing: PRESS.easing, useNativeDriver: true }).start();
+  };
 
   useEffect(() => {
     Animated.timing(appear, { toValue: 1, duration: motion.gentle, delay: 700, easing: ease.out, useNativeDriver: true }).start();
   }, [appear]);
-
-  useEffect(() => {
-    if (!listening || reduceMotion) {
-      pulse.setValue(0);
-      return;
-    }
-    const loop = Animated.loop(Animated.timing(pulse, { toValue: 1, duration: motion.pulse, easing: ease.out, useNativeDriver: true }));
-    loop.start();
-    return () => loop.stop();
-  }, [listening, reduceMotion, pulse]);
 
   const playback = () => setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true }).catch(() => {});
 
@@ -65,6 +75,7 @@ export function MicButton({
 
   const pressIn = async () => {
     held.current = true;
+    scaleTo(PRESS.scale);
     let permission;
     try {
       permission = await getRecordingPermissionsAsync();
@@ -102,24 +113,14 @@ export function MicButton({
 
   const pressOut = () => {
     held.current = false;
+    scaleTo(1);
     if (recording.current) finish();
   };
 
   return (
-    <Animated.View style={{ opacity: Animated.multiply(appear, disabled && !busy ? 0.4 : 1) }}>
-      {!reduceMotion && (
-      <Animated.View
-        pointerEvents="none"
-        style={[
-          StyleSheet.absoluteFill,
-          styles.wave,
-          {
-            opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [listening ? 0.7 : 0, 0] }),
-            transform: [{ scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.9] }) }],
-          },
-        ]}
-      />
-      )}
+    <Animated.View style={{ opacity: Animated.multiply(appear, disabled && !busy ? 0.4 : 1), transform: [{ scale: press }] }}>
+      {listening && <View pointerEvents="none" style={styles.listeningRing} />}
+      <Wrap bare={bare}>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Hold to talk"
@@ -128,37 +129,42 @@ export function MicButton({
         hitSlop={8}
         onPressIn={pressIn}
         onPressOut={pressOut}
-        style={[styles.button, listening && styles.listening]}
+        style={styles.hit}
       >
-        {!listening && <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />}
         {busy ? (
           <Ring size={18} />
         ) : (
           <View style={styles.mic}>
-            <View style={[styles.capsule, listening && { backgroundColor: colors.bg }]} />
-            <View style={[styles.cradle, listening && { borderColor: colors.bg }]} />
-            <View style={[styles.stem, listening && { backgroundColor: colors.bg }]} />
+            <View style={styles.capsule} />
+            <View style={styles.cradle} />
+            <View style={styles.stem} />
           </View>
         )}
       </Pressable>
+      </Wrap>
     </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
-  wave: { borderRadius: radius.pill, borderWidth: 1.5, borderColor: colors.text },
-  button: {
-    width: 46,
-    height: 46,
-    borderRadius: radius.pill,
-    overflow: "hidden",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.glass,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.hairline,
+  listeningRing: {
+    position: "absolute",
+    top: -RING,
+    left: -RING,
+    right: -RING,
+    bottom: -RING,
+    borderRadius: radius.round,
+    borderWidth: RING,
+    borderColor: colors.accent,
+    opacity: RING_OPACITY,
+    shadowColor: colors.accent,
+    shadowOpacity: 1,
+    shadowRadius: GLOW,
+    shadowOffset: { width: 0, height: 0 },
   },
-  listening: { backgroundColor: colors.text },
+  button: { width: 60, height: 60, borderRadius: radius.round },
+  bare: { backgroundColor: colors.wash, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.hairline },
+  hit: { flex: 1, alignItems: "center", justifyContent: "center" },
   mic: { alignItems: "center" },
   capsule: { width: 7, height: 12, borderRadius: 3.5, backgroundColor: colors.text },
   cradle: {

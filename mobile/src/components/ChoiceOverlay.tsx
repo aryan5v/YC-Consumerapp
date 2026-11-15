@@ -1,17 +1,16 @@
-import { BlurView } from "expo-blur";
 import { useEffect, useRef } from "react";
 import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
 import type { ChoiceOption } from "../data";
 import { colors, ease, fonts, glow, motion, radius, type } from "../theme";
 import { useReduceMotion } from "../a11y";
+import { Glass } from "./Glass";
 import { Ring } from "./Ring";
 
 export type Rect = { x: number; y: number; w: number; h: number };
 
-const CHIP_HEIGHT = 56;
+const CHIP_HEIGHT = 48;
 const SIDE_MARGIN = 24;
 const MIN_TARGET = 64;
-const LABEL_ROOM = 30;
 const CHIP_GAP = 12;
 
 export function chipsHeight(options: ChoiceOption[]) {
@@ -22,11 +21,11 @@ export function chipsHeight(options: ChoiceOption[]) {
 function useTarget(index: number, picked: string | null, id: string) {
   const appear = useRef(new Animated.Value(0)).current;
   const pulse = useRef(new Animated.Value(0)).current;
-  const flash = useRef(new Animated.Value(0)).current;
+  const chosen = useRef(new Animated.Value(0)).current;
+  const pop = useRef(new Animated.Value(1)).current;
   const fade = useRef(new Animated.Value(1)).current;
   const reduce = useReduceMotion();
   const still = useRef(new Animated.Value(1)).current;
-  const rest = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (reduce) {
@@ -35,32 +34,43 @@ function useTarget(index: number, picked: string | null, id: string) {
       return;
     }
     Animated.timing(appear, { toValue: 1, duration: motion.gentle, delay: 120 + index * 110, easing: ease.out, useNativeDriver: true }).start();
+    const period = picked === id ? motion.waitPulse : motion.pulse;
     const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(pulse, { toValue: 1, duration: motion.pulse, delay: index * 260, easing: ease.inOut, useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 0, duration: motion.pulse, easing: ease.inOut, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 1, duration: period / 2, easing: ease.inOut, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 0, duration: period / 2, easing: ease.inOut, useNativeDriver: true }),
       ]),
     );
     loop.start();
     return () => loop.stop();
-  }, [appear, pulse, index, reduce]);
+  }, [appear, pulse, index, reduce, picked, id]);
 
   useEffect(() => {
     if (picked === null) {
       fade.setValue(1);
+      chosen.setValue(0);
       return;
     }
     if (picked !== id) {
-      Animated.timing(fade, { toValue: 0, duration: motion.quick, easing: ease.out, useNativeDriver: true }).start();
+      Animated.timing(fade, { toValue: 0, duration: motion.fade, easing: ease.out, useNativeDriver: true }).start();
       return;
     }
+    Animated.timing(chosen, { toValue: 1, duration: motion.instant, easing: ease.out, useNativeDriver: true }).start();
+    if (reduce) return;
+    const [, peak, settle] = glow.chosenScale;
     Animated.sequence([
-      Animated.timing(flash, { toValue: 1, duration: motion.instant, easing: ease.out, useNativeDriver: true }),
-      Animated.timing(flash, { toValue: 0, duration: motion.base, easing: ease.out, useNativeDriver: true }),
+      Animated.timing(pop, { toValue: peak, duration: motion.chosen * 0.4, easing: ease.out, useNativeDriver: true }),
+      Animated.timing(pop, { toValue: settle, duration: motion.chosen * 0.6, easing: ease.out, useNativeDriver: true }),
     ]).start();
-  }, [picked, id, fade, flash]);
+  }, [picked, id, fade, chosen, pop, reduce]);
 
-  return { appear: reduce ? still : appear, pulse, flash, pop: reduce ? rest : flash, opacity: Animated.multiply(appear, fade) };
+  return {
+    appear: reduce ? still : appear,
+    pulse,
+    chosen,
+    pop,
+    opacity: Animated.multiply(appear, fade),
+  };
 }
 
 type TargetProps = {
@@ -70,20 +80,16 @@ type TargetProps = {
   onPick: (id: string) => void;
 };
 
-const LABEL_WIDTH = 220;
+const LABEL_WIDTH = 240;
 
-function Outline({
-  option,
-  index,
-  picked,
-  onPick,
-  frame,
-  labelAbove,
-  screenWidth,
-}: TargetProps & { frame: Rect; labelAbove: boolean; screenWidth: number }) {
-  const { appear, pulse, flash, pop, opacity } = useTarget(index, picked, option.id);
-  const radius = Math.min(glow.maxRadius, Math.min(frame.w, frame.h) / 4);
+function Outline({ option, index, picked, onPick, frame, screenWidth }: TargetProps & { frame: Rect; screenWidth: number }) {
+  const { appear, pulse, chosen, pop, opacity } = useTarget(index, picked, option.id);
+  const r = Math.min(glow.radius, Math.min(frame.w, frame.h) / 4);
   const waiting = picked === option.id;
+  const ring = (inset: number, extra: object) => [
+    { position: "absolute" as const, left: -inset, right: -inset, top: -inset, bottom: -inset, borderRadius: r + inset },
+    extra,
+  ];
 
   return (
     <Animated.View
@@ -94,54 +100,63 @@ function Outline({
         width: frame.w,
         height: frame.h,
         opacity,
-        transform: [
-          { scale: Animated.add(appear.interpolate({ inputRange: [0, 1], outputRange: [0.94, 1] }), pop.interpolate({ inputRange: [0, 1], outputRange: [0, 0.035] })) },
-        ],
+        transform: [{ scale: Animated.multiply(appear.interpolate({ inputRange: [0, 1], outputRange: [0.96, 1] }), pop) }],
       }}
     >
       <Animated.View
         style={[
-          styles.bloom,
-          { borderRadius: radius + glow.bloomWidth, opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: glow.bloomOpacity }) },
+          StyleSheet.absoluteFill,
+          { borderRadius: r, backgroundColor: glow.color, opacity: chosen.interpolate({ inputRange: [0, 1], outputRange: [glow.wash, glow.washChosen] }) },
         ]}
+      />
+      <View style={ring(glow.contrastWidth / 2, { borderWidth: glow.contrastWidth, borderColor: glow.contrast })} />
+      <Animated.View
+        style={ring(glow.haloWidth / 2 - 1, [
+          styles.halo,
+          {
+            borderWidth: glow.haloWidth,
+            opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: glow.haloOpacity }),
+          },
+        ])}
       />
       <Animated.View
         style={[
           StyleSheet.absoluteFill,
-          styles.halo,
           {
-            borderRadius: radius,
-            opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: glow.haloOpacity }),
-            transform: [{ scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [1, glow.haloScale] }) }],
+            borderRadius: r,
+            borderWidth: glow.coreWidth,
+            borderColor: glow.core,
+            opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: glow.coreOpacity }),
           },
         ]}
       />
-      <View style={[StyleSheet.absoluteFill, styles.edge, { borderRadius: radius }]} />
-      <Animated.View
-        style={[
-          StyleSheet.absoluteFill,
-          { borderRadius: radius, backgroundColor: glow.color, opacity: flash.interpolate({ inputRange: [0, 1], outputRange: [0, glow.flashOpacity] }) },
-        ]}
-      />
       {waiting && (
-        <View style={[StyleSheet.absoluteFill, styles.center]}>
-          <Ring size={30} color={glow.color} delay={320} />
+        <View style={[styles.waitRing, { left: frame.w / 2 - 14 }]}>
+          <Ring size={28} color={glow.core} delay={320} />
         </View>
       )}
-      <View
-        style={[
-          styles.labelWrap,
-          { left: Math.min(Math.max(frame.x + frame.w / 2 - LABEL_WIDTH / 2, 10), screenWidth - LABEL_WIDTH - 10) - frame.x },
-          labelAbove ? { bottom: frame.h + 10 } : { top: frame.h + 10 },
-        ]}
-      >
-        <Text numberOfLines={1} maxFontSizeMultiplier={1.3} style={styles.outlineLabel}>
-          {option.label}
-        </Text>
-      </View>
+      {!waiting && (
+        <View
+          pointerEvents="none"
+          style={[
+            styles.labelWrap,
+            {
+              bottom: frame.h + glow.labelGap,
+              left: Math.min(Math.max(frame.x + frame.w / 2 - LABEL_WIDTH / 2, 10), screenWidth - LABEL_WIDTH - 10) - frame.x,
+            },
+          ]}
+        >
+          <View style={styles.tag}>
+            <Text numberOfLines={1} maxFontSizeMultiplier={1.3} style={styles.tagText}>
+              {option.label}
+            </Text>
+          </View>
+        </View>
+      )}
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={option.label}
+        accessibilityState={{ disabled: picked !== null, selected: picked === option.id }}
         disabled={picked !== null}
         hitSlop={10}
         onPress={() => onPick(option.id)}
@@ -152,49 +167,42 @@ function Outline({
 }
 
 function Chip({ option, index, picked, onPick }: TargetProps) {
-  const { appear, pulse, flash, pop, opacity } = useTarget(index, picked, option.id);
+  const { appear, pulse, chosen, pop, opacity } = useTarget(index, picked, option.id);
   const waiting = picked === option.id;
 
   return (
     <Animated.View
-      style={{
-        opacity,
-        transform: [
-          { translateY: appear.interpolate({ inputRange: [0, 1], outputRange: [14, 0] }) },
-          { scale: pop.interpolate({ inputRange: [0, 1], outputRange: [1, 1.025] }) },
-        ],
-      }}
+      style={[
+        styles.chipShadow,
+        {
+          opacity,
+          transform: [{ translateY: appear.interpolate({ inputRange: [0, 1], outputRange: [14, 0] }) }, { scale: pop }],
+        },
+      ]}
     >
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={option.label}
+        accessibilityState={{ disabled: picked !== null, selected: picked === option.id }}
         disabled={picked !== null}
         onPress={() => onPick(option.id)}
-        style={styles.chip}
       >
-        <BlurView intensity={36} tint="dark" style={StyleSheet.absoluteFill} />
-        <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.glass }]} />
-        <Animated.View
-          style={[StyleSheet.absoluteFill, { backgroundColor: glow.color, opacity: flash.interpolate({ inputRange: [0, 1], outputRange: [0, 0.5] }) }]}
-        />
-        <View style={styles.chipLead}>
-          {waiting ? (
-            <Ring size={18} color={glow.color} delay={320} />
-          ) : (
-            <Animated.View
-              style={[
-                styles.dot,
-                {
-                  opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.45, 1] }),
-                  transform: [{ scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1.15] }) }],
-                },
-              ]}
-            />
-          )}
-        </View>
-        <Text numberOfLines={2} maxFontSizeMultiplier={1.4} style={styles.chipLabel}>
-          {option.label}
-        </Text>
+        <Glass interactive style={styles.chip}>
+          <Animated.View
+            style={[StyleSheet.absoluteFill, { backgroundColor: glow.color, opacity: chosen.interpolate({ inputRange: [0, 1], outputRange: [0, glow.washChosen] }) }]}
+          />
+          <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.chipRing]} />
+          <View style={styles.chipLead}>
+            {waiting ? (
+              <Ring size={18} color={glow.core} delay={320} />
+            ) : (
+              <Animated.View style={[styles.dot, { opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: glow.coreOpacity }) }]} />
+            )}
+          </View>
+          <Text numberOfLines={2} maxFontSizeMultiplier={1.4} style={styles.chipLabel}>
+            {option.label}
+          </Text>
+        </Glass>
       </Pressable>
     </Animated.View>
   );
@@ -243,7 +251,6 @@ export function ChoiceOverlay({
               onPick={onPick}
               frame={frame}
               screenWidth={screenWidth}
-              labelAbove={frame.y + frame.h + LABEL_ROOM > safe.bottom}
             />
           );
         })}
@@ -257,58 +264,54 @@ export function ChoiceOverlay({
 
 const styles = StyleSheet.create({
   halo: {
-    borderWidth: glow.haloWidth,
     borderColor: glow.color,
     shadowColor: glow.color,
     shadowOpacity: 1,
     shadowRadius: glow.blur,
     shadowOffset: { width: 0, height: 0 },
   },
-  edge: { borderWidth: glow.edgeWidth, borderColor: glow.color, opacity: 0.9 },
-  center: { alignItems: "center", justifyContent: "center" },
-  bloom: {
-    position: "absolute",
-    left: -glow.bloomWidth,
-    right: -glow.bloomWidth,
-    top: -glow.bloomWidth,
-    bottom: -glow.bloomWidth,
-    borderWidth: glow.bloomWidth,
-    borderColor: glow.color,
-  },
+  waitRing: { position: "absolute", top: -34 - 28 / 2 },
   labelWrap: { position: "absolute", width: LABEL_WIDTH, alignItems: "center" },
-  outlineLabel: {
-    fontFamily: fonts.ui,
-    fontWeight: "600",
+  tag: {
+    height: glow.labelHeight,
+    paddingHorizontal: 8,
+    borderRadius: radius.control,
+    justifyContent: "center",
+    backgroundColor: colors.tag,
+  },
+  tagText: {
+    fontFamily: fonts.uiSemibold,
     fontSize: type.tag,
-    letterSpacing: 1.4,
+    letterSpacing: type.labelTracking,
     textTransform: "uppercase",
-    color: colors.text,
-    textShadowColor: colors.textShadow,
-    textShadowRadius: 8,
-    textShadowOffset: { width: 0, height: 1 },
+    color: colors.white,
   },
   chips: { position: "absolute", left: 18, right: 18, gap: CHIP_GAP },
+  chipShadow: {
+    shadowColor: glow.color,
+    shadowOpacity: 0.45,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 0 },
+  },
   chip: {
     minHeight: CHIP_HEIGHT,
     paddingVertical: 8,
-    borderRadius: radius.pill,
-    overflow: "hidden",
+    borderRadius: radius.button,
     flexDirection: "row",
     alignItems: "center",
-    paddingRight: 22,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.hairline,
+    paddingRight: 20,
   },
-  chipLead: { width: 52, alignItems: "center", justifyContent: "center" },
+  chipRing: { borderRadius: radius.button, borderWidth: 1.75, borderColor: "rgba(255,255,255,0.9)" },
+  chipLead: { width: 44, alignItems: "center", justifyContent: "center" },
   dot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: glow.color,
+    backgroundColor: glow.core,
     shadowColor: glow.color,
     shadowOpacity: 1,
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 0 },
   },
-  chipLabel: { flex: 1, fontFamily: fonts.ui, fontWeight: "500", fontSize: type.body, letterSpacing: 0.1, color: colors.text },
+  chipLabel: { flex: 1, fontFamily: fonts.uiMedium, fontSize: type.label, color: colors.text },
 });

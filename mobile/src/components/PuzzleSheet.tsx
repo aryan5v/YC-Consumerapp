@@ -1,13 +1,16 @@
-import { BlurView } from "expo-blur";
 import * as Haptics from "expo-haptics";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Animated, Keyboard, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import type { PuzzleStop } from "../data";
 import { colors, ease, fonts, motion, radius, type } from "../theme";
 import { useReduceMotion } from "../a11y";
+import { Glass } from "./Glass";
 import { Ring } from "./Ring";
 
 export type PuzzleState = "idle" | "submitting" | "correct" | "wrong";
+
+const SHEET_INSET = 8;
+const SHEET_RISE = 320;
 
 const KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "del", "0", "go"];
 
@@ -35,7 +38,7 @@ export function PuzzleSheet({
   const answered = state === "correct" || state === "wrong";
 
   useEffect(() => {
-    Animated.timing(appear, { toValue: 1, duration: motion.gentle, delay: 200, easing: ease.out, useNativeDriver: true }).start();
+    Animated.timing(appear, { toValue: 1, duration: motion.sheet, delay: 200, easing: ease.out, useNativeDriver: true }).start();
   }, [appear]);
 
   useEffect(() => {
@@ -71,14 +74,13 @@ export function PuzzleSheet({
       style={[
         styles.sheet,
         {
-          paddingBottom: (keyboardUp ? 0 : bottomInset) + 20,
+          bottom: keyboardUp ? SHEET_INSET : Math.max(bottomInset - 12, SHEET_INSET),
           opacity: appear,
-          transform: [{ translateY: Animated.add(appear.interpolate({ inputRange: [0, 1], outputRange: [reduce ? 0 : 48, 0] }), keyboard) }],
+          transform: [{ translateY: Animated.add(appear.interpolate({ inputRange: [0, 1], outputRange: [reduce ? 0 : SHEET_RISE, 0] }), keyboard) }],
         },
       ]}
     >
-      <BlurView intensity={48} tint="dark" style={StyleSheet.absoluteFill} />
-      <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.glass }]} />
+      <Glass style={styles.surface}>
       <View style={styles.head}>
         <View style={{ flex: 1 }}>
           {line !== null && line !== puzzle.question && <Text style={styles.line}>{line}</Text>}
@@ -166,29 +168,24 @@ export function PuzzleSheet({
           )}
         </View>
       )}
+      </Glass>
     </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
-  sheet: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    paddingTop: 28,
-    paddingHorizontal: 24,
-    borderTopLeftRadius: radius.sheet,
-    borderTopRightRadius: radius.sheet,
-    overflow: "hidden",
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.hairline,
+  sheet: { position: "absolute", left: SHEET_INSET, right: SHEET_INSET },
+  surface: {
+    paddingTop: 26,
+    paddingBottom: 22,
+    paddingHorizontal: 22,
+    borderRadius: radius.sheet,
   },
   head: { flexDirection: "row", alignItems: "flex-start", gap: 14, marginBottom: 22 },
-  line: { fontFamily: fonts.ui, fontWeight: "500", fontSize: type.label, lineHeight: 21, color: colors.dim, marginBottom: 8 },
+  line: { fontFamily: fonts.uiMedium, fontSize: type.label, lineHeight: 21, color: colors.dim, marginBottom: 8 },
   question: { fontFamily: fonts.display, fontSize: type.question, lineHeight: 33, color: colors.text },
   result: { height: 76, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  resultText: { fontFamily: fonts.ui, fontWeight: "500", fontSize: type.lead, color: colors.text },
+  resultText: { fontFamily: fonts.uiMedium, fontSize: type.lead, color: colors.text },
   pick: {
     minHeight: 56,
     borderRadius: radius.field,
@@ -200,15 +197,15 @@ const styles = StyleSheet.create({
     borderColor: colors.hairline,
   },
   pickActive: { backgroundColor: colors.washActive, borderColor: colors.dim },
-  pickText: { fontFamily: fonts.ui, fontWeight: "500", fontSize: type.body, color: colors.text },
+  pickText: { fontFamily: fonts.uiMedium, fontSize: type.body, color: colors.text },
   display: { height: 62, alignItems: "center", justifyContent: "center", marginBottom: 12 },
   digits: { fontFamily: fonts.display, fontSize: type.digits, letterSpacing: 10, color: colors.text },
   pad: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", rowGap: 8 },
   key: { width: "31.5%", minHeight: 52, borderRadius: radius.key, alignItems: "center", justifyContent: "center", backgroundColor: colors.wash },
   keyGo: { backgroundColor: colors.text },
   keyPressed: { backgroundColor: colors.washActive },
-  keyText: { fontFamily: fonts.ui, fontWeight: "500", fontSize: type.key, color: colors.text },
-  keyWord: { fontSize: type.small, fontWeight: "600", letterSpacing: 1.2, textTransform: "uppercase", color: colors.dim },
+  keyText: { fontFamily: fonts.uiMedium, fontSize: type.key, color: colors.text },
+  keyWord: { fontFamily: fonts.uiSemibold, fontSize: type.small, letterSpacing: 1.2, textTransform: "uppercase", color: colors.dim },
   textRow: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 6 },
   input: {
     flex: 1,
@@ -218,11 +215,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.wash,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.hairline,
-    fontFamily: fonts.ui,
-    fontWeight: "500",
+    fontFamily: fonts.uiMedium,
     fontSize: type.lead,
     color: colors.text,
   },
-  send: { height: 54, borderRadius: radius.pill, paddingHorizontal: 22, alignItems: "center", justifyContent: "center", backgroundColor: colors.text },
-  sendText: { fontFamily: fonts.ui, fontWeight: "600", fontSize: type.control, color: colors.bg },
+  send: { height: 54, borderRadius: radius.button, paddingHorizontal: 22, alignItems: "center", justifyContent: "center", backgroundColor: colors.text },
+  sendText: { fontFamily: fonts.uiSemibold, fontSize: type.control, color: colors.bg },
 });

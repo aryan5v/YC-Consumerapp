@@ -1,4 +1,7 @@
 import { setAudioModeAsync } from "expo-audio";
+import { CormorantGaramond_500Medium, CormorantGaramond_500Medium_Italic } from "@expo-google-fonts/cormorant-garamond";
+import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold } from "@expo-google-fonts/inter";
+import { useFonts } from "expo-font";
 import { StatusBar } from "expo-status-bar";
 import { useCallback, useRef, useState } from "react";
 import { Animated, StyleSheet, View } from "react-native";
@@ -73,6 +76,14 @@ function Story() {
 }
 
 export default function App() {
+  const [loaded] = useFonts({
+    CormorantGaramond_500Medium,
+    CormorantGaramond_500Medium_Italic,
+    Inter_400Regular,
+    Inter_500Medium,
+    Inter_600SemiBold,
+  });
+  if (!loaded) return <View style={styles.root} />;
   return (
     <SafeAreaProvider>
       <Story />

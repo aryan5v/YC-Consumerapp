@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { Animated, Easing } from "react-native";
 import { colors, ease, motion } from "../theme";
 
-export function Ring({ size = 22, color = colors.text, delay = 0 }: { size?: number; color?: string; delay?: number }) {
+export function Ring({ size = 22, color = colors.white, delay = 0 }: { size?: number; color?: string; delay?: number }) {
   const spin = useRef(new Animated.Value(0)).current;
   const appear = useRef(new Animated.Value(0)).current;
 
@@ -21,8 +21,8 @@ export function Ring({ size = 22, color = colors.text, delay = 0 }: { size?: num
         width: size,
         height: size,
         borderRadius: size / 2,
-        borderWidth: 2,
-        borderColor: colors.hairline,
+        borderWidth: 3,
+        borderColor: colors.inactive,
         borderTopColor: color,
         opacity: appear,
         transform: [{ rotate: spin.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "360deg"] }) }],

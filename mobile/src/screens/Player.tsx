@@ -17,6 +17,7 @@ import { SettingsGlyph, SettingsSheet } from "../components/SettingsSheet";
 import { audioSource, useStory, videoSource, type Ending, type Stop } from "../data";
 import { useReduceMotion } from "../a11y";
 import { useSettings } from "../settings";
+import { Glass } from "../components/Glass";
 import { colors, ease, fonts, gradients, letterbox, motion, radius, type } from "../theme";
 
 const SLOTS = [0, 1, 2, 3];
@@ -24,9 +25,10 @@ const PORTRAIT = 9 / 16;
 const PUZZLE_FEEDBACK_MS = 900;
 const HEARD_MS = 550;
 const DUCKED_VOLUME = 0.25;
-const TARGET_TOP_CLEARANCE = 44;
+const TARGET_TOP_CLEARANCE = 82;
+const PUZZLE_LIFT = 150;
 const CAPTION_CLEARANCE = 96;
-const MIC_SPACE = 58;
+const MIC_SPACE = 72;
 
 let speakUnavailable = false;
 
@@ -83,6 +85,7 @@ export function Player({
   const [chrome, setChrome] = useState(false);
   const holdScale = useRef(new Animated.Value(1)).current;
   const reduceMotion = useReduceMotion();
+  const sceneLift = useRef(new Animated.Value(0)).current;
   const settings = useSettings();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [listening, setListening] = useState(false);
@@ -257,6 +260,15 @@ export function Player({
   const held = phase === "held" && current !== null;
   const choice = held && current.stop?.kind === "choice" ? current.stop : null;
   const puzzle = held && current.stop?.kind === "puzzle" ? current.stop : null;
+  const puzzleOpen = puzzle !== null;
+  useEffect(() => {
+    Animated.timing(sceneLift, {
+      toValue: puzzleOpen && !reduceMotion ? -PUZZLE_LIFT : 0,
+      duration: motion.sheet,
+      easing: ease.out,
+      useNativeDriver: true,
+    }).start();
+  }, [puzzleOpen, reduceMotion, sceneLift]);
   const ending = held && current.stop === null ? current.ending : null;
 
   const lineUrl = view?.stop?.spokenAudioUrl ?? null;
@@ -348,8 +360,9 @@ export function Player({
   };
 
   const micOn = settings.microphone && !!story.speak && !!current?.stop?.spokenAudioUrl && !speakUnavailable && !micDenied;
-  const mic = (
+  const mic = (bare: boolean) => (
     <MicButton
+      bare={bare}
       busy={voiceBusy}
       disabled={picked !== null || puzzleState !== "idle"}
       onListening={(on) => {
@@ -418,6 +431,7 @@ export function Player({
 
   return (
     <View style={[StyleSheet.absoluteFill, active >= 0 && { backgroundColor: colors.black }]}>
+      <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { transform: [{ translateY: sceneLift }] }]}>
       {SLOTS.map((i) => {
         const visible = i === active || i === previous;
         const letterboxed = (slots[i].aspect ?? PORTRAIT) >= 1;
@@ -459,6 +473,7 @@ export function Player({
           </Animated.View>
         );
       })}
+      </Animated.View>
 
       {active >= 0 && (
         <View pointerEvents="none" style={[StyleSheet.absoluteFill, { zIndex: 3 }]}>
@@ -471,7 +486,7 @@ export function Player({
         <Pressable accessibilityLabel="Show controls" style={StyleSheet.absoluteFill} onPress={() => active >= 0 && setChrome((c) => !c)} />
 
         <Presence show={held && phase === "held"} duration={900}>
-          <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: colors.holdDim }]} />
+          <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: puzzleOpen ? colors.puzzleDim : colors.holdDim }]} />
         </Presence>
 
         <Presence show={(captionsOn || listening || heard !== null || reply !== null) && current !== null && !puzzle && !ending}>
@@ -500,7 +515,7 @@ export function Player({
 
         <Presence show={choice !== null && micOn && (picked === null || voiceBusy)} duration={200}>
           <View pointerEvents="box-none" style={[styles.mic, { bottom: insets.bottom + 12 }]}>
-            {mic}
+            {mic(false)}
           </View>
         </Presence>
 
@@ -510,7 +525,7 @@ export function Player({
               key={current.beatId}
               puzzle={puzzle}
               line={stopLine}
-              accessory={micOn ? mic : null}
+              accessory={micOn ? mic(true) : null}
               state={puzzleState}
               onSubmit={submit}
               bottomInset={insets.bottom}
@@ -530,15 +545,20 @@ export function Player({
 
         <Presence show={chrome && !ending}>
           <View pointerEvents="box-none" style={[styles.chrome, { top: insets.top + 2 }]}>
-            <Pressable accessibilityRole="button" accessibilityLabel="Close" hitSlop={10} onPress={onExit} style={styles.control}>
+            <Glass interactive style={styles.control}>
+<Pressable accessibilityRole="button" accessibilityLabel="Close" hitSlop={10} onPress={onExit} style={styles.hit}>
               <View style={[styles.cross, { transform: [{ rotate: "45deg" }] }]} />
               <View style={[styles.cross, { transform: [{ rotate: "-45deg" }] }]} />
             </Pressable>
+            </Glass>
             <View style={{ flex: 1 }} />
-            <Pressable accessibilityRole="button" accessibilityLabel="Settings" hitSlop={10} onPress={() => setSettingsOpen(true)} style={styles.control}>
+            <Glass interactive style={styles.control}>
+<Pressable accessibilityRole="button" accessibilityLabel="Settings" hitSlop={10} onPress={() => setSettingsOpen(true)} style={styles.hit}>
               <SettingsGlyph />
             </Pressable>
-            <Pressable
+            </Glass>
+            <Glass interactive style={styles.control}>
+<Pressable
               accessibilityRole="button"
               accessibilityLabel={captionsOn ? "Turn captions off" : "Turn captions on"}
               hitSlop={10}
@@ -546,10 +566,11 @@ export function Player({
                 setCaptionsOn((on) => !on);
                 setChrome(true);
               }}
-              style={styles.control}
+              style={styles.hit}
             >
               <Text style={[styles.cc, !captionsOn && { color: colors.faint, borderColor: colors.faint }]}>CC</Text>
             </Pressable>
+            </Glass>
           </View>
         </Presence>
       </View>
@@ -560,15 +581,15 @@ export function Player({
 
 const styles = StyleSheet.create({
   shade: { position: "absolute", left: 0, right: 0 },
-  captions: { position: "absolute", left: 30, right: 30 },
+  captions: { position: "absolute", left: 24, right: 24 },
   dots: { position: "absolute", left: 0, right: 0 },
-  chrome: { position: "absolute", left: 14, right: 14, flexDirection: "row" },
-  mic: { position: "absolute", left: 0, right: 0, alignItems: "center" },
-  control: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
+  chrome: { position: "absolute", left: 16, right: 16, flexDirection: "row", gap: 10 },
+  mic: { position: "absolute", right: 18, alignItems: "flex-end" },
+  control: { width: 44, height: 44, borderRadius: radius.round },
+  hit: { flex: 1, alignItems: "center", justifyContent: "center" },
   cross: { position: "absolute", width: 20, height: 1.5, borderRadius: 1, backgroundColor: colors.text },
   cc: {
-    fontFamily: fonts.ui,
-    fontWeight: "600",
+    fontFamily: fonts.uiSemibold,
     fontSize: type.micro,
     letterSpacing: 1,
     color: colors.text,

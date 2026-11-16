@@ -454,9 +454,9 @@ export function Player({
   const share = () => {
     if (!current?.ending) return;
     Share.share({
-      message: current.ending.result
+      message: current.ending.shareText ?? (current.ending.result
         ? `Synqui · Case 1 · ${current.ending.result.solved ? `solved in ${current.ending.result.movesUsed} of ${current.ending.result.movesTotal}` : "not solved"}\n${streak}-day streak.`
-        : `Synqui \u00B7 ${episodeTitle}\nI reached \u201C${current.ending.title}\u201D.\n${current.ending.path.join(" \u2192 ")}\n${streak}-day streak.`,
+        : `Synqui \u00B7 ${episodeTitle}\nI reached \u201C${current.ending.title}\u201D.\n${current.ending.path.join(" \u2192 ")}\n${streak}-day streak.`),
     }).catch(() => {});
   };
 

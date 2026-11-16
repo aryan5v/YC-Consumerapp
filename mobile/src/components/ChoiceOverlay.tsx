@@ -45,7 +45,7 @@ function useTarget(index: number, picked: string | null, id: string) {
       Animated.timing(appear, { toValue: 1, duration: motion.gentle, easing: ease.out, useNativeDriver: true }).start();
       return;
     }
-    Animated.timing(appear, { toValue: 1, duration: motion.gentle, delay: 120 + index * 110, easing: ease.out, useNativeDriver: true }).start();
+    Animated.timing(appear, { toValue: 1, duration: motion.gentle, easing: ease.out, useNativeDriver: true }).start();
     const period = picked === id ? motion.waitPulse : motion.pulse;
     const loop = Animated.loop(
       Animated.sequence([

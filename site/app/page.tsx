@@ -1,9 +1,9 @@
 import Beam from "@/components/templates/notio/beam";
 import Hero from "@/components/templates/notio/call-to-action/hero";
-import Features from "@/components/templates/notio/features/features";
 import Footer from "@/components/templates/notio/footer";
 import Navbar from "@/components/templates/notio/navbar";
-import Stats from "@/components/templates/notio/stats";
+import Screenshots from "@/components/templates/notio/screenshots";
+import Technology from "@/components/templates/notio/technology";
 
 export default function Page() {
     return (
@@ -11,9 +11,9 @@ export default function Page() {
             <Navbar />
             <Hero />
             <Beam>
-                <Features />
+                <Screenshots />
             </Beam>
-            <Stats />
+            <Technology />
             <Footer />
         </div>
     );

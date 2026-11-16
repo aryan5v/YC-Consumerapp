@@ -1,8 +1,8 @@
 "use client";
 
 import { motion } from "motion/react";
-import { Button } from "@/components/ui/button";
-import Transcriber from "./transcriber";
+import PhoneFrame from "../phone-frame";
+import WaitlistForm from "../waitlist-form";
 
 export default function Hero() {
   return (
@@ -37,18 +37,15 @@ export default function Hero() {
             transition={{ duration: 0.6, delay: 0.4, ease: "easeOut" }}
             className="text-base max-w-lg 4xl:text-2xl 4xl:max-w-3xl"
           >
-            Synqui is a daily mystery on iPhone. Tap the glowing objects in a
-            live-action scene, watch each clue play as a freshly generated
-            clip, and solve it in five moves.
+            A daily mystery on iPhone that you solve in five moves inside a
+            live-action scene.
           </motion.p>
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.6, ease: "easeOut" }}
           >
-            <Button className="w-fit 4xl:text-2xl 4xl:px-6 4xl:h-16 hover:bg-white hover:text-foreground dark:hover:bg-secondary/80 dark:hover:text-foreground" size="lg" onClick={() => document.getElementById("waitlist-email")?.focus()}>
-              Join the TestFlight waitlist
-            </Button>
+            <WaitlistForm />
           </motion.div>
         </section>
         <motion.section
@@ -57,7 +54,14 @@ export default function Hero() {
           transition={{ duration: 0.8, delay: 0.5, ease: "easeOut" }}
           className="relative lg:mt-0 min-[1070px]:absolute min-[1070px]:right-10 xl:right-14 2xl:right-40 3xl:right-96 min-[1500px]:!right-24 min-[1629px]:!right-64 min-[2000px]:!right-96 min-[2200px]:!right-120 min-[2350px]:!right-130 min-[2500px]:!right-150 lg:-bottom-6 z-10 mt-7 max-[488px]:mt-10 max-[516px]:mt-17 mt-10 md:mt-7"
         >
-          <Transcriber />
+          <PhoneFrame
+            src="/shots/case-spire.webp"
+            alt="A night street scene in Synqui with two glowing outlines, The Spire and The Red Glow, under the question: Do you hear that? Which way?"
+            width={402}
+            height={874}
+            priority
+            className="max-w-[17rem] md:max-w-xs xl:max-w-sm"
+          />
         </motion.section>
       </motion.div>
     </div>

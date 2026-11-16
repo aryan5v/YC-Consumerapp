@@ -10,10 +10,7 @@ import { ThemeToggle } from "./theme-toggle";
 export default function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
 
-  const navItems: { label: string; href: string }[] = [
-    { label: "Modes", href: "#modes" },
-    { label: "Technology", href: "#technology" },
-  ];
+  const navItems: { label: string; href: string }[] = [];
 
   return (
     <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 mx-2 md:mx-4 lg:mx-6 w-full md:max-w-3xl lg:max-w-5xl xl:max-w-6xl bg-background/80 backdrop-blur-sm py-2 px-4 rounded-xl">

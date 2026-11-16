@@ -8,4 +8,4 @@ npm run build     # static export to out/
 npm run preview   # serves out/ on port 4173
 ```
 
-The waitlist form has no backend. It opens the visitor's mail app with a prefilled message to the address in `components/templates/notio/waitlist-form.tsx`.
+The waitlist form has no backend yet. It keeps the address in the browser and shows "Noted"; nothing is sent anywhere.

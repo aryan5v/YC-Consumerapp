@@ -1,0 +1,5 @@
+.gateway.env
+.venv/
+bin/
+*.log
+__pycache__/

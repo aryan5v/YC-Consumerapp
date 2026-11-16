@@ -14,6 +14,7 @@ import type * as clips from "../clips.js";
 import type * as crons from "../crons.js";
 import type * as custom from "../custom.js";
 import type * as director from "../director.js";
+import type * as dream from "../dream.js";
 import type * as episodes from "../episodes.js";
 import type * as home from "../home.js";
 import type * as http from "../http.js";
@@ -72,6 +73,7 @@ declare const fullApi: ApiFromModules<{
   crons: typeof crons;
   custom: typeof custom;
   director: typeof director;
+  dream: typeof dream;
   episodes: typeof episodes;
   home: typeof home;
   http: typeof http;

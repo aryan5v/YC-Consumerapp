@@ -129,7 +129,7 @@ export async function trayGetJob(jobId: string): Promise<TrayJobState> {
 
 export async function trayDownload(mp4Url: string): Promise<{ bytes: Uint8Array; contentType: string }> {
   const key = apiKey();
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = { "user-agent": "Mozilla/5.0 Synqui/1.0" };
   if (key !== null) headers.authorization = `Bearer ${key}`;
   const res = await fetch(mp4Url, { method: "GET", headers, signal: AbortSignal.timeout(180000) });
   if (!res.ok) throw new Error(`clip download failed: ${res.status} ${(await res.text()).slice(0, 200)}`);

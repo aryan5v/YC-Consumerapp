@@ -43,6 +43,21 @@ export const beatStatusValidator = v.union(
 );
 
 export default defineSchema({
+  dreams: defineTable({
+    userId: v.id("users"),
+    prompt: v.string(),
+    status: v.union(v.literal("writing"), v.literal("generating"), v.literal("ready"), v.literal("failed")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    h3Prompt: v.optional(v.string()),
+    jobId: v.optional(v.string()),
+    sourceUrl: v.optional(v.string()),
+    mediaToken: v.optional(v.string()),
+    clipUrl: v.optional(v.string()),
+    storageId: v.optional(v.id("_storage")),
+    error: v.optional(v.string()),
+  }).index("by_user_created", ["userId", "createdAt"]),
+
   worldClipCaches: defineTable({
     version: v.string(),
     characterSheetUrl: v.string(),

@@ -32,6 +32,20 @@ async function upload(bytes, type) {
   return (await response.json()).storageId;
 }
 
+async function videoBytes(url) {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const response = await request(url, { headers: auth }, 180000);
+      const bytes = Buffer.from(await response.arrayBuffer());
+      if (bytes.length === 0) throw new Error("empty video response");
+      return bytes;
+    } catch (error) {
+      if (attempt === 2) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    }
+  }
+}
+
 async function dataImage(url) {
   const response = await request(url, { headers: { "user-agent": ua } });
   const bytes = Buffer.from(await response.arrayBuffer());
@@ -125,7 +139,7 @@ async function cacheFrame(scene, asset) {
   }
 }
 
-async function render(scene, index) {
+async function render(scene, index, freshAttempt = false) {
   const cached = results.find((asset) => asset.key === scene.key);
   if (cached) {
     if (!cached.frameUrl) {
@@ -147,7 +161,7 @@ async function render(scene, index) {
   let base = instances[index % instances.length];
   let job;
   let previous;
-  if (existsSync(`${out}/${scene.key}-job.json`)) {
+  if (!freshAttempt && existsSync(`${out}/${scene.key}-job.json`)) {
     previous = JSON.parse(await readFile(`${out}/${scene.key}-job.json`, "utf8"));
   }
   if (previous?.caseId === caseId) {
@@ -170,16 +184,26 @@ async function render(scene, index) {
   }, null, 2));
   await writeFile(`${out}/${scene.key}-job.json`, JSON.stringify({ caseId, base, id: job.id }));
   let done = false;
+  let consecutiveErrors = 0;
   for (let poll = 0; poll < 240; poll += 1) {
     await new Promise((resolve) => setTimeout(resolve, 500));
-    const state = await (await request(`${base}/v1/videos/${job.id}`, { headers: auth }, 30000)).json();
+    let state;
+    try {
+      state = await (await request(`${base}/v1/videos/${job.id}`, { headers: auth }, 30000)).json();
+    } catch (error) {
+      consecutiveErrors += 1;
+      if (consecutiveErrors >= 3 || poll >= 239) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      continue;
+    }
+    consecutiveErrors = 0;
     if (["failed", "cancelled"].includes(state.status)) throw new Error(`generation failed for ${scene.key}`);
     if (state.status === "completed") { done = true; break; }
   }
   if (!done) throw new Error(`generation timed out for ${scene.key}`);
   const completedAt = performance.now();
   const [video, audio] = await Promise.all([
-    request(`${base}/v1/videos/${job.id}/content`, { headers: auth }, 180000).then(async (r) => Buffer.from(await r.arrayBuffer())),
+    videoBytes(`${base}/v1/videos/${job.id}/content`),
     request("https://api.openai.com/v1/audio/speech", {
       method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${openai}` },
       body: JSON.stringify({ model: "gpt-4o-mini-tts", voice: "marin", input: scene.line, response_format: "mp3",
@@ -209,7 +233,7 @@ for (let i = 1; i < plan.scenes.length; i += instances.length) {
   for (const [offset, result] of completed.entries()) {
     if (result.status === "rejected") {
       console.log(JSON.stringify({ phase: "retry", key: scenes[offset].key, reason: result.reason.message }));
-      await render(scenes[offset], i + offset + 1);
+      await render(scenes[offset], i + offset + 1, true);
     }
   }
 }

@@ -1,5 +1,10 @@
-import { httpAction } from "./_generated/server";
+import { httpAction, internalQuery } from "./_generated/server";
 import { envFlag, envNumber } from "./lib/env";
+import { v } from "convex/values";
+import { internal } from "./_generated/api";
+import { Id } from "./_generated/dataModel";
+import { runOwnedBy } from "./lib/session";
+import { readCase as readCaseData } from "./lib/case";
 
 /** Realtime model the page connects to. Pinned; do not follow a newer default. */
 export const REALTIME_MODEL = "gpt-realtime-2.1-mini";
@@ -139,7 +144,22 @@ async function readJson(request: Request): Promise<unknown> {
  *   http.route({ path: "/master/token", method: "POST", handler: mint });
  *   http.route({ path: "/master/token", method: "OPTIONS", handler: mint });
  */
-export const mint = httpAction(async (_ctx, request) => {
+export const context = internalQuery({
+  args: { runId: v.id("runs"), deviceToken: v.string() },
+  handler: async (ctx, { runId, deviceToken }) => {
+    const { run } = await runOwnedBy(ctx, runId, deviceToken);
+    const bundle = run.caseId === undefined ? null : await ctx.db.get(run.caseId);
+    const data = readCaseData(bundle?.data);
+    if (data === null) throw new Error("this run is not a case");
+    return {
+      question: data.question,
+      clues: (run.caseClues ?? []).map((id) => data.clues.find((clue) => clue.id === id)?.fact ?? "").filter(Boolean),
+      movesLeft: Math.max(0, data.moves - (run.caseClues ?? []).length),
+    };
+  },
+});
+
+export const mint = httpAction(async (ctx, request) => {
   if (request.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: CORS });
   }
@@ -157,6 +177,15 @@ export const mint = httpAction(async (_ctx, request) => {
     fields = readCase(await readJson(request));
   } catch {
     return respond({ error: "expected a JSON object body" }, 400);
+  }
+  if (fields.run === null || fields.device === null) return respond({ error: "run and device are required" }, 400);
+  try {
+    const trusted = await ctx.runQuery(internal.master.context, {
+      runId: fields.run as Id<"runs">, deviceToken: fields.device,
+    });
+    fields = { ...fields, ...trusted };
+  } catch {
+    return respond({ error: "this case does not belong to this device" }, 403);
   }
 
   const session = {

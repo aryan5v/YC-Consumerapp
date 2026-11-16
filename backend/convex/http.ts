@@ -2,6 +2,8 @@ import { httpRouter } from "convex/server";
 import { httpAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { keikiConfigured, secretMatches, toolSecret } from "./lib/keiki";
+import { mint } from "./master";
+import { MASTER_PAGE } from "./lib/masterPage";
 
 const http = httpRouter();
 
@@ -89,6 +91,16 @@ http.route({
     });
     return json(payload);
   }),
+});
+
+http.route({ path: "/master/token", method: "POST", handler: mint });
+http.route({ path: "/master/token", method: "OPTIONS", handler: mint });
+http.route({
+  path: "/master",
+  method: "GET",
+  handler: httpAction(async () => new Response(MASTER_PAGE, {
+    headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
+  })),
 });
 
 export default http;

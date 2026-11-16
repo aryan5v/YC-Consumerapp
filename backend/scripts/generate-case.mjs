@@ -1,11 +1,14 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
+import { createHash } from "node:crypto";
 
 const exec = promisify(execFile);
 const version = process.env.CASE_VERSION ?? "pier-nine-v1";
-const out = `${process.env.HOME}/.capy/work/case-render-${version}`;
+const qualityPhase = process.env.QUALITY_PHASE;
+if (qualityPhase && !["opening", "spokes"].includes(qualityPhase)) throw new Error("QUALITY_PHASE must be opening or spokes");
+const out = `${process.env.HOME}/.capy/work/${qualityPhase ? "quality-case" : "case-render"}-${version}`;
 await mkdir(out, { recursive: true });
 const key = process.env.FASTH3_API_KEY;
 const openai = process.env.OPENAI_API_KEY;
@@ -63,6 +66,11 @@ async function compactReference(bytes) {
 const caseId = await convex("cases:prepare", { version });
 const plan = await convex("cases:plan", { caseId });
 const strict = plan.version === "pier-nine-v2";
+const scenes = qualityPhase ? plan.scenes.filter((scene) => qualityPhase === "opening" ? scene.key === "opening" : scene.key !== "opening")
+  .flatMap((scene) => [
+    { ...scene, key: `${scene.key}-a`, baseKey: scene.key },
+    { ...scene, key: `${scene.key}-b`, baseKey: scene.key, prompt: scene.alternatePrompt },
+  ]) : plan.scenes;
 if (plan.published) {
   console.log(JSON.stringify({ caseId, status: "already published", clips: plan.clips.length }));
   process.exit(0);
@@ -70,7 +78,8 @@ if (plan.published) {
 const configured = process.env.FASTH3_URLS ?? (await exec("npx", ["convex", "env", "get", "FASTH3_URLS"])).stdout.trim();
 const instances = configured.split(",").map((url) => url.trim().replace(/\/v1\/?$/, "").replace(/\/+$/, "")).filter(Boolean);
 if (instances.length === 0) throw new Error("FASTH3_URLS is empty");
-let reference = await dataImage(plan.characterSheetUrl);
+let reference = qualityPhase === "opening" && process.env.CASE_CHARACTER_REF_FILE ?
+  await compactReference(await readFile(process.env.CASE_CHARACTER_REF_FILE)) : await dataImage(plan.characterSheetUrl);
 let hubFrameUrl = plan.clips.find((clip) => clip.key === "opening")?.frameUrl;
 const results = [...plan.clips];
 const timing = [];
@@ -140,6 +149,7 @@ async function cacheFrame(scene, asset) {
 }
 
 async function render(scene, index, freshAttempt = false) {
+  const sceneKey = scene.baseKey ?? scene.key;
   const cached = results.find((asset) => asset.key === scene.key);
   if (cached) {
     if (!cached.frameUrl) {
@@ -153,18 +163,20 @@ async function render(scene, index, freshAttempt = false) {
   }
   const start = performance.now();
   const seed = strict ? plan.seed : plan.seed + index * 97;
-  if (strict && scene.key !== "opening" && !hubFrameUrl) throw new Error("the opening frame is not ready");
-  const conditions = strict && scene.key !== "opening" ? [
+  if (strict && sceneKey !== "opening" && !hubFrameUrl) throw new Error("the opening frame is not ready");
+  const conditions = strict && sceneKey !== "opening" ? [
     { type: "image", role: "keyframe", frame_index: 0, uri: reference },
     { type: "image", role: "reference", uri: reference },
   ] : [{ type: "image", role: "reference", uri: reference }];
   let base = instances[index % instances.length];
   let job;
   let previous;
+  const promptHash = createHash("sha256").update(scene.prompt).digest("hex");
+  const imageHash = createHash("sha256").update(reference).digest("hex");
   if (!freshAttempt && existsSync(`${out}/${scene.key}-job.json`)) {
     previous = JSON.parse(await readFile(`${out}/${scene.key}-job.json`, "utf8"));
   }
-  if (previous?.caseId === caseId) {
+  if (previous?.caseId === caseId && (!qualityPhase || (previous.promptHash === promptHash && previous.imageHash === imageHash))) {
     base = previous.base;
     job = { id: previous.id };
   } else {
@@ -178,11 +190,12 @@ async function render(scene, index, freshAttempt = false) {
   }
   if (!job.id) throw new Error("generation returned no job id");
   await writeFile(`${out}/${scene.key}-request.json`, JSON.stringify({
-    caseId, seed, prompt: scene.prompt, inputFrameUrl: scene.key === "opening" ? null : hubFrameUrl,
+    caseId, seed, prompt: scene.prompt, inputFrameUrl: sceneKey === "opening" ? null : hubFrameUrl,
     conditions: conditions.map((condition) => ({ role: condition.role, frame_index: condition.frame_index ?? null })),
     sameImage: conditions.length === 2 ? conditions[0].uri === conditions[1].uri : null,
+    imageHash,
   }, null, 2));
-  await writeFile(`${out}/${scene.key}-job.json`, JSON.stringify({ caseId, base, id: job.id }));
+  await writeFile(`${out}/${scene.key}-job.json`, JSON.stringify({ caseId, base, id: job.id, promptHash, imageHash }));
   let done = false;
   let consecutiveErrors = 0;
   for (let poll = 0; poll < 240; poll += 1) {
@@ -204,13 +217,31 @@ async function render(scene, index, freshAttempt = false) {
   const completedAt = performance.now();
   const [video, audio] = await Promise.all([
     videoBytes(`${base}/v1/videos/${job.id}/content`),
-    request("https://api.openai.com/v1/audio/speech", {
+    qualityPhase ? Promise.resolve(null) : request("https://api.openai.com/v1/audio/speech", {
       method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${openai}` },
       body: JSON.stringify({ model: "gpt-4o-mini-tts", voice: "marin", input: scene.line, response_format: "mp3",
         instructions: "Speak this exact clue clearly, as a calm harbour investigator. Do not add words." }),
     }, 60000).then(async (r) => Buffer.from(await r.arrayBuffer())),
   ]);
-  await Promise.all([writeFile(`${out}/${scene.key}.mp4`, video), writeFile(`${out}/${scene.key}.mp3`, audio)]);
+  await writeFile(`${out}/${scene.key}.mp4`, video);
+  if (audio) await writeFile(`${out}/${scene.key}.mp3`, audio);
+  if (qualityPhase) {
+    await exec("ffmpeg", ["-y", "-i", `${out}/${scene.key}.mp4`, "-frames:v", "1", `${out}/${scene.key}-first.png`]);
+    await exec("ffmpeg", ["-y", "-ss", "2.5", "-i", `${out}/${scene.key}.mp4`, "-frames:v", "1", `${out}/${scene.key}-middle.png`]);
+    await exec("ffmpeg", ["-y", "-i", `${out}/${scene.key}.mp4`, "-vf", "reverse", "-frames:v", "1", `${out}/${scene.key}-last.png`]);
+    const take = {
+      key: sceneKey, take: scene.key.endsWith("-a") ? "a" : "b", caseId, seed,
+      video: `${out}/${scene.key}.mp4`, prompt: scene.prompt,
+      frames: ["first", "middle", "last"].map((frame) => `${out}/${scene.key}-${frame}.png`),
+      inputFrameUrl: sceneKey === "opening" ? null : hubFrameUrl,
+      inputImageHash: imageHash,
+      seconds: +((performance.now() - start) / 1000).toFixed(3), bytes: video.length,
+    };
+    await writeFile(`${out}/${scene.key}-take.json`, JSON.stringify(take, null, 2));
+    console.log(JSON.stringify({ key: scene.key, seconds: take.seconds, bytes: video.length, readyForJudge: true }));
+    return;
+  }
+  if (!audio) throw new Error("spoken line was not rendered");
   const [storageId, audioStorageId] = await Promise.all([upload(video, "video/mp4"), upload(audio, "audio/mpeg")]);
   await convex("cases:saveClip", { caseId, key: scene.key, storageId, audioStorageId,
     prompt: scene.prompt, seed, inputFrameUrl: scene.key === "opening" ? undefined : hubFrameUrl });
@@ -225,17 +256,24 @@ async function render(scene, index, freshAttempt = false) {
 }
 
 const opening = plan.clips.find((clip) => clip.key === "opening");
-if (opening?.frameUrl) reference = await dataImage(opening.frameUrl);
-await render(plan.scenes[0], 0);
-for (let i = 1; i < plan.scenes.length; i += instances.length) {
-  const scenes = plan.scenes.slice(i, i + instances.length);
-  const completed = await Promise.allSettled(scenes.map((scene, offset) => render(scene, i + offset)));
+if (qualityPhase !== "opening" && opening?.frameUrl) reference = await dataImage(opening.frameUrl);
+const first = qualityPhase ? 0 : 1;
+if (!qualityPhase) await render(scenes[0], 0);
+for (let i = first; i < scenes.length; i += instances.length) {
+  const batch = scenes.slice(i, i + instances.length);
+  const completed = await Promise.allSettled(batch.map((scene, offset) => render(scene, i + offset)));
   for (const [offset, result] of completed.entries()) {
     if (result.status === "rejected") {
-      console.log(JSON.stringify({ phase: "retry", key: scenes[offset].key, reason: result.reason.message }));
-      await render(scenes[offset], i + offset + 1, true);
+      console.log(JSON.stringify({ phase: "retry", key: batch[offset].key, reason: result.reason.message }));
+      await render(batch[offset], i + offset + 1, true);
     }
   }
+}
+if (qualityPhase) {
+  const takes = await Promise.all((await readdir(out)).filter((name) => name.endsWith("-take.json")).map(async (name) => JSON.parse(await readFile(`${out}/${name}`, "utf8"))));
+  await writeFile(`${out}/takes.json`, JSON.stringify(takes, null, 2));
+  console.log(JSON.stringify({ caseId, phase: qualityPhase, readyForJudge: true, manifest: `${out}/takes.json` }));
+  process.exit(0);
 }
 await convex("cases:publish", { caseId, activate: !strict });
 console.log(JSON.stringify({ caseId, status: strict ? "sealed, not active" : "published", clips: results.length }));

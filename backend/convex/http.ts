@@ -4,6 +4,7 @@ import { internal } from "./_generated/api";
 import { keikiConfigured, secretMatches, toolSecret } from "./lib/keiki";
 import { mint } from "./master";
 import { MASTER_PAGE } from "./lib/masterPage";
+import { media as dreamMedia } from "./dream";
 
 const http = httpRouter();
 
@@ -102,5 +103,7 @@ http.route({
     headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
   })),
 });
+
+http.route({ pathPrefix: "/dream/media/", method: "GET", handler: dreamMedia });
 
 export default http;

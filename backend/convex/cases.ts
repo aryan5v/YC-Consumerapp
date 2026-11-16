@@ -3,7 +3,7 @@ import { internalMutation, internalQuery } from "./_generated/server";
 import { CASE_ONE, caseScenesForVersion, checkCaseLogic, readCase } from "./lib/case";
 import { ensureEpisode } from "./lib/episodes";
 import { pacificDate } from "./lib/pacific";
-import { normalizeRegion } from "./lib/segment";
+import { normalizeRegion, usableRegion } from "./lib/segment";
 import { ensureDeviceUser } from "./lib/session";
 import { playCaseClip } from "./lib/caseRuntime";
 
@@ -39,6 +39,7 @@ export const plan = internalQuery({
       targets: data.clues.map((clue) => ({ id: clue.id, target: clue.object })),
       characterSheetUrl: original?.clips.find((clip) => clip.key === "opening")?.frameUrl ?? episode.characterSheetUrl,
       seed: episode.seed, aspect: episode.aspect, seconds: episode.seconds,
+      originalClips: original?.clips ?? [],
     };
   },
 });
@@ -91,13 +92,13 @@ export const publish = internalMutation({
           clip.audioStorageId === undefined || await ctx.db.system.get(clip.audioStorageId) === null) {
         throw new Error(`case clip ${scene.key} is missing from storage`);
       }
-      if (bundle.version === "pier-nine-v2" && (clip.prompt !== scene.prompt || clip.seed !== episode.seed ||
+      if (bundle.version === "pier-nine-v2" && (![scene.prompt, (scene as { alternatePrompt?: string }).alternatePrompt].includes(clip.prompt) || clip.seed !== episode.seed ||
           clip.frameUrl === undefined || (scene.key !== "opening" && clip.inputFrameUrl !== bundle.clips.find((entry) => entry.key === "opening")?.frameUrl))) {
         throw new Error(`strict continuity metadata is missing for ${scene.key}`);
       }
     }
     if (activate && bundle.version === "pier-nine-v2") {
-      if (deadlineAt === undefined || Date.now() >= deadlineAt) throw new Error("the activation deadline has passed");
+      if (deadlineAt !== undefined && Date.now() >= deadlineAt) throw new Error("the activation deadline has passed");
       const previews = await ctx.db.query("runs").withIndex("by_case", (q) => q.eq("caseId", caseId)).collect();
       if (!previews.some((run) => run.caseResult?.solved === true) || !previews.some((run) => run.caseResult?.solved === false)) {
         throw new Error("both preview endings must pass before activation");
@@ -132,5 +133,19 @@ export const preview = internalMutation({
     });
     await playCaseClip(ctx, (await ctx.db.get(runId))!, "opening", 0);
     return runId;
+  },
+});
+
+export const repairRegions = internalMutation({
+  args: { caseId: v.id("caseBundles"), key: v.string(), regions: v.any() },
+  returns: v.null(),
+  handler: async (ctx, { caseId, key, regions }) => {
+    const bundle = await ctx.db.get(caseId);
+    if (bundle === null) throw new Error("case not found");
+    const data = readCase(bundle.data);
+    if (data === null || !bundle.clips.some((clip) => clip.key === key)) throw new Error("case clip not found");
+    const checked = Object.fromEntries(data.clues.map((clue) => [clue.id, usableRegion(regions?.[clue.id])]));
+    await ctx.db.patch(caseId, { clips: bundle.clips.map((clip) => clip.key === key ? { ...clip, regions: checked } : clip) });
+    return null;
   },
 });

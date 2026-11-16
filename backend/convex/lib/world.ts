@@ -60,6 +60,7 @@ export type Clock = { day: number; timeOfDay: number };
 
 export type Configure = {
   timeOfDay: number;
+  day?: number;
   weather: Weather;
   palette: ConfigurePalette;
   mood: string;
@@ -279,6 +280,7 @@ export type ClientClock = Clock & {
 export function echoConfigure(current: ClientClock, landmarks: Landmark[], transitionMs: number): Configure {
   return {
     timeOfDay: current.timeOfDay,
+    day: current.day,
     weather: current.weather,
     palette: paletteOut(current.palette),
     mood: clampMood(current.mood),

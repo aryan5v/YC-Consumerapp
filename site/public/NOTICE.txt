@@ -1,5 +1,0 @@
-StyleUI components adapted under the MIT License.
-Copyright (c) 2026 StyleUI contributors.
-https://github.com/heyfabrika/styleui
-
-Paper Mono is used under the SIL Open Font License. See fonts/OFL.txt.

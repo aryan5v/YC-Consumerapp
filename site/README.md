@@ -1,5 +1,11 @@
-# Synqui
+# Synqui landing page
 
-`npm install && npm run build` writes static files to `dist/`. Serve that folder on any host.
+The page is the Notio template from [StyleUI](https://github.com/heyfabrika/styleui) (MIT, see `STYLEUI-LICENSE`), copied from commit `3da5706` with its layout, type, spacing, radii, shadows and motion left as its authors made them. Only the copy, the imagery, the logo and the accent colour are Synqui's.
 
-The page is a new `site/` directory. `site/` was not on `main` (GitHub issue #6 described it; nothing had been committed). UI primitives in `src/components/ui` are adapted from [StyleUI](https://github.com/heyfabrika/styleui) (MIT). See `THIRD_PARTY_NOTICES.md`.
+```bash
+npm install
+npm run build     # static export to out/
+npm run preview   # serves out/ on port 4173
+```
+
+The waitlist form has no backend yet. It keeps the address in the browser and shows "Noted"; nothing is sent anywhere.

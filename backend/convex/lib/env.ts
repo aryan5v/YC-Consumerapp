@@ -17,6 +17,7 @@ export type EnvName =
   | "DIRECTOR_PROVIDER"
   | "DIRECTOR_BASE_URL"
   | "DIRECTOR_MODEL"
+  | "DIRECTOR_FALLBACK_MODEL"
   | "DIRECTOR_API_KEY"
   | "DEEPSEEK_API_KEY"
   | "DEEPSEEK_BASE_URL"
@@ -41,6 +42,8 @@ export type EnvName =
   | "OPENAI_API_KEY"
   | "OPENAI_TTS_MODEL"
   | "OPENAI_STT_MODEL"
+  | "OPENAI_TTS_FALLBACK_MODEL"
+  | "OPENAI_STT_FALLBACK_MODEL"
   | "OPENAI_BASE_URL"
   | "OPENAI_TIMEOUT_MS"
   | "HELD_CLIP_URL"
@@ -92,6 +95,8 @@ export function env(name: EnvName): string | undefined {
       return process.env.DIRECTOR_BASE_URL;
     case "DIRECTOR_MODEL":
       return process.env.DIRECTOR_MODEL;
+    case "DIRECTOR_FALLBACK_MODEL":
+      return process.env.DIRECTOR_FALLBACK_MODEL;
     case "DIRECTOR_API_KEY":
       return process.env.DIRECTOR_API_KEY;
     case "DEEPSEEK_API_KEY":
@@ -140,6 +145,10 @@ export function env(name: EnvName): string | undefined {
       return process.env.OPENAI_TTS_MODEL;
     case "OPENAI_STT_MODEL":
       return process.env.OPENAI_STT_MODEL;
+    case "OPENAI_TTS_FALLBACK_MODEL":
+      return process.env.OPENAI_TTS_FALLBACK_MODEL;
+    case "OPENAI_STT_FALLBACK_MODEL":
+      return process.env.OPENAI_STT_FALLBACK_MODEL;
     case "OPENAI_BASE_URL":
       return process.env.OPENAI_BASE_URL;
     case "OPENAI_TIMEOUT_MS":

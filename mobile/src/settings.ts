@@ -1,10 +1,10 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useSyncExternalStore } from "react";
 
-export type Settings = { voice: boolean; microphone: boolean; demo: boolean };
+export type Settings = { voice: boolean; microphone: boolean; demo: boolean; captions: boolean };
 
 const KEY = "fork.settings";
-let settings: Settings = { voice: true, microphone: true, demo: false };
+let settings: Settings = { voice: true, microphone: true, demo: false, captions: true };
 const listeners = new Set<() => void>();
 
 AsyncStorage.getItem(KEY)

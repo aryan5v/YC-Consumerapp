@@ -33,7 +33,17 @@ export type CaseInfo = {
   solveChoices: { id: string; label: string }[] | null;
   solveInput?: { kind: "code"; length: number; prompt: string } | null;
 };
-export type DreamView = { status: "writing" | "generating" | "ready" | "failed"; prompt: string; clipUrl?: string | null; elapsedMs: number; error?: string | null };
+export type DreamView = {
+  status: "writing" | "generating" | "ready" | "failed";
+  prompt: string;
+  clipUrl?: string | null;
+  elapsedMs: number;
+  error?: string | null;
+  step?: number;
+  caption?: string | null;
+  stopStatus?: "analysing" | "ready" | "none";
+  stop?: { options: { id: string; label: string; region: Region | null }[] } | null;
+};
 export type CaseResult = { solved: boolean; movesUsed: number; movesTotal: number; answerLabel?: string | null };
 export type Ending = { title: string; summary: string; path: string[]; text?: EndingText | null; result?: CaseResult | null; streak?: number; shareText?: string };
 
@@ -86,6 +96,7 @@ export interface StoryProvider {
   solveText?(runId: string, answerText: string, expectedBeatId: string): Promise<void>;
   dreamStart?(prompt: string): Promise<string>;
   useDream?(dreamId: string | null): DreamView | undefined;
+  dreamContinue?(dreamId: string, optionId: string): Promise<string>;
   setPhone(phone: string): Promise<void>;
   speak?(runId: string, recordingUri: string, expectedBeatId: string): Promise<SpeakResult>;
   voiceReady?(runId: string, expectedBeatId: string): Promise<boolean>;

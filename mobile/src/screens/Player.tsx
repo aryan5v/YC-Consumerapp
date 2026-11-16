@@ -465,7 +465,7 @@ export function Player({
   const video = { x: (width - aspect * scale) / 2, y: (height - scale) / 2, w: aspect * scale, h: scale };
   const micSpace = micOn ? MIC_SPACE : 0;
   const bandHeight = (slotAspect: number | null) => Math.max(0, (height - width / (slotAspect ?? PORTRAIT)) / 2);
-  const captionLift = choice ? chipsHeight(choice.options) + micSpace : 0;
+  const captionLift = choice ? chipsHeight(choice.options, video, width) + micSpace : 0;
   const stopLine =
     held && current.stop
       ? listening

@@ -65,8 +65,23 @@ export const watch = query({
     const user = await requireDeviceUser(ctx, deviceToken);
     const dream = await ctx.db.get(dreamId);
     if (dream === null || dream.userId !== user._id) throw new Error("this dream belongs to another device");
-    return { status: dream.status, prompt: dream.prompt, clipUrl: dream.clipUrl,
-      elapsedMs: Math.max(0, dream.updatedAt - dream.createdAt), error: dream.error };
+    const stored = dream.storageId === undefined ? null : await ctx.storage.getUrl(dream.storageId);
+    const direct = stored ?? (dream.clipUrl?.includes("/api/storage/") ? dream.clipUrl : undefined);
+    const playable = dream.status === "ready" && direct !== undefined && direct !== null;
+    const status: "writing" | "generating" | "ready" | "failed" = playable
+      ? "ready"
+      : dream.status === "failed"
+        ? "failed"
+        : dream.status === "writing"
+          ? "writing"
+          : "generating";
+    return {
+      status,
+      prompt: dream.prompt,
+      clipUrl: playable ? direct : undefined,
+      elapsedMs: Math.max(0, dream.updatedAt - dream.createdAt),
+      error: dream.error,
+    };
   },
 });
 
@@ -115,14 +130,15 @@ export const generate = internalAction({
         if (state.status === "ready" && state.mp4Url !== null) {
           const reference = trayJobReference(job.jobId);
           const sourceUrl = reference.baseUrl === null ? state.mp4Url : contentUrl(reference.baseUrl, reference.jobId);
-          const mediaToken = crypto.randomUUID();
-          const site = process.env.CONVEX_SITE_URL;
-          if (!site) throw new Error("media origin is not configured");
-          const clipUrl = `${site}/dream/media/${dreamId}/${mediaToken}`;
+          const copyStarted = Date.now();
+          const video = await trayDownload(sourceUrl);
+          const storageId = await ctx.storage.store(new Blob([new Uint8Array(video.bytes)], { type: "video/mp4" }));
+          const clipUrl = await ctx.storage.getUrl(storageId);
+          if (clipUrl === null || !clipUrl.includes("/api/storage/")) throw new Error("stored clip has no direct URL");
+          await ctx.runMutation(internal.dream.setStored, { dreamId, storageId, copyMs: Date.now() - copyStarted });
           await ctx.runMutation(internal.dream.update, {
-            dreamId, status: "ready", sourceUrl, mediaToken, clipUrl, pollMs: Date.now() - pollStarted,
+            dreamId, status: "ready", sourceUrl, clipUrl, pollMs: Date.now() - pollStarted,
           });
-          await ctx.scheduler.runAfter(0, internal.dream.mirror, { dreamId });
           return null;
         }
         if (Date.now() - touchedAt >= 1000) {

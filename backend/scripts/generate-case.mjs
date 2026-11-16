@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 
 const exec = promisify(execFile);
 const out = `${process.env.HOME}/.capy/work/case-render`;
@@ -33,7 +34,15 @@ async function upload(bytes, type) {
 async function dataImage(url) {
   const response = await request(url, { headers: { "user-agent": ua } });
   const bytes = Buffer.from(await response.arrayBuffer());
+  if (bytes.length > 200000) return await compactReference(bytes);
   return `data:${response.headers.get("content-type") ?? "image/jpeg"};base64,${bytes.toString("base64")}`;
+}
+
+async function compactReference(bytes) {
+  await writeFile(`${out}/reference-source`, bytes);
+  await exec("ffmpeg", ["-y", "-i", `${out}/reference-source`, "-vf", "scale=512:-2", "-frames:v", "1", "-q:v", "3", `${out}/reference.jpg`]);
+  const jpeg = await readFile(`${out}/reference.jpg`);
+  return `data:image/jpeg;base64,${jpeg.toString("base64")}`;
 }
 
 const caseId = await convex("cases:prepare");
@@ -88,19 +97,59 @@ async function regionsFor(bytes) {
   }
 }
 
+async function cacheFrame(scene, asset) {
+  let frame = await lastFrame(asset.url);
+  if (!frame) {
+    try {
+      await exec("ffmpeg", ["-y", "-i", `${out}/${scene.key}.mp4`, "-vf", "reverse", "-frames:v", "1", `${out}/${scene.key}-frame.png`]);
+      frame = await readFile(`${out}/${scene.key}-frame.png`);
+    } catch {
+      console.log(JSON.stringify({ phase: "frame-fallback", key: scene.key, region: null }));
+    }
+  }
+  if (!frame) return;
+  if (scene.key === "opening") reference = await compactReference(frame);
+  await writeFile(`${out}/${scene.key}-frame.png`, frame);
+  const frameStorageId = await upload(frame, "image/png");
+  const regions = scene.key === "solved" || scene.key === "failed" ? {} : await regionsFor(frame);
+  await convex("cases:saveClip", {
+    caseId, key: scene.key, storageId: asset.storageId, audioStorageId: asset.audioStorageId, frameStorageId, regions,
+  });
+}
+
 async function render(scene, index) {
-  if (results.some((asset) => asset.key === scene.key)) return;
+  const cached = results.find((asset) => asset.key === scene.key);
+  if (cached) {
+    if (!cached.frameUrl) {
+      if (!existsSync(`${out}/${scene.key}.mp4`)) {
+        const response = await request(cached.url);
+        await writeFile(`${out}/${scene.key}.mp4`, Buffer.from(await response.arrayBuffer()));
+      }
+      await cacheFrame(scene, cached);
+    }
+    return;
+  }
   const start = performance.now();
-  const base = instances[index % instances.length];
-  const response = await request(`${base}/v1/videos`, {
-    method: "POST", headers: { ...auth, "content-type": "application/json" },
-    body: JSON.stringify({ model: "FastH3-Omni", task: "ref2va", prompt: scene.prompt,
-      conditions: [{ type: "image", role: "reference", uri: reference }],
-      target: { short_edge: 768, aspect_ratio: plan.aspect, duration_seconds: plan.seconds }, seed: plan.seed + index * 97 }),
-  }, 180000);
-  const job = await response.json();
+  let base = instances[index % instances.length];
+  let job;
+  let previous;
+  if (existsSync(`${out}/${scene.key}-job.json`)) {
+    previous = JSON.parse(await readFile(`${out}/${scene.key}-job.json`, "utf8"));
+  }
+  if (previous?.caseId === caseId) {
+    base = previous.base;
+    job = { id: previous.id };
+  } else {
+    const response = await request(`${base}/v1/videos`, {
+      method: "POST", headers: { ...auth, "content-type": "application/json" },
+      body: JSON.stringify({ model: "FastH3-Omni", task: "ref2va", prompt: scene.prompt,
+        conditions: [{ type: "image", role: "reference", uri: reference }],
+        target: { short_edge: 768, aspect_ratio: plan.aspect, duration_seconds: plan.seconds }, seed: plan.seed + index * 97 }),
+    }, 180000);
+    job = await response.json();
+  }
   if (!job.id) throw new Error("generation returned no job id");
-  await writeFile(`${out}/${scene.key}-job.json`, JSON.stringify({ base, id: job.id }));
+  await writeFile(`${out}/${scene.key}-job.json`, JSON.stringify({ caseId, base, id: job.id }));
   let done = false;
   for (let poll = 0; poll < 240; poll += 1) {
     await new Promise((resolve) => setTimeout(resolve, 500));
@@ -123,20 +172,7 @@ async function render(scene, index) {
   await convex("cases:saveClip", { caseId, key: scene.key, storageId, audioStorageId });
   const refreshed = await convex("cases:plan", { caseId });
   const asset = refreshed.clips.find((entry) => entry.key === scene.key);
-  let frame = await lastFrame(asset.url);
-  if (!frame) {
-    try {
-      await exec("ffmpeg", ["-y", "-sseof", "-0.05", "-i", `${out}/${scene.key}.mp4`, "-frames:v", "1", `${out}/${scene.key}-frame.png`]);
-      frame = await readFile(`${out}/${scene.key}-frame.png`);
-    } catch {}
-  }
-  if (frame) {
-    if (scene.key === "opening") reference = `data:image/png;base64,${frame.toString("base64")}`;
-    await writeFile(`${out}/${scene.key}-frame.png`, frame);
-    const frameStorageId = await upload(frame, "image/png");
-    const regions = scene.key === "solved" || scene.key === "failed" ? {} : await regionsFor(frame);
-    await convex("cases:saveClip", { caseId, key: scene.key, storageId, audioStorageId, frameStorageId, regions });
-  }
+  await cacheFrame(scene, asset);
   results.push(asset);
   const row = { key: scene.key, seconds: +((performance.now() - start) / 1000).toFixed(3), generatedSeconds: +((completedAt - start) / 1000).toFixed(3), bytes: video.length, url: asset.url };
   timing.push(row);
@@ -148,7 +184,14 @@ const opening = plan.clips.find((clip) => clip.key === "opening");
 if (opening?.frameUrl) reference = await dataImage(opening.frameUrl);
 await render(plan.scenes[0], 0);
 for (let i = 1; i < plan.scenes.length; i += instances.length) {
-  await Promise.all(plan.scenes.slice(i, i + instances.length).map((scene, offset) => render(scene, i + offset)));
+  const scenes = plan.scenes.slice(i, i + instances.length);
+  const completed = await Promise.allSettled(scenes.map((scene, offset) => render(scene, i + offset)));
+  for (const [offset, result] of completed.entries()) {
+    if (result.status === "rejected") {
+      console.log(JSON.stringify({ phase: "retry", key: scenes[offset].key, reason: result.reason.message }));
+      await render(scenes[offset], i + offset + 1);
+    }
+  }
 }
 await convex("cases:publish", { caseId });
 console.log(JSON.stringify({ caseId, status: "published", clips: results.length }));

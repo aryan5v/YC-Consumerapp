@@ -123,4 +123,30 @@ describe("the fixed daily case", () => {
     expect(view.case?.movesLeft).toBe(4);
     await expect(t.mutation(api.runs.choose, { runId, optionId: "keys", expectedBeatId: view.current.beatId, deviceToken: token })).rejects.toThrow("already inspected");
   });
+
+  test("publishing a case keeps old-shape runs readable while a new start enters the case", async () => {
+    const { t, caseId } = await readyCase();
+    const userId = await t.mutation(api.session.signInAnonymously, { deviceToken: token });
+    const oldRunId = await t.run(async (ctx) => {
+      const bundle = await ctx.db.get(caseId);
+      const runId = await ctx.db.insert("runs", {
+        userId, episodeId: bundle!.episodeId, status: "active", path: [], optionPath: [], beatsSeen: 0,
+        state: { items: [], trust: 0, clues: [], beats_left: 7 }, startedAt: Date.now(),
+      });
+      const beatId = await ctx.db.insert("beats", {
+        runId, depth: 0, status: "ready", clipPrompt: "the old scene", directorAttempts: 0, createdAt: Date.now(),
+        stop: { kind: "choice", options: [{ id: "a", label: "the mailbox" }] },
+      });
+      await ctx.db.patch(runId, { currentBeatId: beatId });
+      return runId;
+    });
+    const before = await t.query(api.runs.view, { runId: oldRunId, deviceToken: token });
+    expect(before.case).toBeUndefined();
+    expect(before.stop?.kind === "choice" && before.stop.options[0].actions[0].id).toBe("a1");
+    const caseRunId = await t.mutation(api.runs.startToday, { deviceToken: token });
+    expect(caseRunId).not.toBe(oldRunId);
+    expect((await t.query(api.runs.view, { runId: caseRunId, deviceToken: token })).case?.question).toBe(CASE_ONE.question);
+    const after = await t.query(api.runs.view, { runId: oldRunId, deviceToken: token });
+    expect(after).toEqual(before);
+  });
 });

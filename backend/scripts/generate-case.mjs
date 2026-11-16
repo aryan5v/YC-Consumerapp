@@ -4,7 +4,8 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 
 const exec = promisify(execFile);
-const out = `${process.env.HOME}/.capy/work/case-render`;
+const version = process.env.CASE_VERSION ?? "pier-nine-v1";
+const out = `${process.env.HOME}/.capy/work/case-render-${version}`;
 await mkdir(out, { recursive: true });
 const key = process.env.FASTH3_API_KEY;
 const openai = process.env.OPENAI_API_KEY;
@@ -31,6 +32,20 @@ async function upload(bytes, type) {
   return (await response.json()).storageId;
 }
 
+async function videoBytes(url) {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const response = await request(url, { headers: auth }, 180000);
+      const bytes = Buffer.from(await response.arrayBuffer());
+      if (bytes.length === 0) throw new Error("empty video response");
+      return bytes;
+    } catch (error) {
+      if (attempt === 2) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    }
+  }
+}
+
 async function dataImage(url) {
   const response = await request(url, { headers: { "user-agent": ua } });
   const bytes = Buffer.from(await response.arrayBuffer());
@@ -40,13 +55,14 @@ async function dataImage(url) {
 
 async function compactReference(bytes) {
   await writeFile(`${out}/reference-source`, bytes);
-  await exec("ffmpeg", ["-y", "-i", `${out}/reference-source`, "-vf", "scale=512:-2", "-frames:v", "1", "-q:v", "3", `${out}/reference.jpg`]);
+  await exec("ffmpeg", ["-y", "-i", `${out}/reference-source`, ...(strict ? [] : ["-vf", "scale=512:-2"]), "-frames:v", "1", "-q:v", "3", `${out}/reference.jpg`]);
   const jpeg = await readFile(`${out}/reference.jpg`);
   return `data:image/jpeg;base64,${jpeg.toString("base64")}`;
 }
 
-const caseId = await convex("cases:prepare");
+const caseId = await convex("cases:prepare", { version });
 const plan = await convex("cases:plan", { caseId });
+const strict = plan.version === "pier-nine-v2";
 if (plan.published) {
   console.log(JSON.stringify({ caseId, status: "already published", clips: plan.clips.length }));
   process.exit(0);
@@ -55,12 +71,13 @@ const configured = process.env.FASTH3_URLS ?? (await exec("npx", ["convex", "env
 const instances = configured.split(",").map((url) => url.trim().replace(/\/v1\/?$/, "").replace(/\/+$/, "")).filter(Boolean);
 if (instances.length === 0) throw new Error("FASTH3_URLS is empty");
 let reference = await dataImage(plan.characterSheetUrl);
+let hubFrameUrl = plan.clips.find((clip) => clip.key === "opening")?.frameUrl;
 const results = [...plan.clips];
 const timing = [];
 let lastFrameEnabled = true;
 
 async function lastFrame(url) {
-  if (!lastFrameEnabled || !process.env.LASTFRAME_URL || !process.env.LASTFRAME_API_KEY) return null;
+  if (strict || !lastFrameEnabled || !process.env.LASTFRAME_URL || !process.env.LASTFRAME_API_KEY) return null;
   let endpoint = process.env.LASTFRAME_URL.replace(/\/+$/, "");
   if (!endpoint.endsWith("/gateway/last-frame")) endpoint += "/gateway/last-frame";
   const start = performance.now();
@@ -114,10 +131,15 @@ async function cacheFrame(scene, asset) {
   const regions = scene.key === "solved" || scene.key === "failed" ? {} : await regionsFor(frame);
   await convex("cases:saveClip", {
     caseId, key: scene.key, storageId: asset.storageId, audioStorageId: asset.audioStorageId, frameStorageId, regions,
+    prompt: asset.prompt, seed: asset.seed, inputFrameUrl: asset.inputFrameUrl,
   });
+  if (scene.key === "opening") {
+    const current = await convex("cases:plan", { caseId });
+    hubFrameUrl = current.clips.find((clip) => clip.key === "opening").frameUrl;
+  }
 }
 
-async function render(scene, index) {
+async function render(scene, index, freshAttempt = false) {
   const cached = results.find((asset) => asset.key === scene.key);
   if (cached) {
     if (!cached.frameUrl) {
@@ -130,10 +152,16 @@ async function render(scene, index) {
     return;
   }
   const start = performance.now();
+  const seed = strict ? plan.seed : plan.seed + index * 97;
+  if (strict && scene.key !== "opening" && !hubFrameUrl) throw new Error("the opening frame is not ready");
+  const conditions = strict && scene.key !== "opening" ? [
+    { type: "image", role: "keyframe", frame_index: 0, uri: reference },
+    { type: "image", role: "reference", uri: reference },
+  ] : [{ type: "image", role: "reference", uri: reference }];
   let base = instances[index % instances.length];
   let job;
   let previous;
-  if (existsSync(`${out}/${scene.key}-job.json`)) {
+  if (!freshAttempt && existsSync(`${out}/${scene.key}-job.json`)) {
     previous = JSON.parse(await readFile(`${out}/${scene.key}-job.json`, "utf8"));
   }
   if (previous?.caseId === caseId) {
@@ -143,24 +171,39 @@ async function render(scene, index) {
     const response = await request(`${base}/v1/videos`, {
       method: "POST", headers: { ...auth, "content-type": "application/json" },
       body: JSON.stringify({ model: "FastH3-Omni", task: "ref2va", prompt: scene.prompt,
-        conditions: [{ type: "image", role: "reference", uri: reference }],
-        target: { short_edge: 768, aspect_ratio: plan.aspect, duration_seconds: plan.seconds }, seed: plan.seed + index * 97 }),
+        conditions,
+        target: { short_edge: 768, aspect_ratio: plan.aspect, duration_seconds: plan.seconds }, seed }),
     }, 180000);
     job = await response.json();
   }
   if (!job.id) throw new Error("generation returned no job id");
+  await writeFile(`${out}/${scene.key}-request.json`, JSON.stringify({
+    caseId, seed, prompt: scene.prompt, inputFrameUrl: scene.key === "opening" ? null : hubFrameUrl,
+    conditions: conditions.map((condition) => ({ role: condition.role, frame_index: condition.frame_index ?? null })),
+    sameImage: conditions.length === 2 ? conditions[0].uri === conditions[1].uri : null,
+  }, null, 2));
   await writeFile(`${out}/${scene.key}-job.json`, JSON.stringify({ caseId, base, id: job.id }));
   let done = false;
+  let consecutiveErrors = 0;
   for (let poll = 0; poll < 240; poll += 1) {
     await new Promise((resolve) => setTimeout(resolve, 500));
-    const state = await (await request(`${base}/v1/videos/${job.id}`, { headers: auth }, 30000)).json();
+    let state;
+    try {
+      state = await (await request(`${base}/v1/videos/${job.id}`, { headers: auth }, 30000)).json();
+    } catch (error) {
+      consecutiveErrors += 1;
+      if (consecutiveErrors >= 3 || poll >= 239) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      continue;
+    }
+    consecutiveErrors = 0;
     if (["failed", "cancelled"].includes(state.status)) throw new Error(`generation failed for ${scene.key}`);
     if (state.status === "completed") { done = true; break; }
   }
   if (!done) throw new Error(`generation timed out for ${scene.key}`);
   const completedAt = performance.now();
   const [video, audio] = await Promise.all([
-    request(`${base}/v1/videos/${job.id}/content`, { headers: auth }, 180000).then(async (r) => Buffer.from(await r.arrayBuffer())),
+    videoBytes(`${base}/v1/videos/${job.id}/content`),
     request("https://api.openai.com/v1/audio/speech", {
       method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${openai}` },
       body: JSON.stringify({ model: "gpt-4o-mini-tts", voice: "marin", input: scene.line, response_format: "mp3",
@@ -169,7 +212,8 @@ async function render(scene, index) {
   ]);
   await Promise.all([writeFile(`${out}/${scene.key}.mp4`, video), writeFile(`${out}/${scene.key}.mp3`, audio)]);
   const [storageId, audioStorageId] = await Promise.all([upload(video, "video/mp4"), upload(audio, "audio/mpeg")]);
-  await convex("cases:saveClip", { caseId, key: scene.key, storageId, audioStorageId });
+  await convex("cases:saveClip", { caseId, key: scene.key, storageId, audioStorageId,
+    prompt: scene.prompt, seed, inputFrameUrl: scene.key === "opening" ? undefined : hubFrameUrl });
   const refreshed = await convex("cases:plan", { caseId });
   const asset = refreshed.clips.find((entry) => entry.key === scene.key);
   await cacheFrame(scene, asset);
@@ -189,9 +233,9 @@ for (let i = 1; i < plan.scenes.length; i += instances.length) {
   for (const [offset, result] of completed.entries()) {
     if (result.status === "rejected") {
       console.log(JSON.stringify({ phase: "retry", key: scenes[offset].key, reason: result.reason.message }));
-      await render(scenes[offset], i + offset + 1);
+      await render(scenes[offset], i + offset + 1, true);
     }
   }
 }
-await convex("cases:publish", { caseId });
-console.log(JSON.stringify({ caseId, status: "published", clips: results.length }));
+await convex("cases:publish", { caseId, activate: !strict });
+console.log(JSON.stringify({ caseId, status: strict ? "sealed, not active" : "published", clips: results.length }));

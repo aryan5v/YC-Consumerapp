@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#0E2C36">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>Synqui master</title>
+  <style>
+    :root {
+      --lagoon: #0E2C36;
+      --moonstone: #E8EEF1;
+      --blossom: #FF8E9E;
+      --ink: #0E2C36;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: var(--lagoon);
+      color: var(--moonstone);
+      font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    body {
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      padding:
+        calc(24px + env(safe-area-inset-top))
+        calc(20px + env(safe-area-inset-right))
+        calc(28px + env(safe-area-inset-bottom))
+        calc(20px + env(safe-area-inset-left));
+      overflow: hidden;
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .mark {
+      letter-spacing: 0.28em;
+      font-size: 12px;
+      text-transform: uppercase;
+      opacity: 0.7;
+    }
+    #line {
+      width: min(100%, 28rem);
+      min-height: 4.8em;
+      margin: 0;
+      text-align: center;
+      font-size: 1.15rem;
+      line-height: 1.45;
+      display: -webkit-box;
+      -webkit-line-clamp: 4;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    #error {
+      width: min(100%, 28rem);
+      min-height: 1.4em;
+      margin: 12px 0 0;
+      text-align: center;
+      color: var(--blossom);
+      font-size: 0.85rem;
+      line-height: 1.35;
+    }
+    #talk {
+      width: min(72vw, 240px);
+      height: min(72vw, 240px);
+      border-radius: 50%;
+      border: 3px solid var(--blossom);
+      background: transparent;
+      color: var(--moonstone);
+      font: inherit;
+      font-size: 0.95rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+    #talk:active { background: var(--blossom); color: var(--ink); }
+    #talk[data-live="listening"] {
+      background: var(--blossom);
+      color: var(--ink);
+      box-shadow: 0 0 0 10px rgba(255, 142, 158, 0.18);
+    }
+    #talk:disabled { opacity: 0.55; }
+    .hint {
+      margin: 16px 0 0;
+      font-size: 0.72rem;
+      letter-spacing: 0.04em;
+      opacity: 0.55;
+      text-align: center;
+    }
+    audio { display: none; }
+  </style>
+</head>
+<body data-state="idle">
+  <p class="mark">Synqui</p>
+  <div>
+    <p id="line">Tap to talk to the master.</p>
+    <p id="error" role="alert"></p>
+  </div>
+  <div>
+    <button id="talk" type="button">Tap to talk</button>
+    <p class="hint">Nudges only. Press Solve when ready.</p>
+  </div>
+  <audio id="out" playsinline autoplay></audio>
+  <script>
+    (function () {
+      var CALLS = "https://api.openai.com/v1/realtime/calls";
+      var line = document.getElementById("line");
+      var errorEl = document.getElementById("error");
+      var button = document.getElementById("talk");
+      var audio = document.getElementById("out");
+      var peer = null;
+      var channel = null;
+      var mic = null;
+      var pending = [];
+      var busy = false;
+      var live = false;
+      var buffer = "";
+      var failing = false;
+
+      function setState(state) {
+        document.body.setAttribute("data-state", state);
+      }
+
+      function safe(text) {
+        return String(text || "Something went wrong.")
+          .replace(/ek_[A-Za-z0-9_-]+/g, "[secret]")
+          .replace(/sk-[A-Za-z0-9_-]+/g, "[secret]")
+          .slice(0, 220);
+      }
+
+      function showError(text) {
+        if (failing) return;
+        failing = true;
+        teardown();
+        failing = false;
+        busy = false;
+        errorEl.textContent = safe(text);
+        setState("error");
+        button.disabled = false;
+        button.textContent = "Try again";
+        button.removeAttribute("data-live");
+      }
+
+      function clearError() {
+        errorEl.textContent = "";
+      }
+
+      function setLine(text) {
+        line.textContent = text;
+      }
+
+      function params() {
+        var search = location.search.charAt(0) === "?" ? location.search.slice(1) : location.search;
+        var token = "";
+        var tokenAt = search.indexOf("token=");
+        if (tokenAt !== -1) {
+          var rest = search.slice(tokenAt + 6);
+          var cut = rest.search(/&(?:run|device|question|clues|clue|movesLeft)=/);
+          token = cut === -1 ? rest : rest.slice(0, cut);
+          try { token = decodeURIComponent(token.replace(/\+/g, " ")); } catch (e) {}
+          if (token.indexOf("%3A%2F%2F") !== -1 || token.indexOf("%3a%2f%2f") !== -1) {
+            try { token = decodeURIComponent(token); } catch (e2) {}
+          }
+        }
+        var query = new URLSearchParams(location.search);
+        var clues = [];
+        var rawClues = query.get("clues");
+        if (rawClues) {
+          try {
+            var parsed = JSON.parse(rawClues);
+            if (Array.isArray(parsed)) clues = parsed;
+            else clues = [rawClues];
+          } catch (e3) {
+            clues = rawClues.split("|");
+          }
+        }
+        query.getAll("clue").forEach(function (item) { clues.push(item); });
+        var moves = query.get("movesLeft");
+        return {
+          token: token,
+          run: query.get("run") || "",
+          device: query.get("device") || "",
+          question: query.get("question") || "",
+          clues: clues,
+          movesLeft: moves === null || moves === "" ? null : Number(moves)
+        };
+      }
+
+      function unlock() {
+        audio.setAttribute("playsinline", "true");
+        audio.playsInline = true;
+        if (!audio.src && !audio.srcObject) {
+          audio.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=";
+        }
+        var played = audio.play();
+        if (played && played.catch) played.catch(function () {});
+      }
+
+      function teardown() {
+        live = false;
+        if (channel) {
+          try { channel.close(); } catch (e) {}
+        }
+        channel = null;
+        if (peer) {
+          try { peer.close(); } catch (e2) {}
+        }
+        peer = null;
+        if (mic) {
+          mic.getTracks().forEach(function (track) { track.stop(); });
+        }
+        mic = null;
+        button.removeAttribute("data-live");
+      }
+
+      function sendRaw(payload) {
+        if (!channel || channel.readyState !== "open") {
+          pending.push(payload);
+          return;
+        }
+        channel.send(payload);
+      }
+
+      function flush() {
+        while (pending.length && channel && channel.readyState === "open") {
+          channel.send(pending.shift());
+        }
+      }
+
+      function note(text) {
+        var cleaned = String(text || "").trim();
+        if (!cleaned) return;
+        sendRaw(JSON.stringify({
+          type: "conversation.item.create",
+          item: {
+            type: "message",
+            role: "system",
+            content: [{ type: "input_text", text: cleaned.slice(0, 2000) }]
+          }
+        }));
+      }
+
+      function onEvent(raw) {
+        var event;
+        try { event = JSON.parse(raw); } catch (e) { return; }
+        if (!event || typeof event.type !== "string") return;
+        if (event.type === "error") {
+          var message = event.error && event.error.message ? event.error.message : "The master hit an error.";
+          showError(message);
+          return;
+        }
+        if (event.type === "session.created" || event.type === "session.updated") {
+          setState("live");
+          return;
+        }
+        if (event.type === "response.created") {
+          buffer = "";
+          return;
+        }
+        var deltaType = event.type === "response.output_audio_transcript.delta"
+          || event.type === "response.audio_transcript.delta"
+          || event.type === "response.output_text.delta";
+        if (deltaType) {
+          var piece = typeof event.delta === "string" ? event.delta : "";
+          if (!piece && typeof event.transcript === "string") piece = event.transcript;
+          if (piece) {
+            buffer += piece;
+            setLine(buffer);
+          }
+          return;
+        }
+        var doneType = event.type === "response.output_audio_transcript.done"
+          || event.type === "response.audio_transcript.done"
+          || event.type === "response.output_text.done"
+          || event.type === "response.done";
+        if (doneType) {
+          var transcript = typeof event.transcript === "string" ? event.transcript : buffer;
+          if (transcript && transcript.trim()) setLine(transcript.trim());
+        }
+      }
+
+      function waitIce(connection) {
+        return new Promise(function (resolve) {
+          if (connection.iceGatheringState === "complete") {
+            resolve();
+            return;
+          }
+          var timer = setTimeout(finish, 2500);
+          function finish() {
+            clearTimeout(timer);
+            connection.removeEventListener("icegatheringstatechange", onChange);
+            resolve();
+          }
+          function onChange() {
+            if (connection.iceGatheringState === "complete") finish();
+          }
+          connection.addEventListener("icegatheringstatechange", onChange);
+        });
+      }
+
+      function fetchSecret(input) {
+        var url;
+        try { url = new URL(input.token); } catch (e) {
+          return Promise.reject(new Error("The token URL is not a URL."));
+        }
+        if (url.protocol !== "https:" && url.protocol !== "http:") {
+          return Promise.reject(new Error("The token URL must be http or https."));
+        }
+        var controller = typeof AbortController === "function" ? new AbortController() : null;
+        var timer = controller ? setTimeout(function () { controller.abort(); }, 15000) : null;
+        return fetch(url.toString(), {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          credentials: "omit",
+          cache: "no-store",
+          body: JSON.stringify({
+            run: input.run,
+            device: input.device,
+            question: input.question,
+            clues: input.clues,
+            movesLeft: input.movesLeft
+          }),
+          signal: controller ? controller.signal : undefined
+        }).then(function (res) {
+          if (timer) clearTimeout(timer);
+          return res.text().then(function (text) {
+            var data = null;
+            try { data = JSON.parse(text); } catch (e2) {}
+            if (!res.ok) {
+              var err = data && typeof data.error === "string" ? data.error : "Token request failed (" + res.status + ").";
+              throw new Error(err);
+            }
+            if (!data || typeof data.value !== "string" || data.value.length === 0) {
+              throw new Error("The token response had no client secret.");
+            }
+            return data.value;
+          });
+        }, function () {
+          if (timer) clearTimeout(timer);
+          throw new Error("Could not reach the token URL.");
+        });
+      }
+
+      function openCall(secret, stream) {
+        var connection = new RTCPeerConnection();
+        peer = connection;
+        connection.ontrack = function (event) {
+          var remote = event.streams && event.streams[0];
+          if (!remote) return;
+          audio.removeAttribute("src");
+          audio.srcObject = remote;
+          var played = audio.play();
+          if (played && played.catch) played.catch(function () {});
+        };
+        connection.onconnectionstatechange = function () {
+          if (connection.connectionState === "connected") {
+            document.body.setAttribute("data-link", "connected");
+          }
+          if (connection.connectionState === "failed") {
+            showError("The voice connection failed.");
+          }
+        };
+        stream.getTracks().forEach(function (track) { connection.addTrack(track, stream); });
+        var dc = connection.createDataChannel("oai-events");
+        channel = dc;
+        dc.onopen = function () { flush(); };
+        dc.onmessage = function (event) { onEvent(event.data); };
+        return connection.createOffer().then(function (offer) {
+          return connection.setLocalDescription(offer);
+        }).then(function () {
+          return waitIce(connection);
+        }).then(function () {
+          var sdp = connection.localDescription && connection.localDescription.sdp;
+          if (!sdp) throw new Error("Could not build a call offer.");
+          return fetch(CALLS, {
+            method: "POST",
+            body: sdp,
+            headers: {
+              Authorization: "Bearer " + secret,
+              "Content-Type": "application/sdp"
+            }
+          });
+        }).then(function (res) {
+          return res.text().then(function (text) {
+            if (!res.ok) throw new Error("Could not open the voice session (" + res.status + ").");
+            var answer = text.indexOf("v=0") !== -1 ? text : null;
+            if (!answer) {
+              try {
+                var parsed = JSON.parse(text);
+                if (parsed && typeof parsed.sdp === "string") answer = parsed.sdp;
+              } catch (e) {}
+            }
+            if (!answer) throw new Error("The voice session returned no answer.");
+            return connection.setRemoteDescription({ type: "answer", sdp: answer });
+          });
+        });
+      }
+
+      function micError(err) {
+        var name = err && err.name;
+        if (name === "NotAllowedError" || name === "SecurityError") {
+          return "Microphone is blocked. Allow the mic and tap again.";
+        }
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          return "Microphone needs HTTPS.";
+        }
+        return "Could not open the microphone.";
+      }
+
+      function connect() {
+        if (busy) return;
+        if (live) {
+          var track = mic && mic.getAudioTracks()[0];
+          if (!track) return;
+          track.enabled = !track.enabled;
+          button.textContent = track.enabled ? "Listening" : "Tap to talk";
+          button.setAttribute("data-live", track.enabled ? "listening" : "muted");
+          setLine(track.enabled ? "Listening." : "Muted. Tap to talk.");
+          return;
+        }
+        var input = params();
+        if (!input.token) {
+          showError("Missing the token URL. Open this page with ?token= and the mint URL.");
+          return;
+        }
+        busy = true;
+        clearError();
+        setState("connecting");
+        setLine("Connecting.");
+        button.disabled = true;
+        button.textContent = "Connecting";
+        unlock();
+        var micPromise = navigator.mediaDevices && navigator.mediaDevices.getUserMedia
+          ? navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true }, video: false })
+          : Promise.reject(new Error("Microphone needs HTTPS."));
+        Promise.allSettled([fetchSecret(input), micPromise]).then(function (results) {
+          var secretResult = results[0];
+          var micResult = results[1];
+          if (secretResult.status === "rejected") {
+            if (micResult.status === "fulfilled") {
+              micResult.value.getTracks().forEach(function (track) { track.stop(); });
+            }
+            throw secretResult.reason;
+          }
+          if (micResult.status === "rejected") throw new Error(micError(micResult.reason));
+          mic = micResult.value;
+          return openCall(secretResult.value, mic);
+        }).then(function () {
+          live = true;
+          busy = false;
+          button.disabled = false;
+          button.textContent = "Listening";
+          button.setAttribute("data-live", "listening");
+          setState("live");
+          setLine("The master is listening.");
+          flush();
+        }).catch(function (err) {
+          showError(err && err.message ? err.message : "Could not start the master.");
+          setLine("Tap to talk to the master.");
+        });
+      }
+
+      window.addEventListener("message", function (event) {
+        var data = event.data;
+        if (typeof data === "string") {
+          try { data = JSON.parse(data); } catch (e) { return; }
+        }
+        if (!data || data.type !== "context" || typeof data.text !== "string") return;
+        note(data.text);
+      });
+
+      button.addEventListener("click", function (event) {
+        event.preventDefault();
+        connect();
+      });
+    })();
+  </script>
+</body>
+</html>

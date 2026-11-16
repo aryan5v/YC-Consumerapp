@@ -70,7 +70,7 @@ function useTarget(index: number, picked: string | null, id: string) {
     pulse,
     chosen,
     pop,
-    opacity: Animated.multiply(appear, fade),
+    opacity: fade,
   };
 }
 

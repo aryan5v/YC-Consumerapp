@@ -21,6 +21,7 @@ const api = {
   startToday: makeFunctionReference<"mutation", DeviceArgs, string>("runs:startToday"),
   view: makeFunctionReference<"query", DeviceArgs & { runId: string }, WireRunView>("runs:view"),
   choose: makeFunctionReference<"mutation", RunArgs & { optionId: string; actionId?: string }, null>("runs:choose"),
+  solve: makeFunctionReference<"mutation", RunArgs & { answerId: string }, { solved: boolean }>("runs:solve"),
   answer: makeFunctionReference<"mutation", RunArgs & { answer: string }, { correct: boolean }>("runs:answer"),
   speakUploadUrl: makeFunctionReference<"mutation", RunArgs, string>("runs:speakUploadUrl"),
   speak: makeFunctionReference<"action", RunArgs & { audioStorageId: string }, SpeakResult>("runs:speak"),
@@ -82,6 +83,9 @@ export function createConvexProvider(url: string): StoryProvider {
         expectedBeatId,
         deviceToken: await getDeviceToken(),
       });
+    },
+    solve: async (runId, answerId, expectedBeatId) => {
+      await client.mutation(api.solve, { runId, answerId, expectedBeatId, deviceToken: await getDeviceToken() });
     },
     answer: async (runId, answer, expectedBeatId) => client.mutation(api.answer, { runId, answer, expectedBeatId, deviceToken: await getDeviceToken() }),
     speak: async (runId, recordingUri, expectedBeatId) => {

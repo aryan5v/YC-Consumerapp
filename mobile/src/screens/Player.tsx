@@ -545,8 +545,7 @@ export function Player({
           </View>
         </Presence>
 
-        <Presence show={choice !== null} duration={200}>
-          {choice && current && (
+        {choice && current && (
             <ChoiceOverlay
               key={current.beatId}
               options={choice.options}
@@ -558,8 +557,7 @@ export function Player({
               screenWidth={width}
               safe={{ top: insets.top + (current.case ? CASE_TOP_CLEARANCE : TARGET_TOP_CLEARANCE), bottom: height - insets.bottom - CAPTION_CLEARANCE - captionLift }}
             />
-          )}
-        </Presence>
+        )}
 
         <Presence show={choice !== null && micOn && (picked === null || voiceBusy)} duration={200}>
           <View pointerEvents="box-none" style={[styles.mic, { bottom: insets.bottom + 12 }]}>

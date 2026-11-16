@@ -24,9 +24,11 @@ const api = {
   solve: makeFunctionReference<"mutation", RunArgs & { answerId?: string; answerText?: string }, { solved: boolean }>("runs:solve"),
   dreamStart: makeFunctionReference<"mutation", DeviceArgs & { prompt: string }, { dreamId: string }>("dream:start"),
   dreamWatch: makeFunctionReference<"query", DeviceArgs & { dreamId: string }, DreamView>("dream:watch"),
+  dreamContinue: makeFunctionReference<"mutation", DeviceArgs & { dreamId: string; optionId: string }, { dreamId: string }>("dream:continue"),
   answer: makeFunctionReference<"mutation", RunArgs & { answer: string }, { correct: boolean }>("runs:answer"),
   speakUploadUrl: makeFunctionReference<"mutation", RunArgs, string>("runs:speakUploadUrl"),
   speak: makeFunctionReference<"action", RunArgs & { audioStorageId: string }, SpeakResult>("runs:speak"),
+  signIn: makeFunctionReference<"mutation", DeviceArgs, string>("session:signInAnonymously"),
   interactUploadUrl: makeFunctionReference<"mutation", DeviceArgs & { thingId: string }, string>("world:interactUploadUrl"),
   interact: makeFunctionReference<
     "mutation",
@@ -93,6 +95,7 @@ export function createConvexProvider(url: string): StoryProvider {
       await client.mutation(api.solve, { runId, answerText, expectedBeatId, deviceToken: await getDeviceToken() });
     },
     dreamStart: async (prompt) => (await client.mutation(api.dreamStart, { prompt, deviceToken: await getDeviceToken() })).dreamId,
+    dreamContinue: async (dreamId, optionId) => (await client.mutation(api.dreamContinue, { dreamId, optionId, deviceToken: await getDeviceToken() })).dreamId,
     useDream: (dreamId) => {
       const deviceToken = useDeviceToken();
       return useQuery(api.dreamWatch, dreamId && deviceToken ? { dreamId, deviceToken } : "skip");
@@ -114,6 +117,7 @@ export function createConvexProvider(url: string): StoryProvider {
     ),
     interact: async (input) => {
       const deviceToken = await getDeviceToken();
+      await client.mutation(api.signIn, { deviceToken }).catch(() => {});
       const uploadUrl = await client.mutation(api.interactUploadUrl, { deviceToken, thingId: input.thingId });
       const shot = await (await fetch(input.screenshot)).blob();
       const upload = await fetch(uploadUrl, { method: "POST", headers: { "Content-Type": "image/jpeg" }, body: shot });

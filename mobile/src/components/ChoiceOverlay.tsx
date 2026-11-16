@@ -196,7 +196,7 @@ function Silhouette({ option, index, picked, preview, onPick, video, screenWidth
         <Svg width={video.w} height={video.h} pointerEvents="box-none">{defs}
           {d ? <>
             
-            <Path d={d} fill="none" stroke={glow.silhouette} strokeWidth={2} strokeOpacity={0.5} filter={`url(#${id}blur)`} />
+            <Path d={d} fill="none" stroke={glow.silhouette} strokeWidth={7} strokeOpacity={0.45} filter={`url(#${id}blur)`} />
             <Path d={d} fill="transparent" stroke={glow.silhouette} strokeWidth={glow.silhouetteWidth} onPress={press} disabled={picked !== null} />
           </> : <SvgImage href={{ uri: region.maskUrl! }} width={video.w} height={video.h} preserveAspectRatio="none" filter={`url(#${id}edge)`} />}
         </Svg>

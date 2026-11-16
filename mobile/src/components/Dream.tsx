@@ -30,10 +30,22 @@ class Guard extends Component<{ children: ReactNode; onError: () => void }, { fa
 }
 
 function Clip({ url }: { url: string }) {
-  const player = useVideoPlayer(videoSource(url), (p) => {
+  const player = useVideoPlayer(null, (p) => {
     p.loop = true;
-    p.play();
   });
+  useEffect(() => {
+    let alive = true;
+    fetch(url, { method: "GET", headers: { Range: "bytes=0-1" } })
+      .then((r) => r.url || url)
+      .catch(() => url)
+      .then((resolved) => {
+        if (!alive) return;
+        player.replaceAsync(videoSource(resolved)).then(() => player.play()).catch(() => {});
+      });
+    return () => {
+      alive = false;
+    };
+  }, [url, player]);
   return <VideoView player={player} style={StyleSheet.absoluteFill} contentFit="cover" nativeControls={false} />;
 }
 

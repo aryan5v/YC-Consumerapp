@@ -47,7 +47,7 @@ export const gradients = {
 export const glow = {
   silhouette: moonstone,
   gradientEnd: lagoon,
-  silhouetteWidth: 1.5,
+  silhouetteWidth: 2,
   silhouetteBlur: 4,
   silhouetteFill: 0.45,
   color: accent,

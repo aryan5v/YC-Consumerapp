@@ -113,6 +113,40 @@ export async function trayGenerate(request: TrayGenerateRequest): Promise<{ jobI
   return { jobId: `${jobId}@${baseUrl}` };
 }
 
+
+export async function trayGenerateDream(request: { prompt: string; seed: number; aspect: string; seconds: number }): Promise<{ jobId: string }> {
+  const urls = trayUrls();
+  const baseUrl = urls.find((url) => url.includes("fasth3-v2")) ?? urls[0];
+  if (baseUrl === undefined) throw new Error("FASTH3_URLS is not set");
+  if (baseUrl.includes("fasth3-v2")) {
+    const res = await fetch(`${baseUrl}/v1/videos`, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${apiKey() ?? ""}`, "user-agent": "Mozilla/5.0 Synqui/1.0" },
+      body: JSON.stringify({
+        model: "FastH3-V2",
+        task: "t2va",
+        prompt: request.prompt,
+        conditions: [],
+        target: { short_edge: 768, aspect_ratio: request.aspect, duration_seconds: request.seconds },
+        seed: request.seed,
+      }),
+      signal: AbortSignal.timeout(60000),
+    });
+    const text = await res.text();
+    if (!res.ok) throw new Error(`v2 submit failed: ${res.status} ${text.slice(0, 180)}`);
+    const raw = JSON.parse(text) as { id?: string };
+    if (!raw.id) throw new Error("v2 submit returned no job id");
+    return { jobId: `${raw.id}@${baseUrl}` };
+  }
+  return await trayGenerate({
+    ...request,
+    continuityFrameUrl: null,
+    continuityVideoUrl: null,
+    characterSheetUrl: null,
+    styleImageUrl: null,
+  });
+}
+
 export async function trayGetJob(jobId: string): Promise<TrayJobState> {
   if (trayMode() === "mock") {
     return { status: "ready", mp4Url: stockClipForJob(jobId), lastFrameUrl: null };

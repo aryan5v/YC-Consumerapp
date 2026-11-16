@@ -5,7 +5,7 @@ import { Id } from "./_generated/dataModel";
 import { ensureDeviceUser, requireDeviceUser } from "./lib/session";
 import { sanitizeCustomPrompt } from "./lib/custom";
 import { buildH3Prompt, PROFILE } from "./lib/h3";
-import { trayGenerate, trayGetJob, trayDownload, trayJobReference } from "./lib/tray";
+import { trayGenerateDream, trayGetJob, trayDownload, trayJobReference } from "./lib/tray";
 import { contentUrl } from "./lib/trayUniserve";
 import { characterSheetUrl } from "./lib/config";
 import { sleep } from "./lib/env";
@@ -103,15 +103,8 @@ export const generate = internalAction({
       const h3Prompt = buildDreamPrompt(dream.prompt);
       const promptMs = Date.now() - promptStarted;
       await ctx.runMutation(internal.dream.update, { dreamId, status: "generating", h3Prompt, promptMs });
-      const request = {
-        prompt: h3Prompt, seed: 0, aspect: "9:16", seconds: 5,
-        continuityFrameUrl: null, continuityVideoUrl: null,
-        characterSheetUrl: process.env.DREAM_REFERENCE_URL ?? characterSheetUrl(), styleImageUrl: null,
-      };
       const submitStarted = Date.now();
-      let job;
-      try { job = await trayGenerate(request); }
-      catch { job = await trayGenerate({ ...request, seed: 1 }); }
+      const job = await trayGenerateDream({ prompt: h3Prompt, seed: 0, aspect: "9:16", seconds: 5 });
       const submitMs = Date.now() - submitStarted;
       await ctx.runMutation(internal.dream.update, { dreamId, status: "generating", jobId: job.jobId, submitMs });
       const pollStarted = Date.now();

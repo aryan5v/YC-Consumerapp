@@ -4,35 +4,55 @@ import { internal } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
 import { ensureDeviceUser, requireDeviceUser } from "./lib/session";
 import { sanitizeCustomPrompt } from "./lib/custom";
-import { buildH3Prompt, PROFILE } from "./lib/h3";
+import { PROFILE } from "./lib/h3";
 import { trayGenerateDream, trayGetJob, trayDownload, trayJobReference } from "./lib/tray";
 import { contentUrl } from "./lib/trayUniserve";
 import { characterSheetUrl } from "./lib/config";
 import { sleep } from "./lib/env";
 
 
+function sceneLight(prompt: string): string {
+  const text = prompt.toLowerCase();
+  if (/\b(lantern|candle|torch|bonfire|firelight|festival)\b/.test(text)) {
+    return "warm lantern and firelight from inside the named place, with no daylight sun and no indoor loft";
+  }
+  if (/\b(night|midnight|moon|stars)\b/.test(text)) {
+    return "the cool low light the named night scene itself has, with no daylight sun";
+  }
+  if (/\b(dusk|twilight|evening|sunset)\b/.test(text)) {
+    return "the low warm light of that evening, not noon sun and not a workshop interior";
+  }
+  if (/\b(mist|fog|rain|overcast|storm)\b/.test(text)) {
+    return "soft diffuse light through the mist or cloud the player named, with no hard sunlight and no indoor loft";
+  }
+  if (/\b(sun|sunlit|daylight|noon)\b/.test(text)) {
+    return "natural sunlight from camera left, with soft daylight filling the shadows";
+  }
+  return "only the light that belongs to the place the player named, not a default sunlit workshop";
+}
+
 export function buildDreamPrompt(prompt: string): string {
-  const night = /\b(night|midnight|moon|stars)\b/i.test(prompt);
-  return buildH3Prompt({
-    mode: "t2va",
-    shotSize: "wide shot",
-    cameraMove: "Push In",
-    cameraNote: "with small amplitude at slow speed",
-    light: night
-      ? "a warm practical lamp from camera left against cool night light"
-      : "natural sunlight from camera left, with soft daylight filling the shadows",
-    materials: "worn wood, brushed metal, natural fabric and real stone where present",
-    preserved: null,
-    beats: [
-      prompt,
-      "The protagonist slowly turns their head toward the scene's focal object, keeping both hands relaxed at their sides",
-      "The scene's small physical movement continues naturally while fixed objects keep their positions",
-      "The movement slows and the protagonist comes to rest without a cut",
-    ],
-    ambience: "Soft environmental tone and quiet physical sounds from the scene; no dialogue and no music",
-    ending: "The final second is held in a steady wide framing with the protagonist and main objects clearly separated and none cut off by the frame edge",
-    cast: PROFILE.cast,
-  });
+  const scene = prompt.trim().replace(/\s+/g, " ");
+  const light = sceneLight(scene);
+  const description = [
+    `[Shot 1] Live-action, cinematic, a wide vertical portrait shot of exactly this place and event, and of no other place: ${scene}.`,
+    `The first thing visible is ${scene}.`,
+    "Do not substitute a different place, a default interior, or any earlier example.",
+    `The scene is lit by ${light}.`,
+    `Surfaces, weather and objects are the ones ${scene} would actually have, not worn workshop wood unless the player named a workshop.`,
+    `If a person is in frame, ${PROFILE.cast}, standing inside that named place.`,
+    `The camera pushes in with small amplitude at slow speed while the place stays recognisably ${scene}.`,
+    "Small physical movement continues, and the place, weather and named objects keep their positions.",
+    `The final second holds a steady wide framing of ${scene}, with its main objects clearly separated and none cut off by the frame edge.`,
+    PROFILE.never,
+  ].join(" ");
+  return [
+    `integrated_multimodal_description: ${description}`,
+    "",
+    `overall_soundscape: The sounds that belong to ${scene}; quiet physical sounds, no dialogue and no music.`,
+    "",
+    "non_diegetic_music: N/A",
+  ].join("\n");
 }
 
 export const start = mutation({

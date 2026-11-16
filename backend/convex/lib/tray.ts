@@ -73,6 +73,10 @@ function apiKey(): string | null {
   return envFlag("FASTH3_API_KEY");
 }
 
+function modelFor(baseUrl: string): string {
+  return baseUrl.includes("fasth3-v2") ? "FastH3-V2" : uniserveModel();
+}
+
 export function detectConfigured(): boolean {
   return envFlag("DETECT_URL") !== null;
 }
@@ -94,7 +98,7 @@ export async function trayGenerate(request: TrayGenerateRequest): Promise<{ jobI
   const uniserve: UniserveRequest = {
     baseUrl,
     apiKey: apiKey(),
-    model: uniserveModel(),
+    model: modelFor(baseUrl),
     task: uniserveTask(),
     prompt: legend === "" ? request.prompt : `${request.prompt}\n\n${legend}`,
     seed: request.seed,

@@ -56,6 +56,10 @@ export default defineSchema({
     clipUrl: v.optional(v.string()),
     storageId: v.optional(v.id("_storage")),
     error: v.optional(v.string()),
+    promptMs: v.optional(v.number()),
+    submitMs: v.optional(v.number()),
+    pollMs: v.optional(v.number()),
+    copyMs: v.optional(v.number()),
   }).index("by_user_created", ["userId", "createdAt"]),
 
   worldClipCaches: defineTable({

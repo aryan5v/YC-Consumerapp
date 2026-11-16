@@ -4,13 +4,36 @@ import { internal } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
 import { ensureDeviceUser, requireDeviceUser } from "./lib/session";
 import { sanitizeCustomPrompt } from "./lib/custom";
-import { deepseekJSON, parseJSONObject } from "./lib/deepseek";
-import { validateBeat } from "./lib/director";
-import { PROFILE } from "./lib/h3";
+import { buildH3Prompt, PROFILE } from "./lib/h3";
 import { trayGenerate, trayGetJob, trayDownload, trayJobReference } from "./lib/tray";
 import { contentUrl } from "./lib/trayUniserve";
 import { characterSheetUrl } from "./lib/config";
 import { sleep } from "./lib/env";
+
+
+export function buildDreamPrompt(prompt: string): string {
+  const night = /\b(night|midnight|moon|stars)\b/i.test(prompt);
+  return buildH3Prompt({
+    mode: "t2va",
+    shotSize: "wide shot",
+    cameraMove: "Push In",
+    cameraNote: "with small amplitude at slow speed",
+    light: night
+      ? "a warm practical lamp from camera left against cool night light"
+      : "natural sunlight from camera left, with soft daylight filling the shadows",
+    materials: "worn wood, brushed metal, natural fabric and real stone where present",
+    preserved: null,
+    beats: [
+      prompt,
+      "The protagonist slowly turns their head toward the scene's focal object, keeping both hands relaxed at their sides",
+      "The scene's small physical movement continues naturally while fixed objects keep their positions",
+      "The movement slows and the protagonist comes to rest without a cut",
+    ],
+    ambience: "Soft environmental tone and quiet physical sounds from the scene; no dialogue and no music",
+    ending: "The final second is held in a steady wide framing with the protagonist and main objects clearly separated and none cut off by the frame edge",
+    cast: PROFILE.cast,
+  });
+}
 
 export const start = mutation({
   args: { deviceToken: v.string(), prompt: v.string() },
@@ -58,6 +81,7 @@ export const update = internalMutation({
     status: v.union(v.literal("writing"), v.literal("generating"), v.literal("ready"), v.literal("failed")),
     h3Prompt: v.optional(v.string()), jobId: v.optional(v.string()), sourceUrl: v.optional(v.string()),
     mediaToken: v.optional(v.string()), clipUrl: v.optional(v.string()), error: v.optional(v.string()),
+    promptMs: v.optional(v.number()), submitMs: v.optional(v.number()), pollMs: v.optional(v.number()),
   },
   returns: v.null(),
   handler: async (ctx, { dreamId, ...fields }) => {
@@ -75,19 +99,24 @@ export const generate = internalAction({
     const dream = await ctx.runQuery(internal.dream.read, { dreamId });
     if (dream === null || dream.status !== "writing") return null;
     try {
-      const raw = await deepseekJSON([
-        { role: "system", content: `Write one five-second live-action cinematic shot from a player's fictional world idea. Fixed cast: ${PROFILE.cast}. No real people, selfies, minors, readable text, logos, violence, sexual content or crowds. One simple physical action, real textures and a named light source with direction. Return JSON only: {"shot":{"mode":"t2va","shotSize":"wide shot","cameraMove":"Push In","cameraNote":"with small amplitude at slow speed","light":"source and direction","materials":"concrete surfaces","beats":["first beat","second beat","third beat","fourth beat"],"ambience":"physical sounds only","ending":"the final second is held in a steady wide framing with objects clearly separated"},"narration":"one short sentence"}. This is a cut, never a continuation. Do not invent extra shots or timestamps.` },
-        { role: "user", content: dream.prompt },
-      ], 1500);
-      const checked = validateBeat(parseJSONObject(raw), { expectedKind: "choice", beatsLeft: 1, beatIndex: 0 });
-      if (!checked.ok) throw new Error("invalid shot");
-      await ctx.runMutation(internal.dream.update, { dreamId, status: "generating", h3Prompt: checked.beat.clip_prompt });
-      const job = await trayGenerate({ prompt: checked.beat.clip_prompt, seed: 0, aspect: "9:16", seconds: 5,
+      const promptStarted = Date.now();
+      const h3Prompt = buildDreamPrompt(dream.prompt);
+      const promptMs = Date.now() - promptStarted;
+      await ctx.runMutation(internal.dream.update, { dreamId, status: "generating", h3Prompt, promptMs });
+      const request = {
+        prompt: h3Prompt, seed: 0, aspect: "9:16", seconds: 5,
         continuityFrameUrl: null, continuityVideoUrl: null,
-        characterSheetUrl: process.env.DREAM_REFERENCE_URL ?? characterSheetUrl(), styleImageUrl: null });
-      await ctx.runMutation(internal.dream.update, { dreamId, status: "generating", jobId: job.jobId });
+        characterSheetUrl: process.env.DREAM_REFERENCE_URL ?? characterSheetUrl(), styleImageUrl: null,
+      };
+      const submitStarted = Date.now();
+      let job;
+      try { job = await trayGenerate(request); }
+      catch { job = await trayGenerate({ ...request, seed: 1 }); }
+      const submitMs = Date.now() - submitStarted;
+      await ctx.runMutation(internal.dream.update, { dreamId, status: "generating", jobId: job.jobId, submitMs });
+      const pollStarted = Date.now();
       let touchedAt = Date.now();
-      for (let poll = 0; poll < 360; poll += 1) {
+      for (let poll = 0; poll < 400; poll += 1) {
         const state = await trayGetJob(job.jobId);
         if (state.status === "failed") throw new Error("video generation failed");
         if (state.status === "ready" && state.mp4Url !== null) {
@@ -97,7 +126,9 @@ export const generate = internalAction({
           const site = process.env.CONVEX_SITE_URL;
           if (!site) throw new Error("media origin is not configured");
           const clipUrl = `${site}/dream/media/${dreamId}/${mediaToken}`;
-          await ctx.runMutation(internal.dream.update, { dreamId, status: "ready", sourceUrl, mediaToken, clipUrl });
+          await ctx.runMutation(internal.dream.update, {
+            dreamId, status: "ready", sourceUrl, mediaToken, clipUrl, pollMs: Date.now() - pollStarted,
+          });
           await ctx.scheduler.runAfter(0, internal.dream.mirror, { dreamId });
           return null;
         }
@@ -105,7 +136,7 @@ export const generate = internalAction({
           await ctx.runMutation(internal.dream.update, { dreamId, status: "generating" });
           touchedAt = Date.now();
         }
-        await sleep(300);
+        await sleep(200);
       }
       throw new Error("video generation timed out");
     } catch {
@@ -116,9 +147,9 @@ export const generate = internalAction({
 });
 
 export const setStored = internalMutation({
-  args: { dreamId: v.id("dreams"), storageId: v.id("_storage") }, returns: v.null(),
-  handler: async (ctx, { dreamId, storageId }) => {
-    if (await ctx.db.get(dreamId) !== null) await ctx.db.patch(dreamId, { storageId });
+  args: { dreamId: v.id("dreams"), storageId: v.id("_storage"), copyMs: v.number() }, returns: v.null(),
+  handler: async (ctx, { dreamId, storageId, copyMs }) => {
+    if (await ctx.db.get(dreamId) !== null) await ctx.db.patch(dreamId, { storageId, copyMs });
     return null;
   },
 });
@@ -129,9 +160,10 @@ export const mirror = internalAction({
     const dream = await ctx.runQuery(internal.dream.read, { dreamId });
     if (dream?.status !== "ready" || dream.sourceUrl === undefined || dream.storageId !== undefined) return null;
     try {
+      const copyStarted = Date.now();
       const video = await trayDownload(dream.sourceUrl);
       const storageId = await ctx.storage.store(new Blob([new Uint8Array(video.bytes)], { type: video.contentType }));
-      await ctx.runMutation(internal.dream.setStored, { dreamId, storageId });
+      await ctx.runMutation(internal.dream.setStored, { dreamId, storageId, copyMs: Date.now() - copyStarted });
     } catch {}
     return null;
   },

@@ -12,12 +12,14 @@ export function CaseHud({
   showQuestion,
   canSolve,
   onSolve,
+  onTalk,
 }: {
   info: CaseInfo;
   top: number;
   showQuestion: boolean;
   canSolve: boolean;
   onSolve: () => void;
+  onTalk?: () => void;
 }) {
   const used = info.movesTotal - info.movesLeft;
   return (
@@ -26,6 +28,13 @@ export function CaseHud({
         <Text accessibilityLabel={`${info.movesLeft} moves left of ${info.movesTotal}`} style={styles.moves}>
           MOVES {info.movesLeft}/{info.movesTotal}
         </Text>
+        {onTalk && (
+          <Glass interactive style={styles.solve}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Talk to the master" onPress={onTalk} style={styles.solveHit}>
+              <Text maxFontSizeMultiplier={1.3} style={styles.solveText}>Ask</Text>
+            </Pressable>
+          </Glass>
+        )}
         {canSolve && (
           <Glass interactive style={styles.solve}>
             <Pressable

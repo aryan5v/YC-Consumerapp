@@ -1,0 +1,263 @@
+import { LinearGradient } from "expo-linear-gradient";
+import * as Haptics from "expo-haptics";
+import { useEffect, useRef, useState } from "react";
+import { Animated, Keyboard, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useReduceMotion } from "../a11y";
+import { useStory, type Ending } from "../data";
+import { colors, ease, fonts, gradients, motion, radius, type } from "../theme";
+import { Ring } from "./Ring";
+
+let phoneAnswered: "saved" | "skipped" | null = null;
+
+function normalize(input: string) {
+  const digits = input.replace(/\D/g, "");
+  if (digits.length < 10 || digits.length > 15) return null;
+  return input.trim().startsWith("+") ? `+${digits}` : digits.length === 10 ? `+1${digits}` : `+${digits}`;
+}
+
+export function EndingCard({
+  ending,
+  streak,
+  onShare,
+  onDone,
+  bottomInset,
+}: {
+  ending: Ending;
+  streak: number;
+  onShare: () => void;
+  onDone: () => void;
+  bottomInset: number;
+}) {
+  const story = useStory();
+  const topInset = useSafeAreaInsets().top;
+  const reduceMotion = useReduceMotion();
+
+  useEffect(() => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+  }, []);
+  const steps = useRef([0, 1, 2, 3, 4].map(() => new Animated.Value(0))).current;
+  const keyboard = useRef(new Animated.Value(0)).current;
+  const [phone, setPhone] = useState("");
+  const [phoneState, setPhoneState] = useState<"ask" | "saving" | "saved" | "skipped">(phoneAnswered ?? "ask");
+  const text = ending.text ?? null;
+  const valid = normalize(phone);
+
+  useEffect(() => {
+    Animated.stagger(
+      140,
+      steps.map((v) => Animated.timing(v, { toValue: 1, duration: motion.slow, easing: ease.out, useNativeDriver: true })),
+    ).start();
+  }, [steps]);
+
+  useEffect(() => {
+    const move = (height: number, duration: number) =>
+      Animated.timing(keyboard, {
+        toValue: height === 0 ? 0 : -Math.max(0, height - bottomInset - 142),
+        duration: duration || 250,
+        easing: ease.out,
+        useNativeDriver: true,
+      }).start();
+    const show = Keyboard.addListener("keyboardWillShow", (e) => move(e.endCoordinates.height, e.duration));
+    const hide = Keyboard.addListener("keyboardWillHide", (e) => move(0, e.duration));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, [keyboard, bottomInset]);
+
+  const rise = (v: Animated.Value) => ({
+    opacity: v,
+    transform: [{ translateY: v.interpolate({ inputRange: [0, 1], outputRange: [reduceMotion ? 0 : 16, 0] }) }],
+  });
+
+  const save = async () => {
+    if (!valid || phoneState !== "ask") return;
+    Keyboard.dismiss();
+    setPhoneState("saving");
+    try {
+      await story.setPhone(valid);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      phoneAnswered = "saved";
+      setPhoneState("saved");
+    } catch {
+      setPhoneState("ask");
+    }
+  };
+
+  const skip = () => {
+    Keyboard.dismiss();
+    phoneAnswered = "skipped";
+    setPhoneState("skipped");
+  };
+
+  return (
+    <View style={StyleSheet.absoluteFill}>
+      <LinearGradient
+        colors={gradients.ending.colors}
+        locations={gradients.ending.locations}
+        style={StyleSheet.absoluteFill}
+      />
+      <Pressable accessible={false} style={StyleSheet.absoluteFill} onPress={Keyboard.dismiss} />
+      <Animated.View pointerEvents="box-none" style={[styles.body, { transform: [{ translateY: keyboard }] }]}>
+        <ScrollView
+          bounces={false}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={[styles.content, { paddingTop: topInset + 24, paddingBottom: bottomInset + 14 }]}
+        >
+        <Animated.View style={rise(steps[0])}>
+          <Text style={styles.kicker}>
+            {ending.result
+              ? `Case 1 · ${ending.result.solved ? `solved in ${ending.result.movesUsed} of ${ending.result.movesTotal}` : "not solved"}`
+              : "Your ending"}
+          </Text>
+          <Text style={styles.title}>{ending.title}</Text>
+          <Text style={styles.summary}>{ending.summary}</Text>
+        </Animated.View>
+
+        <Animated.View style={[styles.path, rise(steps[1])]}>
+          {ending.path.map((step, i) => (
+            <View key={i} style={styles.step}>
+              <View style={styles.rail}>
+                <View style={[styles.line, i === 0 && { opacity: 0 }]} />
+                <View style={styles.node} />
+                <View style={[styles.line, i === ending.path.length - 1 && { opacity: 0 }]} />
+              </View>
+              <Text style={styles.stepText}>
+                {step}
+              </Text>
+            </View>
+          ))}
+        </Animated.View>
+
+        <Animated.View style={[styles.streak, rise(steps[2])]}>
+          <Text maxFontSizeMultiplier={1.4} style={styles.streakNumber}>{streak}</Text>
+          <Text style={styles.streakLabel}>day streak{"\n"}A new story tomorrow</Text>
+        </Animated.View>
+
+        {text && phoneState !== "skipped" && (
+          <Animated.View style={[styles.text, rise(steps[3])]}>
+            {phoneState === "saved" ? (
+              <>
+                <View style={styles.bubble}>
+                  <Text style={styles.bubbleText}>{text.character} has your number.</Text>
+                </View>
+                {text.number ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    hitSlop={8}
+                    onPress={() => Linking.openURL(`sms:${text.number}&body=${encodeURIComponent(text.prompt)}`).catch(() => {})}
+                    style={({ pressed }) => [styles.textFirst, pressed && { opacity: 0.6 }]}
+                  >
+                    <View style={styles.textFirstUnderline}>
+                      <Text maxFontSizeMultiplier={1.4} style={styles.textFirstLabel}>Text first</Text>
+                    </View>
+                  </Pressable>
+                ) : (
+                  <Text style={styles.hint}>Keep your phone close.</Text>
+                )}
+              </>
+            ) : (
+              <>
+                <View style={styles.bubble}>
+                  <Text style={styles.bubbleText}>{text.character} isn{"\u2019"}t finished with you.</Text>
+                </View>
+                <Text style={styles.hint}>Someone from the story may text you. What you say shapes tomorrow.</Text>
+                <View style={styles.phoneRow}>
+                  <TextInput
+                    value={phone}
+                    onChangeText={setPhone}
+                    editable={phoneState === "ask"}
+                    keyboardType="phone-pad"
+                    textContentType="telephoneNumber"
+                    autoComplete="tel"
+                    keyboardAppearance="dark"
+                    maxLength={20}
+                    placeholder="Your phone number"
+                    placeholderTextColor={colors.faint}
+                    selectionColor={colors.text}
+                    style={styles.phone}
+                  />
+                  {valid || phoneState === "saving" ? (
+                    <Pressable accessibilityRole="button" accessibilityLabel="Save number" onPress={save} style={({ pressed }) => [styles.save, pressed && { opacity: 0.8 }]}>
+                      {phoneState === "saving" ? <Ring size={18} color={colors.bg} /> : <Text maxFontSizeMultiplier={1.4} style={styles.saveText}>Save</Text>}
+                    </Pressable>
+                  ) : (
+                    <Pressable accessibilityRole="button" accessibilityLabel="Not now" hitSlop={8} onPress={skip} style={({ pressed }) => [styles.skip, pressed && { opacity: 0.6 }]}>
+                      <Text maxFontSizeMultiplier={1.4} style={styles.skipText}>Not now</Text>
+                    </Pressable>
+                  )}
+                </View>
+              </>
+            )}
+          </Animated.View>
+        )}
+
+        <Animated.View style={rise(steps[4])}>
+          <Pressable accessibilityRole="button" onPress={onShare} style={({ pressed }) => [styles.share, pressed && { opacity: 0.8 }]}>
+            <Text maxFontSizeMultiplier={1.4} style={styles.shareText}>Share your path</Text>
+          </Pressable>
+          <Pressable accessibilityRole="button" onPress={onDone} hitSlop={8} style={({ pressed }) => [styles.done, pressed && { opacity: 0.6 }]}>
+            <Text maxFontSizeMultiplier={1.4} style={styles.doneText}>Done</Text>
+          </Pressable>
+        </Animated.View>
+        </ScrollView>
+      </Animated.View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  body: { flex: 1 },
+  content: { flexGrow: 1, justifyContent: "flex-end", paddingHorizontal: 26 },
+  kicker: { fontFamily: fonts.uiSemibold, fontSize: type.micro, letterSpacing: type.labelTracking, textTransform: "uppercase", color: colors.dim, marginBottom: 10 },
+  title: { fontFamily: fonts.display, fontSize: type.endTitle, lineHeight: 50, color: colors.text },
+  summary: { fontFamily: fonts.ui, fontSize: type.body, lineHeight: 24, color: colors.dim, marginTop: 8 },
+  path: { marginTop: 20 },
+  step: { flexDirection: "row", alignItems: "center", minHeight: 28 },
+  rail: { width: 22, alignItems: "center", alignSelf: "stretch" },
+  line: { flex: 1, width: StyleSheet.hairlineWidth * 2, backgroundColor: colors.faint },
+  node: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.text },
+  stepText: { flex: 1, marginLeft: 10, fontFamily: fonts.uiMedium, fontSize: type.label, color: colors.text },
+  streak: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 16,
+    marginTop: 18,
+    paddingTop: 16,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.hairline,
+  },
+  streakNumber: { fontFamily: fonts.display, fontSize: type.digits, lineHeight: 48, color: colors.text },
+  streakLabel: { fontFamily: fonts.uiMedium, fontSize: type.small, lineHeight: 20, color: colors.dim },
+  text: { marginTop: 16, paddingTop: 16, borderTopWidth: StyleSheet.hairlineWidth, borderColor: colors.hairline },
+  bubble: { alignSelf: "flex-start", maxWidth: "88%", paddingHorizontal: 14, paddingVertical: 10, borderRadius: radius.bubble, backgroundColor: colors.bubble },
+  bubbleText: { fontFamily: fonts.ui, fontSize: type.body, lineHeight: 22, color: colors.bubbleInk },
+  teaser: { fontFamily: fonts.display, fontSize: type.teaser, lineHeight: 27, color: colors.text },
+  hint: { fontFamily: fonts.ui, fontSize: type.small, lineHeight: 20, color: colors.dim, marginTop: 4 },
+  phoneRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 12 },
+  phone: {
+    flex: 1,
+    height: 50,
+    borderRadius: radius.key,
+    paddingHorizontal: 16,
+    backgroundColor: colors.wash,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.hairline,
+    fontFamily: fonts.uiMedium,
+    fontSize: type.body,
+    color: colors.text,
+  },
+  save: { minHeight: 50, minWidth: 84, borderRadius: radius.button, paddingHorizontal: 20, alignItems: "center", justifyContent: "center", backgroundColor: colors.text },
+  saveText: { fontFamily: fonts.uiSemibold, fontSize: type.label, color: colors.bg },
+  skip: { minHeight: 50, minWidth: 84, alignItems: "center", justifyContent: "center" },
+  skipText: { fontFamily: fonts.uiMedium, fontSize: type.label, color: colors.dim },
+  textFirst: { alignSelf: "flex-start", minHeight: 44, justifyContent: "center", marginTop: 4 },
+  textFirstUnderline: { paddingBottom: 2, borderBottomWidth: 1, borderColor: colors.dim },
+  textFirstLabel: { fontFamily: fonts.uiSemibold, fontSize: type.label, color: colors.text },
+  share: { minHeight: 56, borderRadius: radius.button, alignItems: "center", justifyContent: "center", backgroundColor: colors.accent, marginTop: 20 },
+  shareText: { fontFamily: fonts.uiSemibold, fontSize: type.body, color: colors.accentInk },
+  done: { minHeight: 44, alignItems: "center", justifyContent: "center", marginTop: 2 },
+  doneText: { fontFamily: fonts.uiMedium, fontSize: type.control, color: colors.dim },
+});

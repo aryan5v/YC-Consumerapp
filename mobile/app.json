@@ -1,0 +1,40 @@
+{
+  "expo": {
+    "name": "Synqui",
+    "slug": "fork",
+    "scheme": "fork",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/brand/icon-lagoon.png",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#071A21",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.aryan5v.fork",
+      "infoPlist": {
+        "UIViewControllerBasedStatusBarAppearance": true
+      },
+      "icon": "./assets/brand/icon-lagoon.png"
+    },
+    "android": {
+      "package": "com.aryan5v.fork",
+      "adaptiveIcon": {
+        "backgroundColor": "#071A21",
+        "foregroundImage": "./assets/android-icon-foreground.png"
+      }
+    },
+    "plugins": [
+      "expo-video",
+      "expo-image",
+      "expo-asset",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Synqui listens only while you hold the microphone, to answer a character out loud."
+        }
+      ],
+      "expo-secure-store",
+      "expo-font"
+    ]
+  }
+}

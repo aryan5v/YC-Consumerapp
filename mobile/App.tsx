@@ -4,6 +4,7 @@ import { StatusBar } from "expo-status-bar";
 import { Component, type ReactNode, useCallback, useRef, useState } from "react";
 import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
+import { Dream } from "./src/components/Dream";
 import { SettingsSheet } from "./src/components/SettingsSheet";
 import { convexStory, mockStory, StoryContext, useStory } from "./src/data";
 import { setSetting, useSettings } from "./src/settings";
@@ -23,6 +24,7 @@ function Shell() {
   const [playing, setPlaying] = useState(false);
   const [settings, setSettings] = useState(false);
   const [world, setWorld] = useState(false);
+  const [dream, setDream] = useState(false);
   const reduceMotion = useReduceMotion();
   const worldIn = useRef(new Animated.Value(0)).current;
   const insets = useSafeAreaInsets();
@@ -63,8 +65,8 @@ function Shell() {
 
   return (
     <View style={styles.root}>
-      <StatusBar style="light" hidden={playing || world} animated />
-      <Home starting={starting} onPlay={play} onWander={story.interact ? openWorld : undefined} onSettings={() => setSettings(true)} />
+      <StatusBar style="light" hidden={playing || world || dream} animated />
+      <Home starting={starting} onPlay={play} onWander={story.interact ? openWorld : undefined} onDream={() => setDream(true)} onSettings={() => setSettings(true)} />
       {world && (
         <Animated.View style={[StyleSheet.absoluteFill, { opacity: worldIn }]}>
           <World active={!playing && !runId} onClose={closeWorld} onStory={play} />
@@ -75,6 +77,7 @@ function Shell() {
           <Player runId={runId} streak={home.streak} episodeTitle={home.episode.title} onStarted={started} onExit={exit} />
         </Animated.View>
       )}
+      {dream && <Dream onClose={() => setDream(false)} />}
       {settings && <SettingsSheet onClose={() => setSettings(false)} bottomInset={insets.bottom} />}
     </View>
   );

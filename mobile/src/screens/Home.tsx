@@ -21,7 +21,7 @@ function dateLabel(iso: string) {
   return `${DAYS[date.getDay()]}, ${MONTHS[date.getMonth()]} ${date.getDate()}`;
 }
 
-export function Home({ starting, onPlay, onWander, onSettings }: { starting: boolean; onPlay: () => void; onWander?: () => void; onSettings: () => void }) {
+export function Home({ starting, onPlay, onWander, onDream, onSettings }: { starting: boolean; onPlay: () => void; onWander?: () => void; onDream: () => void; onSettings: () => void }) {
   const story = useStory();
   const reduceMotion = useReduceMotion();
   const home = story.useHome();
@@ -66,65 +66,52 @@ export function Home({ starting, onPlay, onWander, onSettings }: { starting: boo
           style={[
             styles.bottom,
             {
-              paddingBottom: insets.bottom + 22,
+              paddingBottom: insets.bottom + 100,
               opacity: appear,
               transform: [{ translateY: appear.interpolate({ inputRange: [0, 1], outputRange: [reduceMotion ? 0 : 18, 0] }) }],
             },
           ]}
         >
-          <Text style={styles.kicker}>Today{"\u2019"}s episode</Text>
-          <Text style={styles.title}>{home.episode.title}</Text>
-          <Text style={styles.tagline}>{home.episode.tagline}</Text>
-
-          <View style={styles.divider}>
-            <AsciiDivider />
-          </View>
-
-          <View style={styles.streak}>
-            <Text style={styles.streakNumber}>{home.streak}</Text>
-            <Text style={styles.streakLabel}>day streak</Text>
-            <View style={styles.pips}>
-              {Array.from({ length: 7 }, (_, i) => (
-                <View
-                  key={i}
-                  style={[
-                    styles.pip,
-                    i < ((home.streak - 1) % 7) + 1 && home.streak > 0 && styles.pipOn,
-                    i === (home.streak - 1) % 7 && home.streak > 0 && styles.pipToday,
-                  ]}
-                />
-              ))}
-            </View>
-          </View>
-
-          <Glass tinted interactive style={styles.playGlass}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={action}
-            disabled={starting}
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              onPlay();
-            }}
-            style={({ pressed }) => [styles.play, pressed && { opacity: 0.85 }]}
-          >
-            {starting ? (
-              <Ring size={22} />
-            ) : (
-              <>
-                <View style={styles.triangle} />
-                <Text maxFontSizeMultiplier={1.4} style={styles.playText}>{action}</Text>
-              </>
-            )}
-          </Pressable>
+          <Glass tinted interactive style={styles.caseCard}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={"Today's case, " + action}
+              disabled={starting}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                onPlay();
+              }}
+              style={({ pressed }) => [styles.caseHit, pressed && { opacity: 0.85 }]}
+            >
+              <Text style={styles.kicker}>Today{"’"}s case · Case 1</Text>
+              <Text style={styles.title}>{home.episode.title}</Text>
+              <Text style={styles.tagline}>{home.episode.tagline}</Text>
+              <View style={styles.caseFoot}>
+                {starting ? <Ring size={20} /> : <Text style={styles.caseAction}>{action} {"→"}</Text>}
+                <Text style={styles.caseMeta}>{home.run ? (home.run.status === "active" ? "In progress" : "Played today") : "5 moves · one answer"}</Text>
+              </View>
+            </Pressable>
           </Glass>
-          {onWander && (
-            <Glass interactive style={styles.wanderGlass}>
-              <Pressable accessibilityRole="button" accessibilityLabel="Wander" disabled={starting} onPress={onWander} style={styles.wander}>
-                <Text maxFontSizeMultiplier={1.4} style={styles.wanderText}>Wander</Text>
+
+          <View style={styles.pair}>
+            {onWander && (
+              <Glass interactive style={styles.modeCard}>
+                <Pressable accessibilityRole="button" accessibilityLabel="Wander" disabled={starting} onPress={onWander} style={styles.modeHit}>
+                  <Text style={styles.motif}>{".  ~ ~ .  ~\n ~ .  ~  . ~"}</Text>
+                  <Text style={styles.modeTitle}>Wander</Text>
+                  <Text style={styles.modeSub}>The open world</Text>
+                </Pressable>
+              </Glass>
+            )}
+            <Glass interactive style={styles.modeCard}>
+              <Pressable accessibilityRole="button" accessibilityLabel="Dream a world" onPress={onDream} style={styles.modeHit}>
+                <Text style={styles.motif}>{"* .  o  . *\n .  *  .  o ."}</Text>
+                <Text style={styles.modeTitle}>Dream a world</Text>
+                <Text style={styles.modeSub}>Describe it</Text>
               </Pressable>
             </Glass>
-          )}
+          </View>
+
         </Animated.View>
       )}
     </View>
@@ -132,6 +119,28 @@ export function Home({ starting, onPlay, onWander, onSettings }: { starting: boo
 }
 
 const styles = StyleSheet.create({
+  caseCard: { borderRadius: 24 },
+  caseHit: { padding: 20 },
+  caseFoot: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 16 },
+  caseAction: { fontFamily: fonts.uiSemibold, fontSize: type.lead, color: colors.text },
+  caseMeta: { fontFamily: fonts.mono, fontSize: type.micro, letterSpacing: ascii.monoTracking, textTransform: "uppercase", color: colors.dim },
+  pair: { flexDirection: "row", gap: 12, marginTop: 12 },
+  modeCard: { flex: 1, borderRadius: 22 },
+  modeHit: { padding: 16, minHeight: 112 },
+  motif: { fontFamily: fonts.mono, fontSize: 10, lineHeight: 13, color: colors.dim, marginBottom: 10 },
+  modeTitle: { fontFamily: fonts.uiSemibold, fontSize: type.control, color: colors.text },
+  modeSub: { fontFamily: fonts.mono, fontSize: type.small, color: colors.dim, marginTop: 4 },
+  rows: { marginTop: 12, gap: 8 },
+  row: { borderRadius: radius.button },
+  rowHit: { minHeight: 48, paddingHorizontal: 18, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  rowText: { fontFamily: fonts.uiMedium, fontSize: type.control, color: colors.text },
+  rowChevron: { fontFamily: fonts.ui, fontSize: 22, color: colors.dim },
+  scrim: { backgroundColor: "rgba(7,26,33,0.5)", justifyContent: "flex-end" },
+  dream: { borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24, gap: 14 },
+  dreamInput: { minHeight: 48, borderRadius: radius.button, paddingHorizontal: 16, color: colors.text, fontFamily: fonts.mono, fontSize: type.control, backgroundColor: "rgba(232,238,241,0.08)" },
+  dreamDone: { minHeight: 48, alignItems: "center", justifyContent: "center" },
+  back: { minHeight: 44, justifyContent: "center", marginBottom: 12 },
+  pastRow: { borderRadius: radius.button, padding: 18, marginTop: 12 },
   root: { flex: 1, backgroundColor: colors.bg, overflow: "hidden" },
   top: { position: "absolute", top: 0, left: 26, right: 26, flexDirection: "row", alignItems: "center" },
   brand: { flex: 1, flexDirection: "row", alignItems: "center", gap: 10 },
@@ -155,7 +164,7 @@ const styles = StyleSheet.create({
   pips: { flexDirection: "row", gap: 6 },
   pip: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.inactive },
   pipOn: { backgroundColor: colors.text },
-  pipToday: { backgroundColor: colors.accent },
+  pipToday: { backgroundColor: colors.text },
   playGlass: { borderRadius: radius.button, marginTop: 24 },
   wanderGlass: { borderRadius: radius.button, marginTop: 12 },
   wander: { minHeight: 48, alignItems: "center", justifyContent: "center" },

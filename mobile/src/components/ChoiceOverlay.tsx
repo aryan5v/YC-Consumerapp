@@ -17,13 +17,11 @@ const area = (ring: Point[]) => Math.abs(ring.reduce((sum, [x, y], i) => sum + x
 const drawable = (o: ChoiceOption, video: Rect, screenWidth: number) => {
   const region = o.region;
   if (!region) return false;
-  const left = (video.x + region.centroid.x * video.w) / screenWidth;
-  if (left < 0.03 || left > 0.97 || region.centroid.y < 0.02 || region.centroid.y > 0.98) return false;
   const points = region.polygon;
   if (!points?.length) return !!region.maskUrl;
   const rings = typeof points[0][0] === "number" ? [points as Point[]] : (points as Point[][]);
   const total = rings.reduce((sum, ring) => sum + area(ring), 0);
-  return total >= 0.005 && total <= 0.12;
+  return total >= 0.0003 && total <= 0.4;
 };
 
 export function chipsHeight(options: ChoiceOption[], video: Rect, screenWidth: number) {
@@ -121,9 +119,9 @@ function Chip({ option, index, picked, onPick }: TargetProps) {
           <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.chipRing]} />
           <View style={styles.chipLead}>
             {waiting ? (
-              <Ring size={18} color={glow.core} delay={320} />
+              <Ring size={18} delay={320} />
             ) : (
-              <Animated.View style={[styles.dot, { opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: glow.coreOpacity }) }]} />
+              <View style={styles.dot} />
             )}
           </View>
           <Text numberOfLines={2} maxFontSizeMultiplier={1.4} style={styles.chipLabel}>
@@ -197,8 +195,8 @@ function Silhouette({ option, index, picked, preview, onPick, video, screenWidth
       <Animated.View pointerEvents="box-none" style={[StyleSheet.absoluteFill, { opacity: pulse }]}>
         <Svg width={video.w} height={video.h} pointerEvents="box-none">{defs}
           {d ? <>
-            <Path d={d} fill="none" stroke={colors.black} strokeOpacity={0.55} strokeWidth={4} />
-            <Path d={d} fill="none" stroke={glow.silhouette} strokeWidth={4} filter={`url(#${id}blur)`} />
+            
+            <Path d={d} fill="none" stroke={glow.silhouette} strokeWidth={7} strokeOpacity={0.45} filter={`url(#${id}blur)`} />
             <Path d={d} fill="transparent" stroke={glow.silhouette} strokeWidth={glow.silhouetteWidth} onPress={press} disabled={picked !== null} />
           </> : <SvgImage href={{ uri: region.maskUrl! }} width={video.w} height={video.h} preserveAspectRatio="none" filter={`url(#${id}edge)`} />}
         </Svg>
@@ -274,12 +272,7 @@ const styles = StyleSheet.create({
     color: colors.white,
   },
   chips: { position: "absolute", left: 18, right: 18, gap: CHIP_GAP },
-  chipShadow: {
-    shadowColor: glow.color,
-    shadowOpacity: 0.45,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 0 },
-  },
+  chipShadow: {},
   chip: {
     minHeight: CHIP_HEIGHT,
     paddingVertical: 8,
@@ -288,16 +281,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingRight: 20,
   },
-  chipRing: { borderRadius: radius.button, borderWidth: 1.75, borderColor: "rgba(255,255,255,0.9)" },
+  chipRing: { borderRadius: radius.button, borderWidth: StyleSheet.hairlineWidth, borderColor: "rgba(232,238,241,0.28)" },
   chipLead: { width: 44, alignItems: "center", justifyContent: "center" },
   dot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: glow.core,
-    shadowColor: glow.color,
-    shadowOpacity: 1,
-    shadowRadius: 6,
+    backgroundColor: colors.text,
+    opacity: 0.6,
+    shadowOpacity: 0,
     shadowOffset: { width: 0, height: 0 },
   },
   chipLabel: { flex: 1, fontFamily: fonts.uiMedium, fontSize: type.label, color: colors.text },

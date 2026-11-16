@@ -46,8 +46,8 @@ export const gradients = {
 // Three strokes on one shape, bottom to top: a dark contrast ring, the accent halo, a white core.
 export const glow = {
   silhouette: moonstone,
-  gradientEnd: moonstone,
-  silhouetteWidth: 1.5,
+  gradientEnd: lagoon,
+  silhouetteWidth: 2,
   silhouetteBlur: 4,
   silhouetteFill: 0.45,
   color: accent,

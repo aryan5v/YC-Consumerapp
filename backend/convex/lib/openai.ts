@@ -1,6 +1,6 @@
 import { envFlag, envNumber } from "./env";
 
-export const TTS_MODEL = "gpt-4o-mini-tts";
+export const TTS_MODEL = "gpt-4o-mini-tts-2025-12-15";
 export const STT_MODEL = "gpt-transcribe";
 
 const VOICES = [
@@ -40,9 +40,26 @@ function baseUrl(): string {
 }
 
 export async function synthesize(args: { text: string; voice: string; instructions?: string }): Promise<Blob> {
+  return (await synthesizeWithModel(args)).audio;
+}
+
+export async function synthesizeWithModel(args: { text: string; voice: string; instructions?: string }): Promise<{ audio: Blob; model: string }> {
+  const primary = ttsModel();
+  const fallback = envFlag("OPENAI_TTS_FALLBACK_MODEL") ?? "gpt-4o-mini-tts";
+  for (const [index, model] of [...new Set([primary, fallback])].entries()) {
+    try {
+      return { audio: await requestSpeech(args, model), model };
+    } catch (error) {
+      if (index === 1 || primary === fallback) throw error;
+    }
+  }
+  throw new Error("speech generation failed");
+}
+
+async function requestSpeech(args: { text: string; voice: string; instructions?: string }, model: string): Promise<Blob> {
   const voice = args.voice.trim() === "" ? "marin" : args.voice.trim();
   const body: Record<string, unknown> = {
-    model: ttsModel(),
+    model,
     voice,
     input: args.text,
     response_format: "mp3",
@@ -57,8 +74,7 @@ export async function synthesize(args: { text: string; voice: string; instructio
     signal: AbortSignal.timeout(envNumber("OPENAI_TIMEOUT_MS", 60000)),
   });
   if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`openai speech ${res.status}: ${text.slice(0, 300)}`);
+    throw new Error(`openai speech ${res.status}`);
   }
   const blob = await res.blob();
   if (blob.size === 0) throw new Error("openai speech returned no audio");
@@ -77,11 +93,28 @@ export function extensionFor(contentType: string): string {
 }
 
 export async function transcribe(blob: Blob, hint: string): Promise<string> {
+  return (await transcribeWithModel(blob, hint)).text;
+}
+
+export async function transcribeWithModel(blob: Blob, hint: string): Promise<{ text: string; model: string }> {
+  const primary = sttModel();
+  const fallback = envFlag("OPENAI_STT_FALLBACK_MODEL") ?? "gpt-4o-transcribe";
+  for (const [index, model] of [...new Set([primary, fallback])].entries()) {
+    try {
+      return { text: await requestTranscript(blob, hint, model), model };
+    } catch (error) {
+      if (index === 1 || primary === fallback) throw error;
+    }
+  }
+  throw new Error("transcription failed");
+}
+
+async function requestTranscript(blob: Blob, hint: string, model: string): Promise<string> {
   const extension = extensionFor(blob.type === "" ? hint : blob.type);
   const fileName = `recording.${extension}`;
   const form = new FormData();
   form.append("file", blob, fileName);
-  form.append("model", sttModel());
+  form.append("model", model);
   form.append("response_format", "json");
   const res = await fetch(`${baseUrl()}/audio/transcriptions`, {
     method: "POST",
@@ -90,7 +123,7 @@ export async function transcribe(blob: Blob, hint: string): Promise<string> {
     signal: AbortSignal.timeout(envNumber("OPENAI_TIMEOUT_MS", 60000)),
   });
   const text = await res.text();
-  if (!res.ok) throw new Error(`openai transcription ${res.status}: ${text.slice(0, 300)}`);
+  if (!res.ok) throw new Error(`openai transcription ${res.status}`);
   const parsed = JSON.parse(text) as { text?: unknown };
   if (typeof parsed.text !== "string") throw new Error("openai transcription returned no text");
   return parsed.text.trim();

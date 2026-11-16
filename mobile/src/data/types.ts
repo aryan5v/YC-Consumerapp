@@ -26,7 +26,14 @@ export type PuzzleStop = {
 export type Stop = ChoiceStop | PuzzleStop;
 
 export type EndingText = { character: string; number: string | null; prompt: string };
-export type CaseInfo = { question: string; movesLeft: number; movesTotal: number; solveChoices: { id: string; label: string }[] | null };
+export type CaseInfo = {
+  question: string;
+  movesLeft: number;
+  movesTotal: number;
+  solveChoices: { id: string; label: string }[] | null;
+  solveInput?: { kind: "code"; length: number; prompt: string } | null;
+};
+export type DreamView = { status: "writing" | "generating" | "ready" | "failed"; prompt: string; clipUrl?: string | null; elapsedMs: number; error?: string | null };
 export type CaseResult = { solved: boolean; movesUsed: number; movesTotal: number; answerLabel?: string | null };
 export type Ending = { title: string; summary: string; path: string[]; text?: EndingText | null; result?: CaseResult | null; streak?: number; shareText?: string };
 
@@ -76,6 +83,9 @@ export interface StoryProvider {
   choose(runId: string, optionId: string, actionId: string, expectedBeatId: string): Promise<void>;
   answer(runId: string, answer: string, expectedBeatId: string): Promise<{ correct: boolean }>;
   solve?(runId: string, answerId: string, expectedBeatId: string): Promise<void>;
+  solveText?(runId: string, answerText: string, expectedBeatId: string): Promise<void>;
+  dreamStart?(prompt: string): Promise<string>;
+  useDream?(dreamId: string | null): DreamView | undefined;
   setPhone(phone: string): Promise<void>;
   signOut?(): Promise<void>;
   speak?(runId: string, recordingUri: string, expectedBeatId: string): Promise<SpeakResult>;

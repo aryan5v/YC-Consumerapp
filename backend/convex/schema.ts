@@ -43,6 +43,46 @@ export const beatStatusValidator = v.union(
 );
 
 export default defineSchema({
+  dreams: defineTable({
+    userId: v.id("users"),
+    prompt: v.string(),
+    status: v.union(v.literal("writing"), v.literal("generating"), v.literal("ready"), v.literal("failed")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    h3Prompt: v.optional(v.string()),
+    jobId: v.optional(v.string()),
+    sourceUrl: v.optional(v.string()),
+    mediaToken: v.optional(v.string()),
+    clipUrl: v.optional(v.string()),
+    storageId: v.optional(v.id("_storage")),
+    error: v.optional(v.string()),
+    promptMs: v.optional(v.number()),
+    submitMs: v.optional(v.number()),
+    pollMs: v.optional(v.number()),
+    copyMs: v.optional(v.number()),
+  }).index("by_user_created", ["userId", "createdAt"]),
+
+  worldClipCaches: defineTable({
+    version: v.string(),
+    characterSheetUrl: v.string(),
+    clips: v.array(v.object({
+      key: v.string(),
+      storageId: v.id("_storage"),
+      url: v.string(),
+      frameStorageId: v.id("_storage"),
+      frameUrl: v.string(),
+      prompt: v.string(),
+      seed: v.number(),
+    })),
+    selections: v.array(v.object({
+      slot: v.string(),
+      take: v.number(),
+      evidence: v.string(),
+      continuityState: v.string(),
+    })),
+    publishedAt: v.optional(v.number()),
+    createdAt: v.number(),
+  }).index("by_version", ["version"]),
   users: defineTable({
     name: v.optional(v.string()),
     phone: v.optional(v.string()),

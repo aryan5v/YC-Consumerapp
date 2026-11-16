@@ -77,6 +77,24 @@ export function normalizeRegion(raw: unknown, limit = 200): Region | null {
   };
 }
 
+export function regionArea(region: Region): number {
+  return (region.polygon ?? []).reduce((area, ring) => {
+    let doubled = 0;
+    for (let i = 0; i < ring.length; i += 1) {
+      const next = ring[(i + 1) % ring.length];
+      doubled += ring[i][0] * next[1] - next[0] * ring[i][1];
+    }
+    return area + Math.abs(doubled) / 2;
+  }, 0);
+}
+
+export function usableRegion(raw: unknown): Region | null {
+  const region = normalizeRegion(raw);
+  if (region === null) return null;
+  const area = regionArea(region);
+  return area >= 0.005 && area <= 0.12 ? region : null;
+}
+
 export async function segmentFrame(
   frameUrl: string,
   targets: string[],

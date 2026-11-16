@@ -7,6 +7,7 @@ import { requirePlayer } from "./lib/session";
 import { characterSheetUrl, heldClipUrl, maxUploadBytes } from "./lib/config";
 import { pacificDate } from "./lib/pacific";
 import { openaiConfigured, synthesize } from "./lib/openai";
+import { WORLD_CACHE_CLOCK, WORLD_CACHE_LANDMARKS, WORLD_CACHE_VERSION, canonicalWorldSlot, worldCacheScenes } from "./lib/worldCache";
 import {
   Change,
   ClientClock,
@@ -76,6 +77,7 @@ const landmarkValidator = v.object({
 });
 const configureValidator = v.object({
   timeOfDay: v.number(),
+  day: v.optional(v.number()),
   weather: weatherValidator,
   palette: paletteValidator,
   mood: v.string(),
@@ -373,6 +375,11 @@ export const interact = mutation({
   },
   returns: v.object({
     interactionId: v.string(),
+    clipUrl: v.optional(v.string()),
+    narration: v.optional(v.string()),
+    spokenLine: v.optional(v.string()),
+    spokenAudioUrl: v.optional(v.union(v.string(), v.null())),
+    outcome: v.optional(v.object({ thingId: v.string(), change: changeValidator })),
     configure: configureValidator,
     transitionMs: v.number(),
   }),
@@ -409,6 +416,32 @@ export const interact = mutation({
       storageId: args.screenshotStorageId,
     });
     const stored = await loadWorld(ctx, user._id);
+    const cache = await ctx.db.query("worldClipCaches").withIndex("by_version", (q) => q.eq("version", WORLD_CACHE_VERSION)).unique();
+    if (cache?.publishedAt !== undefined) {
+      const slot = canonicalWorldSlot(thingId);
+      if (slot === null) throw new Error("that landmark is not part of the shore");
+      const selection = cache.selections.find((entry) => entry.slot === slot);
+      const clip = cache.clips.find((entry) => entry.key === `${slot}-take-${selection?.take}`);
+      const scene = worldCacheScenes().find((entry) => entry.key === clip?.key);
+      if (clip === undefined || scene === undefined) throw new Error("that landmark's scene is not ready yet; try another landmark");
+      const next = absorb(stored, { ...WORLD_CACHE_CLOCK, position: args.state?.position ?? stored.position, lastThingId: thingId });
+      next.landmarks = WORLD_CACHE_LANDMARKS.map((entry) => ({ ...entry }));
+      next.castName = DEFAULT_CAST.name;
+      next.castLook = DEFAULT_CAST.look;
+      next.castVoice = DEFAULT_CAST.voice;
+      next.visited = [...next.visited, scene.name].slice(-12);
+      next.notes = [...next.notes, scene.narration].slice(-8);
+      await saveWorld(ctx, user._id, next);
+      const cachedConfigure = echoConfigure({ ...WORLD_CACHE_CLOCK, palette: null }, next.landmarks, 0);
+      const interactionId = crypto.randomUUID();
+      const row: InteractionRow = {
+        ownerId: user._id, thingId, name: scene.name, slot, status: "ready",
+        narration: scene.narration, spokenLine: "", spokenAudioUrl: null, clipUrl: clip.url,
+        change: scene.change, configure: cachedConfigure, transitionMs: 0,
+      };
+      await writeJson(ctx, interactCode(interactionId), "world-interact", row);
+      return { interactionId, clipUrl: clip.url, narration: row.narration, spokenLine: "", spokenAudioUrl: null, outcome: { thingId, change: row.change }, configure: cachedConfigure, transitionMs: 0 };
+    }
     const client = clientFrom(
       {
         timeOfDay: args.state?.timeOfDay ?? args.timeOfDay,

@@ -18,6 +18,7 @@ import { PuzzleSheet, type PuzzleState } from "../components/PuzzleSheet";
 import { SettingsGlyph, SettingsSheet } from "../components/SettingsSheet";
 import { Linking } from "react-native";
 import { getDeviceToken } from "../data/device";
+import { recordResult } from "../profile";
 import { audioSource, useStory, videoSource, type CaseInfo, type Ending, type Stop } from "../data";
 import { useReduceMotion } from "../a11y";
 import { useSettings } from "../settings";
@@ -85,7 +86,7 @@ export function Player({
   const [snap, setSnap] = useState<Snap | null>(null);
   const [picked, setPicked] = useState<string | null>(null);
   const [puzzleState, setPuzzleState] = useState<PuzzleState>("idle");
-  const [captionsOn, setCaptionsOn] = useState(true);
+  const [captionsOn, setCaptionsOn] = useState(useSettings().captions);
   const [chrome, setChrome] = useState(false);
   const [solveOpen, setSolveOpen] = useState(false);
   const [solving, setSolving] = useState(false);
@@ -298,6 +299,9 @@ export function Player({
     }).start();
   }, [puzzleOpen, reduceMotion, sceneLift]);
   const ending = held && current.stop === null ? current.ending : null;
+  useEffect(() => {
+    if (ending?.result) recordResult(runId, ending.result);
+  }, [ending, runId]);
 
   const lineUrl = view?.stop?.spokenAudioUrl ?? null;
   useEffect(() => {
@@ -424,14 +428,14 @@ export function Player({
     });
   };
 
-  const solve = async (answerId: string) => {
-    if (!current || !story.solve || solving) return;
+  const solve = async (answer: string, typed = false) => {
+    if (!current || !(typed ? story.solveText : story.solve) || solving) return;
     setSolving(true);
     setSolveOpen(false);
     setCommit({ fromBeatId: current.beatId, url: null });
     notBefore.current = 0;
     try {
-      await story.solve(runId, answerId, current.beatId);
+      await (typed ? story.solveText!(runId, answer, current.beatId) : story.solve!(runId, answer, current.beatId));
     } catch {
       setSolving(false);
       setCommit(null);
@@ -597,7 +601,7 @@ export function Player({
               info={current.case}
               top={insets.top + 34}
               showQuestion={current.beatIndex === 0}
-              canSolve={!!story.solve && !!current.case.solveChoices && current.case.movesLeft < current.case.movesTotal && picked === null}
+              canSolve={((!!story.solveText && !!current.case.solveInput) || (!!story.solve && !!current.case.solveChoices)) && current.case.movesLeft < current.case.movesTotal && picked === null}
               onSolve={() => setSolveOpen(true)}
               onTalk={story.name === "convex" ? async () => {
                 const device = await getDeviceToken();
@@ -610,7 +614,7 @@ export function Player({
         </Presence>
 
         {current?.case && (
-          <SolveSheet info={current.case} open={solveOpen} bottomInset={insets.bottom} busy={solving} onPick={solve} onClose={() => setSolveOpen(false)} />
+          <SolveSheet info={current.case} open={solveOpen} bottomInset={insets.bottom} busy={solving} onPick={(id) => solve(id)} onSubmitCode={(code) => solve(code, true)} onClose={() => setSolveOpen(false)} />
         )}
 
         <Presence show={chrome && !ending}>

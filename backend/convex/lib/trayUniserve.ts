@@ -206,7 +206,7 @@ export function jobStateOf(raw: Record<string, unknown>, baseUrl: string): Unise
 }
 
 function headers(apiKey: string | null): Record<string, string> {
-  const out: Record<string, string> = { "content-type": "application/json" };
+  const out: Record<string, string> = { "content-type": "application/json", "user-agent": "Mozilla/5.0 Synqui/1.0" };
   if (apiKey !== null) out.authorization = `Bearer ${apiKey}`;
   return out;
 }

@@ -14,6 +14,9 @@ import { worldHtml } from "../world/worldHtml";
 const ORIGIN = "https://world.synqui.local/";
 const source = { html: worldHtml, baseUrl: ORIGIN };
 
+const BEFORE = `(function(){try{var r=Math.min(window.devicePixelRatio||1,1.5);Object.defineProperty(window,"devicePixelRatio",{get:function(){return r}});}catch(e){}
+var n=0,t=performance.now();function f(now){n++;if(now-t>=2000){window.ReactNativeWebView&&window.ReactNativeWebView.postMessage(JSON.stringify({type:"fps",fps:Math.round(n*1000/(now-t))}));n=0;t=now;}requestAnimationFrame(f);}requestAnimationFrame(f);})();true;`;
+
 export function World({ active, onClose, onStory }: { active: boolean; onClose: () => void; onStory: () => void }) {
   const story = useStory();
   const settings = useSettings();
@@ -24,6 +27,7 @@ export function World({ active, onClose, onStory }: { active: boolean; onClose: 
   const busy = useRef(false);
   const fade = useRef(new Animated.Value(0)).current;
   const [clipping, setClipping] = useState(false);
+  const [fps, setFps] = useState(0);
   const player = useVideoPlayer(null, (p) => {
     p.loop = false;
   });
@@ -120,6 +124,8 @@ export function World({ active, onClose, onStory }: { active: boolean; onClose: 
       ready.current = true;
       send({ type: "setSound", on: settings.voice });
       if (!active) send({ type: "pause" });
+    } else if (m.type === "fps") {
+      setFps(Number(m.fps) || 0);
     } else if (m.type === "interact") {
       interact(m);
     }
@@ -132,6 +138,7 @@ export function World({ active, onClose, onStory }: { active: boolean; onClose: 
         source={source}
         originWhitelist={["*"]}
         onMessage={onMessage}
+        injectedJavaScriptBeforeContentLoaded={BEFORE}
         style={styles.web}
         bounces={false}
         scrollEnabled={false}
@@ -144,6 +151,7 @@ export function World({ active, onClose, onStory }: { active: boolean; onClose: 
         setSupportMultipleWindows={false}
       />
 
+      <View accessible accessibilityLabel={"world fps " + fps} pointerEvents="none" style={{ position: "absolute", width: 1, height: 1 }} />
       <View pointerEvents="box-none" style={[styles.chrome, { paddingTop: insets.top + 10, paddingBottom: insets.bottom + 22 }]}>
         <Glass interactive style={styles.close}>
           <Pressable accessibilityRole="button" accessibilityLabel="Close world" onPress={onClose} style={styles.hit}>

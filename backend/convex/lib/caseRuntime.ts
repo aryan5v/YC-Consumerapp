@@ -28,7 +28,7 @@ export async function playCaseClip(
     runId: run._id,
     depth,
     status: "ready",
-    clipPrompt: scene.prompt,
+    clipPrompt: asset.prompt ?? scene.prompt,
     narration: scene.narration,
     spokenLine: scene.line,
     spokenAudioUrl: asset.audioUrl,
@@ -39,7 +39,7 @@ export async function playCaseClip(
     createdAt: Date.now(),
   });
   await ctx.db.insert("clips", {
-    runId: run._id, beatId, status: "ready", prompt: scene.prompt,
+    runId: run._id, beatId, status: "ready", prompt: asset.prompt ?? scene.prompt,
     url: asset.url, storageId: asset.storageId, lastFrameUrl: asset.frameUrl,
     regions: asset.regions, seed: 0, aspect: "9:16", seconds: 5, attempts: 0,
     createdAt: Date.now(), readyAt: Date.now(),

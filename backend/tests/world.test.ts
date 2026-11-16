@@ -236,6 +236,20 @@ describe("world clip prompt", () => {
   });
 });
 
+describe("world.interact first visit", () => {
+  test("a new device can tap without signing in, and still cannot watch another device", async () => {
+    const t = newBackend();
+    const fresh = "wander-new-device";
+    const started = await tap(t, fresh);
+    const mine = await t.query(watch, { deviceToken: fresh, interactionId: started.interactionId });
+    expect(mine.outcome.thingId).toBe(THING);
+    await sign(t, TWO);
+    await expect(t.query(watch, { deviceToken: TWO, interactionId: started.interactionId })).rejects.toThrow(
+      /another device/,
+    );
+  });
+});
+
 describe("world.interact ownership", () => {
   test("another device cannot watch the interaction or spend the screenshot", async () => {
     const t = newBackend();

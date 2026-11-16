@@ -3,7 +3,7 @@ import { makeFunctionReference } from "convex/server";
 import { action, internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { Doc, Id } from "./_generated/dataModel";
 import { MutationCtx, QueryCtx } from "./_generated/server";
-import { requireDeviceUser } from "./lib/session";
+import { ensureDeviceUser, requireDeviceUser } from "./lib/session";
 import { characterSheetUrl, heldClipUrl, maxUploadBytes } from "./lib/config";
 import { pacificDate } from "./lib/pacific";
 import { openaiConfigured, synthesize } from "./lib/openai";
@@ -354,7 +354,7 @@ export const interactUploadUrl = mutation({
   args: { deviceToken: v.string(), thingId: v.string() },
   returns: v.string(),
   handler: async (ctx, { deviceToken, thingId }) => {
-    const user = await requireDeviceUser(ctx, deviceToken);
+    const user = await ensureDeviceUser(ctx, deviceToken);
     const id = thingId.trim();
     if (id === "" || id.length > 120) throw new Error("that thing has no name the shore can keep");
     await writeJson(ctx, uploadCode(user._id), "world-upload", { thingId: id, consumed: false });
@@ -384,7 +384,7 @@ export const interact = mutation({
     transitionMs: v.number(),
   }),
   handler: async (ctx, args) => {
-    const user = await requireDeviceUser(ctx, args.deviceToken);
+    const user = await ensureDeviceUser(ctx, args.deviceToken);
     const thingId = args.thingId.trim();
     const name = args.name.replace(/\s+/g, " ").trim().slice(0, 60);
     if (thingId === "" || name === "") throw new Error("that thing has no name the shore can keep");
@@ -741,6 +741,7 @@ export const direct = action({
     reason: v.string(),
   }),
   handler: async (ctx, args) => {
+    await ctx.runMutation(ensureGuestRef, { deviceToken: args.deviceToken });
     const loaded = await ctx.runQuery(readDirectRef, { deviceToken: args.deviceToken });
     const client = clientFrom(args.state, loaded.world);
     const absorbed = absorb(loaded.world, {
@@ -779,11 +780,21 @@ export const direct = action({
   },
 });
 
+const ensureGuestRef = makeFunctionReference<"mutation", { deviceToken: string }, null>("world:ensureGuest");
 const readDirectRef = makeFunctionReference<"query", { deviceToken: string }>("world:readDirect");
 const writeDirectRef = makeFunctionReference<"mutation", { deviceToken: string; world: StoredWorld }>("world:writeDirect");
 const writeDescribeRef = makeFunctionReference<"mutation", { deviceToken: string; described: DescribeResult }>(
   "world:writeDescribe",
 );
+
+export const ensureGuest = internalMutation({
+  args: { deviceToken: v.string() },
+  returns: v.null(),
+  handler: async (ctx, { deviceToken }) => {
+    await ensureDeviceUser(ctx, deviceToken);
+    return null;
+  },
+});
 
 export const readDirect = internalQuery({
   args: { deviceToken: v.string() },

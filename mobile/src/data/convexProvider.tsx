@@ -28,6 +28,7 @@ const api = {
   answer: makeFunctionReference<"mutation", RunArgs & { answer: string }, { correct: boolean }>("runs:answer"),
   speakUploadUrl: makeFunctionReference<"mutation", RunArgs, string>("runs:speakUploadUrl"),
   speak: makeFunctionReference<"action", RunArgs & { audioStorageId: string }, SpeakResult>("runs:speak"),
+  signIn: makeFunctionReference<"mutation", DeviceArgs, string>("session:signInAnonymously"),
   interactUploadUrl: makeFunctionReference<"mutation", DeviceArgs & { thingId: string }, string>("world:interactUploadUrl"),
   interact: makeFunctionReference<
     "mutation",
@@ -116,6 +117,7 @@ export function createConvexProvider(url: string): StoryProvider {
     ),
     interact: async (input) => {
       const deviceToken = await getDeviceToken();
+      await client.mutation(api.signIn, { deviceToken }).catch(() => {});
       const uploadUrl = await client.mutation(api.interactUploadUrl, { deviceToken, thingId: input.thingId });
       const shot = await (await fetch(input.screenshot)).blob();
       const upload = await fetch(uploadUrl, { method: "POST", headers: { "Content-Type": "image/jpeg" }, body: shot });

@@ -38,7 +38,7 @@ export function PuzzleSheet({
   const answered = state === "correct" || state === "wrong";
 
   useEffect(() => {
-    Animated.timing(appear, { toValue: 1, duration: motion.sheet, delay: 200, easing: ease.out, useNativeDriver: true }).start();
+    Animated.timing(appear, { toValue: 1, duration: motion.sheet, easing: ease.out, useNativeDriver: true }).start();
   }, [appear]);
 
   useEffect(() => {

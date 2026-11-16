@@ -9,7 +9,7 @@ export function Captions({ text, lift }: { text: string; lift: number }) {
   const reduce = useReduceMotion();
 
   useEffect(() => {
-    Animated.timing(appear, { toValue: 1, duration: motion.base, delay: 180, easing: ease.out, useNativeDriver: true }).start();
+    Animated.timing(appear, { toValue: 1, duration: motion.base, easing: ease.out, useNativeDriver: true }).start();
   }, [appear]);
 
   useEffect(() => {

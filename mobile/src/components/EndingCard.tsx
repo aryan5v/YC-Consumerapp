@@ -44,8 +44,7 @@ export function EndingCard({
   const valid = normalize(phone);
 
   useEffect(() => {
-    Animated.stagger(
-      140,
+    Animated.parallel(
       steps.map((v) => Animated.timing(v, { toValue: 1, duration: motion.slow, easing: ease.out, useNativeDriver: true })),
     ).start();
   }, [steps]);
@@ -132,7 +131,7 @@ export function EndingCard({
         </Animated.View>
 
         <Animated.View style={[styles.streak, rise(steps[2])]}>
-          <Text maxFontSizeMultiplier={1.4} style={styles.streakNumber}>{streak}</Text>
+          <Text maxFontSizeMultiplier={1.4} style={styles.streakNumber}>{ending.streak ?? streak}</Text>
           <Text style={styles.streakLabel}>day streak{"\n"}A new story tomorrow</Text>
         </Animated.View>
 

@@ -52,7 +52,7 @@ export function MicButton({
   };
 
   useEffect(() => {
-    Animated.timing(appear, { toValue: 1, duration: motion.gentle, delay: 700, easing: ease.out, useNativeDriver: true }).start();
+    Animated.timing(appear, { toValue: 1, duration: motion.gentle, easing: ease.out, useNativeDriver: true }).start();
   }, [appear]);
 
   const playback = () => setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true }).catch(() => {});

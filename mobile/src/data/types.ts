@@ -28,7 +28,7 @@ export type Stop = ChoiceStop | PuzzleStop;
 export type EndingText = { character: string; number: string | null; prompt: string };
 export type CaseInfo = { question: string; movesLeft: number; movesTotal: number; solveChoices: { id: string; label: string }[] | null };
 export type CaseResult = { solved: boolean; movesUsed: number; movesTotal: number; answerLabel?: string | null };
-export type Ending = { title: string; summary: string; path: string[]; text?: EndingText | null; result?: CaseResult | null };
+export type Ending = { title: string; summary: string; path: string[]; text?: EndingText | null; result?: CaseResult | null; streak?: number; shareText?: string };
 
 export type RunView = {
   status: "active" | "ended";

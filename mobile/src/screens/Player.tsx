@@ -16,6 +16,8 @@ import { MicButton } from "../components/MicButton";
 import { Presence } from "../components/Presence";
 import { PuzzleSheet, type PuzzleState } from "../components/PuzzleSheet";
 import { SettingsGlyph, SettingsSheet } from "../components/SettingsSheet";
+import { Linking } from "react-native";
+import { getDeviceToken } from "../data/device";
 import { audioSource, useStory, videoSource, type CaseInfo, type Ending, type Stop } from "../data";
 import { useReduceMotion } from "../a11y";
 import { useSettings } from "../settings";
@@ -454,9 +456,9 @@ export function Player({
   const share = () => {
     if (!current?.ending) return;
     Share.share({
-      message: current.ending.result
+      message: current.ending.shareText ?? (current.ending.result
         ? `Synqui · Case 1 · ${current.ending.result.solved ? `solved in ${current.ending.result.movesUsed} of ${current.ending.result.movesTotal}` : "not solved"}\n${streak}-day streak.`
-        : `Synqui \u00B7 ${episodeTitle}\nI reached \u201C${current.ending.title}\u201D.\n${current.ending.path.join(" \u2192 ")}\n${streak}-day streak.`,
+        : `Synqui \u00B7 ${episodeTitle}\nI reached \u201C${current.ending.title}\u201D.\n${current.ending.path.join(" \u2192 ")}\n${streak}-day streak.`),
     }).catch(() => {});
   };
 
@@ -597,6 +599,12 @@ export function Player({
               showQuestion={current.beatIndex === 0}
               canSolve={!!story.solve && !!current.case.solveChoices && current.case.movesLeft < current.case.movesTotal && picked === null}
               onSolve={() => setSolveOpen(true)}
+              onTalk={story.name === "convex" ? async () => {
+                const device = await getDeviceToken();
+                const base = "https://reliable-opossum-456.convex.site/master";
+                const q = new URLSearchParams({ token: base + "/token", run: runId, device, question: current.case?.question ?? "", clues: "[]", movesLeft: String(current.case?.movesLeft ?? 0) });
+                Linking.openURL(base + "?" + q.toString()).catch(() => {});
+              } : undefined}
             />
           )}
         </Presence>

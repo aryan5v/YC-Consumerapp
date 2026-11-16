@@ -48,6 +48,7 @@ import type * as lib_validators from "../lib/validators.js";
 import type * as lib_view from "../lib/view.js";
 import type * as lib_world from "../lib/world.js";
 import type * as master from "../master.js";
+import type * as modelChecks from "../modelChecks.js";
 import type * as openings from "../openings.js";
 import type * as runs from "../runs.js";
 import type * as session from "../session.js";
@@ -103,6 +104,7 @@ declare const fullApi: ApiFromModules<{
   "lib/view": typeof lib_view;
   "lib/world": typeof lib_world;
   master: typeof master;
+  modelChecks: typeof modelChecks;
   openings: typeof openings;
   runs: typeof runs;
   session: typeof session;

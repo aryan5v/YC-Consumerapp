@@ -26,6 +26,7 @@ import {
   speechAttemptsPerBeat,
 } from "./lib/config";
 import { customEpisodeRow, defaultCustomSeed, sanitizeCustomPrompt } from "./lib/custom";
+import { buildCaseView, playCaseClip, solveCase } from "./lib/caseRuntime";
 
 const NO_SPEECH = {
   transcript: "",
@@ -90,14 +91,27 @@ export const startToday = mutation({
   handler: async (ctx, { deviceToken }) => {
     const user = await ensureDeviceUser(ctx, deviceToken);
     const episode = await ensureEpisode(ctx, pacificDate());
+    if (episode.activeCaseId !== undefined) {
+      const past = await ctx.db.query("runs")
+        .withIndex("by_user_episode", (q) => q.eq("userId", user._id).eq("episodeId", episode._id)).collect();
+      const completed = past.find((run) => run.caseId === episode.activeCaseId && run.caseResult !== undefined);
+      if (completed !== undefined) return completed._id;
+      const resumable = past.find((run) => run.caseId === episode.activeCaseId);
+      if (resumable !== undefined && await runIsReadable(ctx, resumable)) {
+        if (resumable.status !== "active") await refuseWhenAtCapacity(ctx);
+        await ctx.db.patch(resumable._id, { status: "active", endedAt: undefined, error: undefined, lastActivityAt: Date.now() });
+        return resumable._id;
+      }
+    }
     const existing = await ctx.db
       .query("runs")
       .withIndex("by_user_episode", (q) => q.eq("userId", user._id).eq("episodeId", episode._id))
       .order("desc")
       .first();
-    if (existing !== null && existing.status === "active") {
+    if (existing !== null && existing.status === "active" && episode.activeCaseId === undefined) {
       if (await runIsReadable(ctx, existing)) {
-        await kickRun(ctx, existing);
+        await ctx.db.patch(existing._id, { lastActivityAt: Date.now() });
+        if (existing.caseId === undefined) await kickRun(ctx, existing);
         return existing._id;
       }
       await ctx.db.patch(existing._id, {
@@ -111,6 +125,8 @@ export const startToday = mutation({
     const runId = await ctx.db.insert("runs", {
       userId: user._id,
       episodeId: episode._id,
+      caseId: episode.activeCaseId,
+      caseClues: episode.activeCaseId === undefined ? undefined : [],
       status: "active",
       path: [],
       optionPath: [],
@@ -119,6 +135,11 @@ export const startToday = mutation({
       startedAt: Date.now(),
       lastActivityAt: Date.now(),
     });
+    if (episode.activeCaseId !== undefined) {
+      const run = await ctx.db.get(runId);
+      await playCaseClip(ctx, run!, "opening", 0);
+      return runId;
+    }
     if (opening !== null) {
       await applyOpening(ctx, runId, opening);
       return runId;
@@ -209,6 +230,7 @@ export const view = query({
     if (beatId === undefined) throw new Error("run has no current beat");
     const beat = await ctx.db.get(beatId);
     if (beat === null) throw new Error("current beat not found");
+    if (run.caseId !== undefined) return await buildCaseView(ctx, run, beat);
     const clip = await clipForBeat(ctx, beatId);
     const childBeats = await childrenOfBeat(ctx, beatId);
     const children: { beat: Doc<"beats">; clip: Doc<"clips"> | null }[] = [];
@@ -242,6 +264,15 @@ export const answer = mutation({
     await runOwnedBy(ctx, runId, deviceToken);
     const result = await answerPuzzle(ctx, runId, given, expectedBeatId);
     return { correct: result.correct };
+  },
+});
+
+export const solve = mutation({
+  args: { runId: v.id("runs"), answerId: v.string(), expectedBeatId: v.id("beats"), deviceToken: v.string() },
+  returns: v.object({ solved: v.boolean() }),
+  handler: async (ctx, { runId, answerId, expectedBeatId, deviceToken }) => {
+    const { run } = await runOwnedBy(ctx, runId, deviceToken);
+    return await solveCase(ctx, run, answerId, expectedBeatId);
   },
 });
 

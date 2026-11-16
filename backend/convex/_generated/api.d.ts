@@ -9,6 +9,7 @@
  */
 
 import type * as beats from "../beats.js";
+import type * as cases from "../cases.js";
 import type * as clips from "../clips.js";
 import type * as crons from "../crons.js";
 import type * as custom from "../custom.js";
@@ -19,6 +20,7 @@ import type * as http from "../http.js";
 import type * as keiki from "../keiki.js";
 import type * as lib_advance from "../lib/advance.js";
 import type * as lib_case from "../lib/case.js";
+import type * as lib_caseRuntime from "../lib/caseRuntime.js";
 import type * as lib_config from "../lib/config.js";
 import type * as lib_custom from "../lib/custom.js";
 import type * as lib_deepseek from "../lib/deepseek.js";
@@ -60,6 +62,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   beats: typeof beats;
+  cases: typeof cases;
   clips: typeof clips;
   crons: typeof crons;
   custom: typeof custom;
@@ -70,6 +73,7 @@ declare const fullApi: ApiFromModules<{
   keiki: typeof keiki;
   "lib/advance": typeof lib_advance;
   "lib/case": typeof lib_case;
+  "lib/caseRuntime": typeof lib_caseRuntime;
   "lib/config": typeof lib_config;
   "lib/custom": typeof lib_custom;
   "lib/deepseek": typeof lib_deepseek;

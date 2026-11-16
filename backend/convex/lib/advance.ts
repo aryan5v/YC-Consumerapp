@@ -3,6 +3,7 @@ import { MutationCtx } from "../_generated/server";
 import { DirectorPuzzleStop } from "./director";
 import { cancelSiblings, childrenOfBeat, promoteTo } from "./orchestration";
 import { checkAnswer, outcomeLabel, stopObjectViews } from "./story";
+import { chooseCaseClue } from "./caseRuntime";
 
 export async function loadCurrent(
   ctx: MutationCtx,
@@ -48,6 +49,7 @@ export async function chooseOption(
   expectedBeatId: Id<"beats">,
 ): Promise<boolean> {
   const { run, beat } = await loadCurrent(ctx, runId);
+  if (run.caseId !== undefined) return await chooseCaseClue(ctx, run, optionId, actionId, expectedBeatId);
   if (beat._id !== expectedBeatId) return false;
   const objects = stopObjectViews(beat.stop);
   if (objects.length === 0) throw new Error("the current beat is not a choice stop");
@@ -69,6 +71,7 @@ export async function answerPuzzle(
   correctOverride?: boolean,
 ): Promise<{ applied: boolean; correct: boolean }> {
   const { run, beat } = await loadCurrent(ctx, runId);
+  if (run.caseId !== undefined) throw new Error("use runs.solve for the case");
   if (beat._id !== expectedBeatId) {
     const answered = await ctx.db.get(expectedBeatId);
     const previousStop = answered?.stop as DirectorPuzzleStop | undefined;

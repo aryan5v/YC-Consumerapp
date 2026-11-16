@@ -212,7 +212,7 @@ const styles = StyleSheet.create({
   pips: { flexDirection: "row", gap: 6 },
   pip: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.inactive },
   pipOn: { backgroundColor: colors.text },
-  pipToday: { backgroundColor: colors.accent },
+  pipToday: { backgroundColor: colors.text },
   playGlass: { borderRadius: radius.button, marginTop: 24 },
   wanderGlass: { borderRadius: radius.button, marginTop: 12 },
   wander: { minHeight: 48, alignItems: "center", justifyContent: "center" },

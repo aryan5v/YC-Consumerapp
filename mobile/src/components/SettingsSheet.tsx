@@ -1,10 +1,12 @@
 import { getRecordingPermissionsAsync } from "expo-audio";
 import * as Haptics from "expo-haptics";
+import { useAuth, useClerk, useUser } from "@clerk/expo";
 import { useEffect, useRef, useState } from "react";
 import { Animated, AppState, Linking, PanResponder, Pressable, StyleSheet, Text, View } from "react-native";
-import { convexStory } from "../data";
+import { clerkEnabled, convexStory, useStory } from "../data";
 import { useReduceMotion } from "../a11y";
 import { Glass } from "./Glass";
+import { SignInSheet } from "./SignInSheet";
 import { setSetting, useSettings } from "../settings";
 import { colors, ease, fonts, motion, radius, type } from "../theme";
 
@@ -66,8 +68,59 @@ function Switch({ label, detail, value, onChange }: { label: string; detail: str
   );
 }
 
+/** The Clerk-backed account rows. Only rendered while the Convex story is the active one, so Clerk is mounted. */
+function AccountRows({ onSignIn }: { onSignIn: () => void }) {
+  const story = useStory();
+  const { isLoaded, isSignedIn } = useAuth();
+  const { user } = useUser();
+  const { signOut: leaveClerk } = useClerk();
+  const address = user?.primaryEmailAddress?.emailAddress ?? null;
+
+  const leave = async () => {
+    Haptics.selectionAsync();
+    try {
+      await story.signOut?.();
+    } finally {
+      await leaveClerk();
+    }
+  };
+
+  return (
+    <>
+      <Text maxFontSizeMultiplier={1.4} style={[styles.kicker, styles.group]}>Account</Text>
+      {isLoaded && isSignedIn ? (
+        <Pressable accessibilityRole="button" accessibilityLabel="Sign out" onPress={leave} style={styles.row}>
+          <View style={{ flex: 1 }} accessible={false}>
+            <Text maxFontSizeMultiplier={1.4} style={styles.label}>{address ?? "Signed in"}</Text>
+            <Text maxFontSizeMultiplier={1.4} style={styles.detail}>Your streak and your story are on this account.</Text>
+          </View>
+          <Text maxFontSizeMultiplier={1.4} style={styles.action}>Sign out</Text>
+        </Pressable>
+      ) : (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Sign in"
+          onPress={() => {
+            Haptics.selectionAsync();
+            onSignIn();
+          }}
+          style={styles.row}
+        >
+          <View style={{ flex: 1 }} accessible={false}>
+            <Text maxFontSizeMultiplier={1.4} style={styles.label}>Sign in</Text>
+            <Text maxFontSizeMultiplier={1.4} style={styles.detail}>Keep your streak and your story on every device.</Text>
+          </View>
+          <Text maxFontSizeMultiplier={1.4} style={styles.action}>Sign in</Text>
+        </Pressable>
+      )}
+    </>
+  );
+}
+
 export function SettingsSheet({ onClose, bottomInset }: { onClose: () => void; bottomInset: number }) {
   const settings = useSettings();
+  const story = useStory();
+  const [signingIn, setSigningIn] = useState(false);
   const reduceMotion = useReduceMotion();
   const appear = useRef(new Animated.Value(0)).current;
   const drag = useRef(new Animated.Value(0)).current;
@@ -162,8 +215,15 @@ export function SettingsSheet({ onClose, bottomInset }: { onClose: () => void; b
           />
           </>
         )}
+        {story.name === "convex" && clerkEnabled && (
+          <>
+            <Divider />
+            <AccountRows onSignIn={() => setSigningIn(true)} />
+          </>
+        )}
         </Glass>
       </Animated.View>
+      {signingIn && <SignInSheet onClose={() => setSigningIn(false)} />}
     </View>
   );
 }
@@ -192,6 +252,7 @@ const styles = StyleSheet.create({
   noticeText: { flex: 1, fontFamily: fonts.ui, fontSize: type.small, lineHeight: 19, color: colors.faint },
   noticeAction: { minHeight: 44, textAlignVertical: "center", lineHeight: 44, fontFamily: fonts.uiSemibold, fontSize: type.small, color: colors.text },
   row: { flexDirection: "row", alignItems: "center", gap: 18, paddingVertical: 14 },
+  action: { fontFamily: fonts.uiSemibold, fontSize: type.small, letterSpacing: 1.2, textTransform: "uppercase", color: colors.dim },
   label: { fontFamily: fonts.uiMedium, fontSize: type.lead, color: colors.text },
   detail: { fontFamily: fonts.ui, fontSize: type.small, lineHeight: 19, color: colors.dim, marginTop: 3 },
   track: {

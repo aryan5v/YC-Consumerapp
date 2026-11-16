@@ -4,7 +4,7 @@ import { CASE_ONE, caseScenesForVersion, checkCaseLogic, readCase } from "./lib/
 import { ensureEpisode } from "./lib/episodes";
 import { pacificDate } from "./lib/pacific";
 import { normalizeRegion } from "./lib/segment";
-import { ensureDeviceUser } from "./lib/session";
+import { ensurePlayer } from "./lib/session";
 import { playCaseClip } from "./lib/caseRuntime";
 
 export const prepare = internalMutation({
@@ -121,7 +121,7 @@ export const preview = internalMutation({
   handler: async (ctx, { caseId, deviceToken }) => {
     const bundle = await ctx.db.get(caseId);
     if (bundle?.publishedAt === undefined) throw new Error("the preview case is not ready");
-    const user = await ensureDeviceUser(ctx, deviceToken);
+    const user = await ensurePlayer(ctx, deviceToken);
     const data = readCase(bundle.data);
     if (data === null) throw new Error("invalid case");
     const past = await ctx.db.query("runs").withIndex("by_user_episode", (q) => q.eq("userId", user._id).eq("episodeId", bundle.episodeId)).collect();

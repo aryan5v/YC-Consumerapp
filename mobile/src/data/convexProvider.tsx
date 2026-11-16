@@ -1,4 +1,7 @@
 import { ConvexProvider, ConvexReactClient, useQuery } from "convex/react";
+import { ConvexProviderWithClerk } from "convex/react-clerk";
+import { ClerkProvider, useAuth } from "@clerk/expo";
+import { tokenCache } from "@clerk/expo/token-cache";
 import { makeFunctionReference } from "convex/server";
 import type { ReactNode } from "react";
 import { getDeviceToken, useDeviceToken } from "./device";
@@ -37,7 +40,12 @@ const api = {
     { clipUrl: string | null; outcome: { thingId: string; change: Record<string, unknown> }; configure: Record<string, unknown>; transitionMs: number }
   >("world:watch"),
   setPhone: makeFunctionReference<"mutation", DeviceArgs & { phone: string }, string | null>("users:setPhone"),
+  signOut: makeFunctionReference<"mutation", DeviceArgs, string>("session:signOut"),
 };
+
+// Clerk is optional: without the publishable key the app is guest-only, exactly as it was.
+export const clerkKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
+export const clerkEnabled = Boolean(clerkKey);
 
 export function createConvexProvider(url: string): StoryProvider {
   const client = new ConvexReactClient(url);
@@ -45,7 +53,14 @@ export function createConvexProvider(url: string): StoryProvider {
   return {
     name: "convex",
     canReplay: false,
-    Root: ({ children }: { children: ReactNode }) => <ConvexProvider client={client}>{children}</ConvexProvider>,
+    Root: ({ children }: { children: ReactNode }) =>
+      clerkKey === undefined ? (
+        <ConvexProvider client={client}>{children}</ConvexProvider>
+      ) : (
+        <ClerkProvider publishableKey={clerkKey} tokenCache={tokenCache}>
+          <ConvexProviderWithClerk client={client} useAuth={useAuth}>{children}</ConvexProviderWithClerk>
+        </ClerkProvider>
+      ),
     useHome: () => {
       const deviceToken = useDeviceToken();
       return useQuery(api.today, deviceToken ? { deviceToken } : "skip");
@@ -129,6 +144,11 @@ export function createConvexProvider(url: string): StoryProvider {
     },
     setPhone: async (phone) => {
       await client.mutation(api.setPhone, { phone, deviceToken: await getDeviceToken() });
+    },
+    // Settles this install back on a guest player. Clerk's own sign-out runs after this, so the device
+    // never keeps reading the account it just left.
+    signOut: async () => {
+      await client.mutation(api.signOut, { deviceToken: await getDeviceToken() });
     },
   };
 }

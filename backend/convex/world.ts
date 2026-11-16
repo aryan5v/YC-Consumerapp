@@ -3,7 +3,7 @@ import { makeFunctionReference } from "convex/server";
 import { action, internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { Doc, Id } from "./_generated/dataModel";
 import { MutationCtx, QueryCtx } from "./_generated/server";
-import { requireDeviceUser } from "./lib/session";
+import { requirePlayer } from "./lib/session";
 import { characterSheetUrl, heldClipUrl, maxUploadBytes } from "./lib/config";
 import { pacificDate } from "./lib/pacific";
 import { openaiConfigured, synthesize } from "./lib/openai";
@@ -352,7 +352,7 @@ export const interactUploadUrl = mutation({
   args: { deviceToken: v.string(), thingId: v.string() },
   returns: v.string(),
   handler: async (ctx, { deviceToken, thingId }) => {
-    const user = await requireDeviceUser(ctx, deviceToken);
+    const user = await requirePlayer(ctx, deviceToken);
     const id = thingId.trim();
     if (id === "" || id.length > 120) throw new Error("that thing has no name the shore can keep");
     await writeJson(ctx, uploadCode(user._id), "world-upload", { thingId: id, consumed: false });
@@ -377,7 +377,7 @@ export const interact = mutation({
     transitionMs: v.number(),
   }),
   handler: async (ctx, args) => {
-    const user = await requireDeviceUser(ctx, args.deviceToken);
+    const user = await requirePlayer(ctx, args.deviceToken);
     const thingId = args.thingId.trim();
     const name = args.name.replace(/\s+/g, " ").trim().slice(0, 60);
     if (thingId === "" || name === "") throw new Error("that thing has no name the shore can keep");
@@ -515,7 +515,7 @@ export const watch = query({
     transitionMs: v.number(),
   }),
   handler: async (ctx, { deviceToken, interactionId }) => {
-    const user = await requireDeviceUser(ctx, deviceToken);
+    const user = await requirePlayer(ctx, deviceToken);
     const row = await rowByCode(ctx, interactCode(interactionId));
     if (row === null) throw new Error("interaction not found");
     const parsed = JSON.parse(row.text) as InteractionRow;
@@ -755,7 +755,7 @@ const writeDescribeRef = makeFunctionReference<"mutation", { deviceToken: string
 export const readDirect = internalQuery({
   args: { deviceToken: v.string() },
   handler: async (ctx, { deviceToken }) => {
-    const user = await requireDeviceUser(ctx, deviceToken);
+    const user = await requirePlayer(ctx, deviceToken);
     return { world: await loadWorld(ctx, user._id) };
   },
 });
@@ -764,7 +764,7 @@ export const writeDirect = internalMutation({
   args: { deviceToken: v.string(), world: v.any() },
   returns: v.null(),
   handler: async (ctx, { deviceToken, world }) => {
-    const user = await requireDeviceUser(ctx, deviceToken);
+    const user = await requirePlayer(ctx, deviceToken);
     await saveWorld(ctx, user._id, asWorld(world));
     return null;
   },
@@ -807,7 +807,7 @@ export const writeDescribe = internalMutation({
   args: { deviceToken: v.string(), described: v.any() },
   returns: v.null(),
   handler: async (ctx, { deviceToken, described }) => {
-    const user = await requireDeviceUser(ctx, deviceToken);
+    const user = await requirePlayer(ctx, deviceToken);
     const dream = described as DescribeResult;
     const current = await loadWorld(ctx, user._id);
     await saveWorld(ctx, user._id, {

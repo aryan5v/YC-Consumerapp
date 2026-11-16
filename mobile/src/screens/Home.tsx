@@ -1,7 +1,7 @@
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
-import { useEffect, useRef, useState } from "react";
-import { Animated, Image, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { useEffect, useRef } from "react";
+import { Animated, Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useReduceMotion } from "../a11y";
 import { Glass } from "../components/Glass";
@@ -21,14 +21,13 @@ function dateLabel(iso: string) {
   return `${DAYS[date.getDay()]}, ${MONTHS[date.getMonth()]} ${date.getDate()}`;
 }
 
-export function Home({ starting, onPlay, onWander, onSettings }: { starting: boolean; onPlay: () => void; onWander?: () => void; onSettings: () => void }) {
+export function Home({ starting, onPlay, onWander, onDream, onSettings }: { starting: boolean; onPlay: () => void; onWander?: () => void; onDream: () => void; onSettings: () => void }) {
   const story = useStory();
   const reduceMotion = useReduceMotion();
   const home = story.useHome();
   const insets = useSafeAreaInsets();
   const appear = useRef(new Animated.Value(0)).current;
   const loaded = home !== undefined;
-  const [sheet, setSheet] = useState<null | "dream" | "past" | "profile">(null);
 
   useEffect(() => {
     if (loaded) Animated.timing(appear, { toValue: 1, duration: motion.slower, delay: 150, easing: ease.out, useNativeDriver: true }).start();
@@ -67,7 +66,7 @@ export function Home({ starting, onPlay, onWander, onSettings }: { starting: boo
           style={[
             styles.bottom,
             {
-              paddingBottom: insets.bottom + 22,
+              paddingBottom: insets.bottom + 100,
               opacity: appear,
               transform: [{ translateY: appear.interpolate({ inputRange: [0, 1], outputRange: [reduceMotion ? 0 : 18, 0] }) }],
             },
@@ -105,7 +104,7 @@ export function Home({ starting, onPlay, onWander, onSettings }: { starting: boo
               </Glass>
             )}
             <Glass interactive style={styles.modeCard}>
-              <Pressable accessibilityRole="button" accessibilityLabel="Dream a world" onPress={() => setSheet("dream")} style={styles.modeHit}>
+              <Pressable accessibilityRole="button" accessibilityLabel="Dream a world" onPress={onDream} style={styles.modeHit}>
                 <Text style={styles.motif}>{"* .  o  . *\n .  *  .  o ."}</Text>
                 <Text style={styles.modeTitle}>Dream a world</Text>
                 <Text style={styles.modeSub}>Describe it</Text>
@@ -113,67 +112,20 @@ export function Home({ starting, onPlay, onWander, onSettings }: { starting: boo
             </Glass>
           </View>
 
-          <View style={styles.rows}>
-            <Glass interactive style={styles.row}>
-              <Pressable accessibilityRole="button" accessibilityLabel="Past cases" onPress={() => setSheet("past")} style={styles.rowHit}>
-                <Text style={styles.rowText}>Past cases</Text>
-                <Text style={styles.rowChevron}>{"›"}</Text>
-              </Pressable>
-            </Glass>
-            <Glass interactive style={styles.row}>
-              <Pressable accessibilityRole="button" accessibilityLabel="Profile" onPress={() => setSheet("profile")} style={styles.rowHit}>
-                <Text style={styles.rowText}>Profile</Text>
-                <Text style={styles.rowChevron}>{"›"}</Text>
-              </Pressable>
-            </Glass>
-          </View>
         </Animated.View>
-      )}
-      {sheet === "dream" && (
-        <View style={[StyleSheet.absoluteFill, styles.scrim]}>
-          <Pressable accessibilityLabel="Close" style={StyleSheet.absoluteFill} onPress={() => setSheet(null)} />
-          <Glass style={[styles.dream, { paddingBottom: insets.bottom + 24 }]}>
-            <Text style={styles.kicker}>Dream a world</Text>
-            <TextInput placeholder="A harbour town that never sleeps" placeholderTextColor={colors.faint} keyboardAppearance="dark" selectionColor={colors.text} style={styles.dreamInput} />
-            <Text style={styles.modeSub}>Coming soon. Worlds you describe will open here.</Text>
-            <Pressable accessibilityRole="button" onPress={() => setSheet(null)} style={styles.dreamDone}><Text style={styles.rowText}>Done</Text></Pressable>
-          </Glass>
-        </View>
-      )}
-      {(sheet === "past" || sheet === "profile") && home && (
-        <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.bg, paddingTop: insets.top + 18, paddingHorizontal: 26 }]}>
-          <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => setSheet(null)} style={styles.back}><Text style={styles.rowText}>{"‹"} Back</Text></Pressable>
-          {sheet === "past" ? (
-            <>
-              <Text style={styles.title}>Past cases</Text>
-              <Glass style={styles.pastRow}><Text style={styles.modeTitle}>Case 1 · {home.episode.title}</Text><Text style={styles.modeSub}>{home.run ? (home.run.status === "active" ? "In progress" : "Played") : "Not played yet"}</Text></Glass>
-              {["Case 2 · The lamp that lied", "Case 3 · Low tide at Pier Four", "Case 4 · The last ferry"].map((t) => (
-                <Glass key={t} style={[styles.pastRow, { opacity: 0.55 }]}><Text style={styles.modeTitle}>{t}</Text><Text style={styles.modeSub}>Locked · opens in a later season</Text></Glass>
-              ))}
-            </>
-          ) : (
-            <>
-              <Text style={styles.title}>Profile</Text>
-              <Glass style={styles.pastRow}><Text style={styles.modeTitle}>This device</Text><Text style={styles.modeSub}>Your name is set by this phone. No sign-in.</Text></Glass>
-              <Glass style={styles.pastRow}><Text style={styles.modeTitle}>{home.streak} day streak</Text><Text style={styles.modeSub}>Come back tomorrow to keep it</Text></Glass>
-              <Glass interactive style={styles.pastRow}><Pressable accessibilityRole="button" onPress={onSettings}><Text style={styles.modeTitle}>Sound, voice and captions</Text><Text style={styles.modeSub}>Open settings</Text></Pressable></Glass>
-              <Glass style={[styles.pastRow, { opacity: 0.8 }]}><Text style={styles.modeTitle}>Synqui Plus</Text><Text style={styles.modeSub}>More cases, more worlds. Coming soon.</Text></Glass>
-            </>
-          )}
-        </View>
       )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  caseCard: { borderRadius: radius.button },
+  caseCard: { borderRadius: 24 },
   caseHit: { padding: 20 },
   caseFoot: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 16 },
   caseAction: { fontFamily: fonts.uiSemibold, fontSize: type.lead, color: colors.text },
   caseMeta: { fontFamily: fonts.mono, fontSize: type.micro, letterSpacing: ascii.monoTracking, textTransform: "uppercase", color: colors.dim },
   pair: { flexDirection: "row", gap: 12, marginTop: 12 },
-  modeCard: { flex: 1, borderRadius: radius.button },
+  modeCard: { flex: 1, borderRadius: 22 },
   modeHit: { padding: 16, minHeight: 112 },
   motif: { fontFamily: fonts.mono, fontSize: 10, lineHeight: 13, color: colors.dim, marginBottom: 10 },
   modeTitle: { fontFamily: fonts.uiSemibold, fontSize: type.control, color: colors.text },

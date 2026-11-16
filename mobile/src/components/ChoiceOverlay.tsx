@@ -17,13 +17,11 @@ const area = (ring: Point[]) => Math.abs(ring.reduce((sum, [x, y], i) => sum + x
 const drawable = (o: ChoiceOption, video: Rect, screenWidth: number) => {
   const region = o.region;
   if (!region) return false;
-  const left = (video.x + region.centroid.x * video.w) / screenWidth;
-  if (left < 0.03 || left > 0.97 || region.centroid.y < 0.02 || region.centroid.y > 0.98) return false;
   const points = region.polygon;
   if (!points?.length) return !!region.maskUrl;
   const rings = typeof points[0][0] === "number" ? [points as Point[]] : (points as Point[][]);
   const total = rings.reduce((sum, ring) => sum + area(ring), 0);
-  return total >= 0.005 && total <= 0.12;
+  return total >= 0.0003 && total <= 0.4;
 };
 
 export function chipsHeight(options: ChoiceOption[], video: Rect, screenWidth: number) {
@@ -197,8 +195,8 @@ function Silhouette({ option, index, picked, preview, onPick, video, screenWidth
       <Animated.View pointerEvents="box-none" style={[StyleSheet.absoluteFill, { opacity: pulse }]}>
         <Svg width={video.w} height={video.h} pointerEvents="box-none">{defs}
           {d ? <>
-            <Path d={d} fill="none" stroke={colors.black} strokeOpacity={0.55} strokeWidth={4} />
-            <Path d={d} fill="none" stroke={glow.silhouette} strokeWidth={4} filter={`url(#${id}blur)`} />
+            
+            <Path d={d} fill="none" stroke={glow.silhouette} strokeWidth={2} strokeOpacity={0.5} filter={`url(#${id}blur)`} />
             <Path d={d} fill="transparent" stroke={glow.silhouette} strokeWidth={glow.silhouetteWidth} onPress={press} disabled={picked !== null} />
           </> : <SvgImage href={{ uri: region.maskUrl! }} width={video.w} height={video.h} preserveAspectRatio="none" filter={`url(#${id}edge)`} />}
         </Svg>

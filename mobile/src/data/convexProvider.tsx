@@ -2,7 +2,7 @@ import { ConvexProvider, ConvexReactClient, useQuery } from "convex/react";
 import { makeFunctionReference } from "convex/server";
 import type { ReactNode } from "react";
 import { getDeviceToken, useDeviceToken } from "./device";
-import type { ChoiceOption, ChoiceStop, ClipStatus, HomeView, RunView, SpeakResult, StoryProvider } from "./types";
+import type { ChoiceOption, ChoiceStop, ClipStatus, DreamView, HomeView, RunView, SpeakResult, StoryProvider } from "./types";
 
 type DeviceArgs = { deviceToken: string };
 type RunArgs = DeviceArgs & { runId: string; expectedBeatId: string };
@@ -21,7 +21,9 @@ const api = {
   startToday: makeFunctionReference<"mutation", DeviceArgs, string>("runs:startToday"),
   view: makeFunctionReference<"query", DeviceArgs & { runId: string }, WireRunView>("runs:view"),
   choose: makeFunctionReference<"mutation", RunArgs & { optionId: string; actionId?: string }, null>("runs:choose"),
-  solve: makeFunctionReference<"mutation", RunArgs & { answerId: string }, { solved: boolean }>("runs:solve"),
+  solve: makeFunctionReference<"mutation", RunArgs & { answerId?: string; answerText?: string }, { solved: boolean }>("runs:solve"),
+  dreamStart: makeFunctionReference<"mutation", DeviceArgs & { prompt: string }, { dreamId: string }>("dream:start"),
+  dreamWatch: makeFunctionReference<"query", DeviceArgs & { dreamId: string }, DreamView>("dream:watch"),
   answer: makeFunctionReference<"mutation", RunArgs & { answer: string }, { correct: boolean }>("runs:answer"),
   speakUploadUrl: makeFunctionReference<"mutation", RunArgs, string>("runs:speakUploadUrl"),
   speak: makeFunctionReference<"action", RunArgs & { audioStorageId: string }, SpeakResult>("runs:speak"),
@@ -86,6 +88,14 @@ export function createConvexProvider(url: string): StoryProvider {
     },
     solve: async (runId, answerId, expectedBeatId) => {
       await client.mutation(api.solve, { runId, answerId, expectedBeatId, deviceToken: await getDeviceToken() });
+    },
+    solveText: async (runId, answerText, expectedBeatId) => {
+      await client.mutation(api.solve, { runId, answerText, expectedBeatId, deviceToken: await getDeviceToken() });
+    },
+    dreamStart: async (prompt) => (await client.mutation(api.dreamStart, { prompt, deviceToken: await getDeviceToken() })).dreamId,
+    useDream: (dreamId) => {
+      const deviceToken = useDeviceToken();
+      return useQuery(api.dreamWatch, dreamId && deviceToken ? { dreamId, deviceToken } : "skip");
     },
     answer: async (runId, answer, expectedBeatId) => client.mutation(api.answer, { runId, answer, expectedBeatId, deviceToken: await getDeviceToken() }),
     speak: async (runId, recordingUri, expectedBeatId) => {

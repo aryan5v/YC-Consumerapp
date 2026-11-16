@@ -47,7 +47,8 @@ export default defineSchema({
     name: v.optional(v.string()),
     phone: v.optional(v.string()),
     deviceKey: v.optional(v.string()),
-    kind: v.union(v.literal("anonymous"), v.literal("named")),
+    clerkUserId: v.optional(v.string()),
+    kind: v.union(v.literal("anonymous"), v.literal("named"), v.literal("clerk")),
     createdAt: v.number(),
   })
     .index("by_name", ["name"])

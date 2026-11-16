@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { Doc, Id } from "./_generated/dataModel";
-import { ensureDeviceUser, requireDeviceUser, runOwnedBy } from "./lib/session";
+import { ensurePlayer, requirePlayer, runOwnedBy } from "./lib/session";
 import { PREWARM_MAX_AGE_MS, openingFor, applyOpening, STORY_OPENING_KEY } from "./lib/openings";
 import { ensureEpisode } from "./lib/episodes";
 import { pacificDate } from "./lib/pacific";
@@ -89,7 +89,7 @@ export const startToday = mutation({
   args: { deviceToken: v.string() },
   returns: v.id("runs"),
   handler: async (ctx, { deviceToken }) => {
-    const user = await ensureDeviceUser(ctx, deviceToken);
+    const user = await ensurePlayer(ctx, deviceToken);
     const episode = await ensureEpisode(ctx, pacificDate());
     if (episode.activeCaseId !== undefined) {
       const past = await ctx.db.query("runs")
@@ -175,7 +175,7 @@ export const startCustom = mutation({
   args: { deviceToken: v.string(), prompt: v.string() },
   returns: v.id("runs"),
   handler: async (ctx, { deviceToken, prompt }) => {
-    const user = await ensureDeviceUser(ctx, deviceToken);
+    const user = await ensurePlayer(ctx, deviceToken);
     const clean = sanitizeCustomPrompt(prompt);
     if (!clean.ok) throw new Error(clean.message);
     const recent = await ctx.db

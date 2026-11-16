@@ -12,8 +12,9 @@ convex/
   schema.ts          users, sessions, episodes, runs, beats, clips, storyMessages, streaks
   home.ts            home.today()
   runs.ts            runs.startToday / view / choose / answer / speak / speakUploadUrl
-  session.ts         anonymous identity, named accounts
+  session.ts         guest, named and Clerk identities
   users.ts           users.setPhone, users.me
+  auth.config.ts     the Clerk issuer Convex verifies tokens against
   episodes.ts        today's episode, seeds the days ahead
   director.ts        the director action: one shot, then the objects in that shot (validated, one retry, fixture fallback)
   custom.ts          "Dream a world": writes an episode seed from a typed description
@@ -27,7 +28,8 @@ convex/
   lib/               tray adapter, H3 prompt builder, director schema and prompts, speech matcher, segmenter client, mock clips
 docs/tray-api.md     the FastH3 video API this backend actually calls, and what it still needs
 docs/keiki-agent.md  how to wire the Keiki agent, its prompt and its two tools
-tests/               a full episode end to end in mock mode, the tray adapter, the speech matcher
+docs/clerk.md        the Clerk application, the dashboard steps and the client wiring
+tests/               a full episode end to end in mock mode, the tray adapter, the speech matcher, the Clerk account model
 ```
 
 ## The shared contract with the app
@@ -51,8 +53,13 @@ mutation session.signInAnonymously({ deviceToken }) / signInAs({ name, deviceTok
 per install the first time it starts (6 to 128 characters of letters, digits, `.`, `:`, `_` or `-`),
 stores it, and sends it on every call above. Each token gets its own player, its own streak and its own
 run, so several phones at the table never share a story, and a run id that belongs to one token is
-refused for another. Nothing else changed about identity: there is still no login screen, and
-`session.signInAs` still just puts a display name on the device's own player.
+refused for another. `session.signInAs` still just puts a display name on the device's own player.
+
+**Clerk is how the backend knows which person is which.** When a call carries a Clerk token — the app
+attaches one automatically through `ConvexProviderWithClerk` — `ctx.auth.getUserIdentity()` names the
+account, and that account's player is the one the call reads and writes, on whatever device it signed
+in from. `deviceToken` stays required and unchanged; it is the install's own player for guests. See
+[Clerk accounts](#clerk-accounts) and `docs/clerk.md`.
 
 **`expectedBeatId` is how a late request is ignored.** Every advance names the beat it is answering.
 If that beat is no longer current — the player tapped twice, or a speech result arrived after the story
@@ -117,6 +124,7 @@ happens when the relevant pair is unset — it is not a misconfiguration.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
+| `CLERK_JWT_ISSUER_DOMAIN` | unset (guests only) | The Clerk app's Frontend API URL, for example `https://verb-noun-00.clerk.accounts.dev`. Convex verifies every Clerk token against this issuer. Unset means the deployment takes no tokens and only guests play. `CLERK_FRONTEND_API_URL` is accepted as a fallback name. |
 | `FASTH3_URLS` | unset (mock) | Comma-separated tray base URLs. Parallel children are spread across them. |
 | `FASTH3_URL` | unset | Single tray base URL, kept for convenience. |
 | `FASTH3_API_KEY` | unset | Sent as `Authorization: Bearer <key>` to the tray. |
@@ -190,10 +198,44 @@ creates today's episode if it is somehow missing.
 
 ## Identity
 
-The app has no auth screen. Each install generates one opaque `deviceToken` and stores it; the backend
-maps that token to a player row in `users` (with the token kept in `sessions`), creates it on first
-sight, and checks ownership of every run against it. One token, one player, one live run — which is
-what makes several phones at the same table independent.
+Two layers, and the account wins when it is there.
+
+**The install.** Each install generates one opaque `deviceToken` and stores it; the backend maps that
+token to a player row in `users` (with the token kept in `sessions`), creates it on first sight, and
+checks ownership of every run against it. One token, one guest player, one live run — which is what
+makes several phones at the same table independent.
+
+**The account.** With `CLERK_JWT_ISSUER_DOMAIN` set, a call that carries a Clerk token resolves to the
+player with that Clerk user id, whichever device it came from, and the player is created on the first
+signed-in call. `users.clerkUserId` is Clerk's `sub`, and `users.kind` is `clerk` for those players.
+Everything else in the contract is unchanged: the same queries and mutations, the same `deviceToken`
+argument, and `anonymous: false` from `session.whoami` and `users.me` for a signed-in player.
+
+## Clerk accounts
+
+The app signs in with Clerk; the backend never sees a password and never asks for one. What the
+backend does with the token is in `convex/auth.config.ts` (issuer), `convex/lib/session.ts` (which
+player a call belongs to) and `convex/schema.ts` (`users.clerkUserId`). `docs/clerk.md` has the
+dashboard steps and the client wiring.
+
+* **Signing in adopts the guest.** The first signed-in call on a device whose player is still a guest
+  turns that player into the account's, so the streak and the live run follow the player in. The guest
+  name they typed is kept unless Clerk has one.
+* **One account, one player.** A second device that signs in with the same Clerk user lands on the same
+  player and the same streak.
+* **Signing out settles the device on a fresh guest player**, and the account keeps its streak and its
+  runs. Do call `session.signOut({ deviceToken })` when Clerk signs out; it is what returns the device
+  to a guest player instead of leaving it with none.
+* **A guest can never reach an account's player.** A call with no verified token on a device whose
+  player belongs to an account reads nothing (`users.me` and `session.whoami` answer `null`) and a
+  mutation refuses with `sign in again, or call session.signInAnonymously to play as a guest` rather
+  than writing to the wrong player. `session.signInAnonymously` is the call that says "this device is a
+  guest now".
+* **The device token is a session credential.** While it is bound to a signed-in player it reaches that
+  account, so the app must keep it where it keeps secrets (iOS Keychain / `expo-secure-store`), not in
+  plain `AsyncStorage`.
+* **`session.signInAs`** still sets the story name. On a signed-in player it only changes the name and
+  leaves the account link alone.
 
 ## Mock mode
 

@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { deviceUser, ensureDeviceUser } from "./lib/session";
+import { ensurePlayer, guestPlayer, localPlayer, playerFor } from "./lib/session";
 
 export const whoami = query({
   args: { deviceToken: v.string() },
@@ -13,7 +13,7 @@ export const whoami = query({
     }),
   ),
   handler: async (ctx, { deviceToken }) => {
-    const user = await deviceUser(ctx, deviceToken);
+    const user = await playerFor(ctx, deviceToken);
     if (user === null) return null;
     return { userId: user._id, name: user.name ?? null, anonymous: user.kind === "anonymous" };
   },
@@ -23,7 +23,7 @@ export const signInAnonymously = mutation({
   args: { deviceToken: v.string() },
   returns: v.id("users"),
   handler: async (ctx, { deviceToken }) => {
-    return (await ensureDeviceUser(ctx, deviceToken))._id;
+    return (await localPlayer(ctx, deviceToken))._id;
   },
 });
 
@@ -33,9 +33,11 @@ export const signInAs = mutation({
   handler: async (ctx, { name, deviceToken }) => {
     const trimmed = name.trim().slice(0, 60);
     if (trimmed === "") throw new Error("a name is required");
-    const user = await ensureDeviceUser(ctx, deviceToken);
-    if (user.name !== trimmed || user.kind !== "named") {
-      await ctx.db.patch(user._id, { name: trimmed, kind: "named" });
+    const user = await ensurePlayer(ctx, deviceToken);
+    // A signed-in player is named by Clerk; the story name still belongs to them.
+    const kind = user.clerkUserId === undefined ? ("named" as const) : user.kind;
+    if (user.name !== trimmed || user.kind !== kind) {
+      await ctx.db.patch(user._id, { name: trimmed, kind });
     }
     return user._id;
   },
@@ -45,7 +47,9 @@ export const signOut = mutation({
   args: { deviceToken: v.string() },
   returns: v.id("users"),
   handler: async (ctx, { deviceToken }) => {
-    const user = await ensureDeviceUser(ctx, deviceToken);
+    // Signing out leaves the account its streak and its runs; this device settles
+    // on a guest player of its own instead of reading the account as a stranger.
+    const user = await guestPlayer(ctx, deviceToken);
     if (user.name !== undefined || user.kind !== "anonymous") {
       await ctx.db.patch(user._id, { name: undefined, kind: "anonymous" });
     }

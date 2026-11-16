@@ -79,8 +79,8 @@ export const publish = internalMutation({
     for (const scene of caseScenes(data)) {
       const clip = bundle.clips.find((entry) => entry.key === scene.key);
       if (clip === undefined || clip.audioUrl === undefined) throw new Error(`case clip ${scene.key} is not ready`);
-      if (await ctx.storage.getMetadata(clip.storageId) === null ||
-          clip.audioStorageId === undefined || await ctx.storage.getMetadata(clip.audioStorageId) === null) {
+      if (await ctx.db.system.get(clip.storageId) === null ||
+          clip.audioStorageId === undefined || await ctx.db.system.get(clip.audioStorageId) === null) {
         throw new Error(`case clip ${scene.key} is missing from storage`);
       }
     }

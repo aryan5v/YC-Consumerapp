@@ -138,6 +138,7 @@ export default defineSchema({
   })
     .index("by_user_episode", ["userId", "episodeId"])
     .index("by_user", ["userId"])
+    .index("by_case", ["caseId"])
     .index("by_status", ["status"]),
 
   beats: defineTable({
@@ -197,6 +198,9 @@ export default defineSchema({
     data: v.any(),
     clips: v.array(v.object({
       key: v.string(),
+      prompt: v.optional(v.string()),
+      seed: v.optional(v.number()),
+      inputFrameUrl: v.optional(v.string()),
       url: v.string(),
       storageId: v.id("_storage"),
       audioUrl: v.optional(v.string()),

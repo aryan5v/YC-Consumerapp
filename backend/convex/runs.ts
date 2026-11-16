@@ -94,9 +94,9 @@ export const startToday = mutation({
     if (episode.activeCaseId !== undefined) {
       const past = await ctx.db.query("runs")
         .withIndex("by_user_episode", (q) => q.eq("userId", user._id).eq("episodeId", episode._id)).collect();
-      const completed = past.find((run) => run.caseId === episode.activeCaseId && run.caseResult !== undefined);
+      const completed = past.find((run) => run.caseId !== undefined && run.caseResult !== undefined);
       if (completed !== undefined) return completed._id;
-      const resumable = past.find((run) => run.caseId === episode.activeCaseId);
+      const resumable = past.find((run) => run.caseId !== undefined);
       if (resumable !== undefined && await runIsReadable(ctx, resumable)) {
         if (resumable.status !== "active") await refuseWhenAtCapacity(ctx);
         await ctx.db.patch(resumable._id, { status: "active", endedAt: undefined, error: undefined, lastActivityAt: Date.now() });

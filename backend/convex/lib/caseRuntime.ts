@@ -1,6 +1,6 @@
 import { MutationCtx, QueryCtx } from "../_generated/server";
 import { Doc, Id } from "../_generated/dataModel";
-import { caseClue, caseEnding, caseScenes, caseStop, readCase } from "./case";
+import { caseClue, caseEnding, caseScenesForVersion, caseStop, readCase } from "./case";
 import { RunView } from "./view";
 import { bumpStreak } from "./streak";
 
@@ -21,7 +21,7 @@ export async function playCaseClip(
 ): Promise<Id<"beats">> {
   const { bundle, data } = await caseBundle(ctx, run);
   const asset = bundle.clips.find((clip) => clip.key === key);
-  const scene = caseScenes(data).find((clip) => clip.key === key);
+  const scene = caseScenesForVersion(data, bundle.version).find((clip) => clip.key === key);
   if (asset === undefined || scene === undefined) throw new Error("this case clip is not ready");
   const stop = caseEnding(data, key) === null ? caseStop(data, run.caseClues ?? []) : undefined;
   const beatId = await ctx.db.insert("beats", {
@@ -100,7 +100,7 @@ export async function buildCaseView(ctx: QueryCtx, run: Doc<"runs">, beat: Doc<"
   const key = run.caseResult === undefined ? used.at(-1) ?? "opening" : run.caseResult.solved ? "solved" : "failed";
   const asset = bundle.clips.find((clip) => clip.key === key);
   if (asset === undefined) throw new Error("this case clip is not ready");
-  const scene = caseScenes(data).find((clip) => clip.key === key)!;
+  const scene = caseScenesForVersion(data, bundle.version).find((clip) => clip.key === key)!;
   const result = run.caseResult;
   return {
     status: run.status, beatIndex: beat.depth, beatsTotal: data.moves,

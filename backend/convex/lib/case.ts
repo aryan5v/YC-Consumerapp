@@ -1,5 +1,5 @@
 import { DirectorChoiceStop, DirectorStop, StopObject } from "./director";
-import { PROFILE, buildH3Prompt } from "./h3";
+import { I2VA_INSTRUCTION, PROFILE, buildH3Prompt } from "./h3";
 
 // The case is authored, fixed data: one question, three answers, one solution, and six objects
 // that each reveal one fact. The director never invents the puzzle, it only writes the shots.
@@ -307,4 +307,21 @@ export function checkCaseLogic(data: CaseData): boolean {
   return data.answers.length === 3 && new Set(data.answers).size === 3 &&
     data.moves === 5 && data.clues.length === 6 && new Set(data.clues.map((clue) => clue.id)).size === 6 &&
     remaining.length === 1 && remaining[0] === data.answers[data.solution];
+}
+
+export const CASE_CONTINUITY = `[Shot 1] Live-action, cinematic, a wide shot of the delivery office at Pier Nine, a small working harbour with a stone quay. ${PROFILE.cast}. They wear exactly this clothing and retain exactly this face in every shot. The office counter stays on camera left, a brass key hook and a dispatch radio stay on the back wall, a wooden bench stays beside the loading door, and a green panel van stays beside the iron pier gate on camera right unless the action explicitly moves it. It is late afternoon at golden hour, clear weather, dry air with no rain or fog. One low sun shines from camera left toward camera right. Wet grey stone, salt-dulled timber, worn canvas, weathered rope and painted iron retain their natural colours and textures. A 35 mm lens stays at a camera height of 1.55 metres with a medium depth of field. The camera holds a Static Shot with zero amplitude and zero speed. There are no cuts, zooms, lighting changes, new locations, wardrobe changes or readable text within the shot.`;
+
+export function caseScenesForVersion(data: CaseData, version: string) {
+  const scenes = caseScenes(data);
+  if (version !== "pier-nine-v2") return scenes;
+  return scenes.map((scene) => {
+    const action = scene.key === "opening" ?
+      "The protagonist sets both empty hands on the delivery counter and looks toward the green van, leaving the open delivery log, wet bootprints, brass key hook, folded work gloves, torn green wool on the gate latch and dispatch radio clearly visible around the office" :
+      caseClue(data, scene.key)?.visual ?? caseEnding(data, scene.key)!.visual;
+    const instruction = scene.key === "opening" ? "" : `${I2VA_INSTRUCTION}\n\n`;
+    return {
+      ...scene,
+      prompt: `${instruction}integrated_multimodal_description: ${CASE_CONTINUITY} Action: ${action}. The action begins gently and occupies the middle three seconds of the five-second shot. The final second is a steady wide shot held without camera movement, with the main objects well lit, clearly separated and none cut off by the frame edge.\n\noverall_soundscape: Harbour water slaps the pilings, gulls call in the distance, a rope creaks and the physical sounds of the one action remain quiet under the scene; no dialogue.\n\nnon_diegetic_music: N/A`,
+    };
+  });
 }

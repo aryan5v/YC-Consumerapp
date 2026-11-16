@@ -47,6 +47,10 @@ const runStopValidator = v.union(
 );
 
 export const runViewValidator = v.object({
+  case: v.optional(v.object({
+    question: v.string(), movesLeft: v.number(), movesTotal: v.number(),
+    solveChoices: v.array(v.object({ id: v.string(), label: v.string() })),
+  })),
   status: v.union(v.literal("active"), v.literal("ended")),
   beatIndex: v.number(),
   beatsTotal: v.number(),
@@ -61,6 +65,9 @@ export const runViewValidator = v.object({
     v.null(),
     v.object({
       title: v.string(),
+      result: v.optional(v.object({ solved: v.boolean(), movesUsed: v.number(), movesTotal: v.number() })),
+      streak: v.optional(v.number()),
+      shareText: v.optional(v.string()),
       summary: v.string(),
       path: v.array(v.string()),
       text: v.optional(

@@ -42,9 +42,10 @@ export const today = query({
       .withIndex("by_user_episode", (q) => q.eq("userId", user._id).eq("episodeId", episode._id))
       .order("desc")
       .first();
+    const currentCandidate = episode.activeCaseId !== undefined && candidate?.caseId !== episode.activeCaseId ? null : candidate;
     const run =
-      candidate === null || candidate.status !== "active" || (await runIsReadable(ctx, candidate))
-        ? candidate
+      currentCandidate === null || currentCandidate.status !== "active" || (await runIsReadable(ctx, currentCandidate))
+        ? currentCandidate
         : null;
     return {
       episode: {

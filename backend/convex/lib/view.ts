@@ -37,6 +37,12 @@ export type ViewStop =
     };
 
 export type RunView = {
+  case?: {
+    question: string;
+    movesLeft: number;
+    movesTotal: number;
+    solveChoices: { id: string; label: string }[];
+  };
   status: "active" | "ended";
   beatIndex: number;
   beatsTotal: number;
@@ -48,6 +54,9 @@ export type RunView = {
   };
   stop: ViewStop;
   ending: null | {
+    result?: { solved: boolean; movesUsed: number; movesTotal: number };
+    streak?: number;
+    shareText?: string;
     title: string;
     summary: string;
     path: string[];

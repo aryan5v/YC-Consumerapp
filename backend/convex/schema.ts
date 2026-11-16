@@ -91,6 +91,7 @@ export default defineSchema({
   }).index("by_key", ["key"]),
 
   episodes: defineTable({
+    activeCaseId: v.optional(v.id("caseBundles")),
     date: v.string(),
     dayIndex: v.number(),
     seed: v.number(),
@@ -111,6 +112,14 @@ export default defineSchema({
   }).index("by_date", ["date"]),
 
   runs: defineTable({
+    caseId: v.optional(v.id("caseBundles")),
+    caseClues: v.optional(v.array(v.string())),
+    caseResult: v.optional(v.object({
+      solved: v.boolean(),
+      movesUsed: v.number(),
+      movesTotal: v.number(),
+      streak: v.number(),
+    })),
     prewarm: v.optional(v.boolean()),
     userId: v.id("users"),
     episodeId: v.id("episodes"),
@@ -181,6 +190,23 @@ export default defineSchema({
     .index("by_job", ["jobId"])
     .index("by_run", ["runId"])
     .index("by_status_created", ["status", "createdAt"]),
+
+  caseBundles: defineTable({
+    episodeId: v.id("episodes"),
+    version: v.string(),
+    data: v.any(),
+    clips: v.array(v.object({
+      key: v.string(),
+      url: v.string(),
+      storageId: v.id("_storage"),
+      audioUrl: v.optional(v.string()),
+      audioStorageId: v.optional(v.id("_storage")),
+      frameUrl: v.optional(v.string()),
+      regions: v.optional(v.any()),
+    })),
+    publishedAt: v.optional(v.number()),
+    createdAt: v.number(),
+  }).index("by_episode_version", ["episodeId", "version"]),
 
   openings: defineTable({
     episodeId: v.id("episodes"),

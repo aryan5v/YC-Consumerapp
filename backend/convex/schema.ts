@@ -43,6 +43,27 @@ export const beatStatusValidator = v.union(
 );
 
 export default defineSchema({
+  worldClipCaches: defineTable({
+    version: v.string(),
+    characterSheetUrl: v.string(),
+    clips: v.array(v.object({
+      key: v.string(),
+      storageId: v.id("_storage"),
+      url: v.string(),
+      frameStorageId: v.id("_storage"),
+      frameUrl: v.string(),
+      prompt: v.string(),
+      seed: v.number(),
+    })),
+    selections: v.array(v.object({
+      slot: v.string(),
+      take: v.number(),
+      evidence: v.string(),
+      continuityState: v.string(),
+    })),
+    publishedAt: v.optional(v.number()),
+    createdAt: v.number(),
+  }).index("by_version", ["version"]),
   users: defineTable({
     name: v.optional(v.string()),
     phone: v.optional(v.string()),
@@ -54,6 +75,7 @@ export default defineSchema({
     .index("by_name", ["name"])
     .index("by_kind", ["kind"])
     .index("by_device_key", ["deviceKey"])
+    .index("by_clerk_user_id", ["clerkUserId"])
     .index("by_phone", ["phone"]),
 
   recordings: defineTable({

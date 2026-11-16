@@ -47,6 +47,7 @@ import type * as lib_trayUniserve from "../lib/trayUniserve.js";
 import type * as lib_validators from "../lib/validators.js";
 import type * as lib_view from "../lib/view.js";
 import type * as lib_world from "../lib/world.js";
+import type * as lib_worldCache from "../lib/worldCache.js";
 import type * as master from "../master.js";
 import type * as modelChecks from "../modelChecks.js";
 import type * as openings from "../openings.js";
@@ -56,6 +57,7 @@ import type * as speech from "../speech.js";
 import type * as tray from "../tray.js";
 import type * as users from "../users.js";
 import type * as world from "../world.js";
+import type * as worldCache from "../worldCache.js";
 
 import type {
   ApiFromModules,
@@ -103,6 +105,7 @@ declare const fullApi: ApiFromModules<{
   "lib/validators": typeof lib_validators;
   "lib/view": typeof lib_view;
   "lib/world": typeof lib_world;
+  "lib/worldCache": typeof lib_worldCache;
   master: typeof master;
   modelChecks: typeof modelChecks;
   openings: typeof openings;
@@ -112,6 +115,7 @@ declare const fullApi: ApiFromModules<{
   tray: typeof tray;
   users: typeof users;
   world: typeof world;
+  worldCache: typeof worldCache;
 }>;
 
 /**

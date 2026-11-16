@@ -23,7 +23,7 @@ const drawable = (o: ChoiceOption, video: Rect, screenWidth: number) => {
   if (!points?.length) return !!region.maskUrl;
   const rings = typeof points[0][0] === "number" ? [points as Point[]] : (points as Point[][]);
   const total = rings.reduce((sum, ring) => sum + area(ring), 0);
-  return total >= 0.005 && total <= 0.4;
+  return total >= 0.005 && total <= 0.12;
 };
 
 export function chipsHeight(options: ChoiceOption[], video: Rect, screenWidth: number) {
